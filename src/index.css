@@ -2,10 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+@media print {
+  .print\:hidden {
+    display: none !important;
+  }
+}
+
+/* During PDF capture, hide elements and enforce darker numeric text */
+.pdf-mode .print\:hidden {
+  display: none !important;
+}
+.pdf-mode .text-slate-900 {
+  color: #000000 !important;
+}
+.pdf-mode .font-mono.tabular-nums {
+  color: #000000 !important;
+  font-weight: 700;
+}
+
 :root {
   color-scheme: light dark;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }

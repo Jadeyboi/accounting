@@ -4,6 +4,7 @@ import Monthly from "@/pages/Monthly";
 import Reports from "@/pages/Reports";
 import Payroll from "@/pages/Payroll";
 import Savings from "@/pages/Savings";
+import RequestFunds from "@/pages/RequestFunds";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -21,7 +22,7 @@ export default function App() {
               <img
                 src="/logo.jpg"
                 alt="Avensetech logo"
-                className="h-20 w-20 object-contain"
+                className="h-40 w-40 object-contain"
               />
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">
@@ -95,6 +96,18 @@ export default function App() {
               >
                 Payroll
               </NavLink>
+              <NavLink
+                to="/request-funds"
+                className={({ isActive }) =>
+                  `rounded px-3 py-2 ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`
+                }
+              >
+                Request Funds
+              </NavLink>
             </nav>
           </div>
         </header>
@@ -105,6 +118,7 @@ export default function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/savings" element={<Savings />} />
           <Route path="/payroll" element={<Payroll />} />
+          <Route path="/request-funds" element={<RequestFunds />} />
           <Route path="*" element={<Home />} />
         </Routes>
 

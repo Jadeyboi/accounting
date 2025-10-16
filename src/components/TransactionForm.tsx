@@ -64,15 +64,23 @@ export default function TransactionForm({ onCreated }: Props) {
             return;
           }
 
-          const fileExt = rf.name.split(".").pop();
+          const fileExt = rf.name.includes(".")
+            ? rf.name.split(".").pop()
+            : "bin";
           const fileName = `receipt-${Date.now()}.${fileExt}`;
           const { data: uploadData, error: uploadError } =
-            await supabase.storage
-              .from("receipts")
-              .upload(fileName, rf, { cacheControl: "3600", upsert: false });
+            await supabase.storage.from("receipts").upload(fileName, rf, {
+              cacheControl: "3600",
+              upsert: false,
+              contentType: rf.type || "application/octet-stream",
+            });
 
           if (uploadError) {
-            setError(uploadError.message ?? String(uploadError));
+            setError(
+              (uploadError as any)?.message
+                ? `Upload failed: ${(uploadError as any).message}`
+                : `Upload failed: ${String(uploadError)}`
+            );
             setLoading(false);
             return;
           }
