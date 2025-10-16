@@ -1,25 +1,48 @@
-import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
-import Home from '@/pages/Home'
-import Monthly from '@/pages/Monthly'
-import Reports from '@/pages/Reports'
-import Payroll from '@/pages/Payroll'
+import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
+import Home from "@/pages/Home";
+import Monthly from "@/pages/Monthly";
+import Reports from "@/pages/Reports";
+import Payroll from "@/pages/Payroll";
+import Savings from "@/pages/Savings";
+import type { SyntheticEvent } from "react";
 
 export default function App() {
+  function hideLogo(e: SyntheticEvent<HTMLImageElement>) {
+    // use currentTarget which is correctly typed and avoids any inline casts
+    e.currentTarget.style.display = "none";
+  }
+
   return (
     <BrowserRouter>
       <div className="mx-auto max-w-6xl p-4">
         <header className="mb-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Accounting Tracker</h1>
-              <p className="text-sm text-gray-600">Track cash in, cash out, expenses, and monthly summaries.</p>
+            <div className="flex items-center gap-4">
+              <img
+                src="/logo.jpg"
+                alt="Avensetech logo"
+                className="h-20 w-20 object-contain"
+              />
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">
+                  Avensetech Software Development Services
+                </h1>
+                <p className="text-sm text-gray-600">
+                  Accounting Tracker — Track cash in, cash out, expenses, and
+                  monthly summaries.
+                </p>
+              </div>
             </div>
             <nav className="flex gap-3 text-sm">
               <NavLink
                 to="/"
                 end
                 className={({ isActive }) =>
-                  `rounded px-3 py-2 ${isActive ? 'bg-blue-600 text-white' : 'text-blue-700 hover:bg-blue-50'}`
+                  `rounded px-3 py-2 ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`
                 }
               >
                 Home
@@ -27,7 +50,11 @@ export default function App() {
               <NavLink
                 to="/monthly"
                 className={({ isActive }) =>
-                  `rounded px-3 py-2 ${isActive ? 'bg-blue-600 text-white' : 'text-blue-700 hover:bg-blue-50'}`
+                  `rounded px-3 py-2 ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`
                 }
               >
                 Monthly
@@ -35,15 +62,35 @@ export default function App() {
               <NavLink
                 to="/reports"
                 className={({ isActive }) =>
-                  `rounded px-3 py-2 ${isActive ? 'bg-blue-600 text-white' : 'text-blue-700 hover:bg-blue-50'}`
+                  `rounded px-3 py-2 ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`
                 }
               >
                 Reports
               </NavLink>
               <NavLink
+                to="/savings"
+                className={({ isActive }) =>
+                  `rounded px-3 py-2 ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`
+                }
+              >
+                Savings
+              </NavLink>
+              <NavLink
                 to="/payroll"
                 className={({ isActive }) =>
-                  `rounded px-3 py-2 ${isActive ? 'bg-blue-600 text-white' : 'text-blue-700 hover:bg-blue-50'}`
+                  `rounded px-3 py-2 ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`
                 }
               >
                 Payroll
@@ -56,6 +103,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/monthly" element={<Monthly />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/savings" element={<Savings />} />
           <Route path="/payroll" element={<Payroll />} />
           <Route path="*" element={<Home />} />
         </Routes>
@@ -65,5 +113,5 @@ export default function App() {
         </footer>
       </div>
     </BrowserRouter>
-  )
+  );
 }
