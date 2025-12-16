@@ -5,6 +5,7 @@ import Reports from "@/pages/Reports";
 import Payroll from "@/pages/Payroll";
 import Savings from "@/pages/Savings";
 import RequestFunds from "@/pages/RequestFunds";
+import Invoice from "@/pages/Invoice";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -108,6 +109,18 @@ export default function App() {
               >
                 Request Funds
               </NavLink>
+              <NavLink
+                to="/invoice"
+                className={({ isActive }) =>
+                  `rounded px-3 py-2 ${
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-blue-700 hover:bg-blue-50"
+                  }`
+                }
+              >
+                Invoice
+              </NavLink>
             </nav>
           </div>
         </header>
@@ -119,6 +132,7 @@ export default function App() {
           <Route path="/savings" element={<Savings />} />
           <Route path="/payroll" element={<Payroll />} />
           <Route path="/request-funds" element={<RequestFunds />} />
+          <Route path="/invoice" element={<Invoice />} />
           <Route path="*" element={<Home />} />
         </Routes>
 

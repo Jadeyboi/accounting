@@ -11,6 +11,14 @@ interface RequestItem {
   halfMonthAmount: number | "";
   remarks: string;
   status: Status;
+  groupId?: string;
+}
+
+interface SavedGroup {
+  id: string;
+  name: string;
+  createdAt: string;
+  items: RequestItem[];
 }
 
 export default function RequestFunds() {
@@ -21,8 +29,44 @@ export default function RequestFunds() {
   const [remarks, setRemarks] = useState("");
   const [status, setStatus] = useState<Status>("N/A");
   const [usdRate, setUsdRate] = useState<string>("56");
+  const [isLoadingRate, setIsLoadingRate] = useState(false);
+  const [rateError, setRateError] = useState<string>("");
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [savedGroups, setSavedGroups] = useState<SavedGroup[]>([]);
+  const [groupName, setGroupName] = useState<string>("");
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [viewingGroup, setViewingGroup] = useState<SavedGroup | null>(null);
 
   const printableRef = useRef<HTMLDivElement | null>(null);
+
+  // Fetch current USD to PHP rate
+  const fetchCurrentRate = async () => {
+    setIsLoadingRate(true);
+    setRateError("");
+    try {
+      // Using exchangerate-api.com (free tier, no API key required)
+      const response = await fetch(
+        "https://api.exchangerate-api.com/v4/latest/USD"
+      );
+      if (!response.ok) throw new Error("Failed to fetch exchange rate");
+      const data = await response.json();
+      if (data.rates && data.rates.PHP) {
+        setUsdRate(String(data.rates.PHP));
+      } else {
+        throw new Error("PHP rate not found in response");
+      }
+    } catch (error) {
+      console.error("Error fetching exchange rate:", error);
+      setRateError("Failed to fetch current rate");
+    } finally {
+      setIsLoadingRate(false);
+    }
+  };
+
+  // Auto-fetch rate on component mount
+  useEffect(() => {
+    fetchCurrentRate();
+  }, []);
 
   // Load from localStorage
   useEffect(() => {
@@ -33,12 +77,23 @@ export default function RequestFunds() {
         if (Array.isArray(parsed)) setItems(parsed);
       } catch {}
     }
+    const groupsRaw = localStorage.getItem("request-funds-groups");
+    if (groupsRaw) {
+      try {
+        const parsed = JSON.parse(groupsRaw);
+        if (Array.isArray(parsed)) setSavedGroups(parsed);
+      } catch {}
+    }
   }, []);
 
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem("request-funds-items", JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    localStorage.setItem("request-funds-groups", JSON.stringify(savedGroups));
+  }, [savedGroups]);
 
   const addItem = () => {
     const m = monthlyAmount ? Number(monthlyAmount) : 0;
@@ -63,6 +118,60 @@ export default function RequestFunds() {
 
   const removeItem = (id: string) => {
     setItems((prev) => prev.filter((x) => x.id !== id));
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleItemSelection = (id: string) => {
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const saveSelectedAsGroup = () => {
+    if (selectedItems.size === 0) {
+      return alert("Please select at least one item to save as a group");
+    }
+    setShowGroupModal(true);
+  };
+
+  const confirmSaveGroup = () => {
+    if (!groupName.trim()) {
+      return alert("Please enter a group name");
+    }
+    const selectedItemsData = items.filter((it) => selectedItems.has(it.id));
+    const newGroup: SavedGroup = {
+      id: crypto.randomUUID(),
+      name: groupName.trim(),
+      createdAt: new Date().toISOString(),
+      items: selectedItemsData,
+    };
+    setSavedGroups((prev) => [...prev, newGroup]);
+    setGroupName("");
+    setShowGroupModal(false);
+    setSelectedItems(new Set());
+  };
+
+  const deleteGroup = (groupId: string) => {
+    if (!confirm("Are you sure you want to delete this group?")) return;
+    setSavedGroups((prev) => prev.filter((g) => g.id !== groupId));
+  };
+
+  const showGroupItems = (group: SavedGroup) => {
+    setViewingGroup(group);
+  };
+
+  const closeGroupView = () => {
+    setViewingGroup(null);
   };
 
   // Inline edit state
@@ -219,7 +328,7 @@ export default function RequestFunds() {
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4">
-        <div>
+        <div className="flex-1">
           <h2 className="text-xl font-semibold text-slate-900">
             Request Funds
           </h2>
@@ -227,6 +336,16 @@ export default function RequestFunds() {
             Prepare a request with monthly and half-month items, remarks, and
             status.
           </p>
+          {selectedItems.size > 0 && (
+            <div className="mt-2">
+              <button
+                onClick={saveSelectedAsGroup}
+                className="rounded-md bg-purple-600 px-4 py-1.5 text-sm font-medium text-white shadow hover:bg-purple-700"
+              >
+                Save {selectedItems.size} Selected as Group
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm text-slate-600" title="PHP per 1 USD">
@@ -240,7 +359,19 @@ export default function RequestFunds() {
             onChange={(e) => setUsdRate(e.target.value)}
             className="w-28 rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
             placeholder="56.00"
+            disabled={isLoadingRate}
           />
+          <button
+            onClick={fetchCurrentRate}
+            disabled={isLoadingRate}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
+            title="Refresh current rate"
+          >
+            {isLoadingRate ? "..." : "↻"}
+          </button>
+          {rateError && (
+            <span className="text-xs text-red-600">{rateError}</span>
+          )}
         </div>
         <button
           onClick={exportPDF}
@@ -341,7 +472,7 @@ export default function RequestFunds() {
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-slate-500">Rate</div>
+            <div className="text-xs text-slate-500">Exchange Rate (Today)</div>
             <div className="text-sm font-medium text-slate-700">
               1 USD ={" "}
               {Number(usdRate || 0).toLocaleString(undefined, {
@@ -360,6 +491,22 @@ export default function RequestFunds() {
             <table className="min-w-full table-fixed text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                  <th className="p-2 print:hidden w-10">
+                    <input
+                      type="checkbox"
+                      checked={
+                        items.length > 0 && selectedItems.size === items.length
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedItems(new Set(items.map((it) => it.id)));
+                        } else {
+                          setSelectedItems(new Set());
+                        }
+                      }}
+                      className="rounded border-slate-300"
+                    />
+                  </th>
                   <th className="p-2">Description</th>
                   <th className="p-2 text-right text-slate-900">Monthly</th>
                   <th className="p-2 text-right text-slate-900">
@@ -388,6 +535,14 @@ export default function RequestFunds() {
                         key={it.id}
                         className="border-b border-slate-100 bg-yellow-50"
                       >
+                        <td className="p-2 print:hidden">
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.has(it.id)}
+                            onChange={() => toggleItemSelection(it.id)}
+                            className="rounded border-slate-300"
+                          />
+                        </td>
                         <td className="p-2 text-slate-900">
                           <input
                             type="text"
@@ -493,6 +648,14 @@ export default function RequestFunds() {
                       key={it.id}
                       className="border-b border-slate-100 odd:bg-white even:bg-slate-50"
                     >
+                      <td className="p-2 print:hidden">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.has(it.id)}
+                          onChange={() => toggleItemSelection(it.id)}
+                          className="rounded border-slate-300"
+                        />
+                      </td>
                       <td className="p-2 text-slate-900">{it.description}</td>
                       <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                         {money(Number(it.monthlyAmount) || 0)}
@@ -542,6 +705,7 @@ export default function RequestFunds() {
               </tbody>
               <tfoot>
                 <tr className="font-medium bg-slate-100">
+                  <td className="p-2 print:hidden"></td>
                   <td className="p-2 text-slate-900">Totals</td>
                   <td className="p-2 text-right font-mono tabular-nums">
                     {money(totals.monthly)}
@@ -568,6 +732,241 @@ export default function RequestFunds() {
           </div>
         )}
       </div>
+
+      {/* Saved Groups Section */}
+      {savedGroups.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900 mb-3">
+            Saved Groups
+          </h3>
+          <div className="space-y-2">
+            {savedGroups.map((group) => (
+              <div
+                key={group.id}
+                className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3"
+              >
+                <div className="flex-1">
+                  <div className="font-medium text-slate-900">{group.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {group.items.length} items • Created{" "}
+                    {new Date(group.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => showGroupItems(group)}
+                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                  >
+                    Show Items
+                  </button>
+                  <button
+                    onClick={() => deleteGroup(group.id)}
+                    className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Group Name Modal */}
+      {showGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">
+              Save Selected Items as Group
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm text-slate-600 mb-2">
+                Group Name
+              </label>
+              <input
+                type="text"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmSaveGroup();
+                }}
+                className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="e.g., Monthly Expenses Oct 2025"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowGroupModal(false);
+                  setGroupName("");
+                }}
+                className="rounded-md bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSaveGroup}
+                className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+              >
+                Save Group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Group Items Modal */}
+      {viewingGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-5xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  {viewingGroup.name}
+                </h3>
+                <p className="text-sm text-slate-500">
+                  {viewingGroup.items.length} items • Created{" "}
+                  {new Date(viewingGroup.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <button
+                onClick={closeGroupView}
+                className="rounded-md bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full table-fixed text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                    <th className="p-2">Description</th>
+                    <th className="p-2 text-right text-slate-900">Monthly</th>
+                    <th className="p-2 text-right text-slate-900">
+                      Monthly (USD)
+                    </th>
+                    <th className="p-2 text-right text-slate-900">
+                      Half-Month
+                    </th>
+                    <th className="p-2 text-right text-slate-900">
+                      Half (USD)
+                    </th>
+                    <th className="p-2 text-right text-slate-900">Total</th>
+                    <th className="p-2 text-right text-slate-900">
+                      Total (USD)
+                    </th>
+                    <th className="p-2">Status</th>
+                    <th className="p-2">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewingGroup.items.map((it) => {
+                    const monthlyPhp = Number(it.monthlyAmount) || 0;
+                    const halfPhp = Number(it.halfMonthAmount) || 0;
+                    const totalPhp = monthlyPhp + halfPhp;
+                    return (
+                      <tr
+                        key={it.id}
+                        className="border-b border-slate-100 odd:bg-white even:bg-slate-50"
+                      >
+                        <td className="p-2 text-slate-900">{it.description}</td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {money(monthlyPhp)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {usd(toUsd(monthlyPhp))}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {money(halfPhp)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {usd(toUsd(halfPhp))}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {money(totalPhp)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {usd(toUsd(totalPhp))}
+                        </td>
+                        <td className="p-2">{it.status}</td>
+                        <td className="p-2">{it.remarks || ""}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="font-medium bg-slate-100">
+                    <td className="p-2 text-slate-900">Totals</td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {money(
+                        viewingGroup.items.reduce(
+                          (s, it) => s + (Number(it.monthlyAmount) || 0),
+                          0
+                        )
+                      )}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {usd(
+                        toUsd(
+                          viewingGroup.items.reduce(
+                            (s, it) => s + (Number(it.monthlyAmount) || 0),
+                            0
+                          )
+                        )
+                      )}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {money(
+                        viewingGroup.items.reduce(
+                          (s, it) => s + (Number(it.halfMonthAmount) || 0),
+                          0
+                        )
+                      )}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {usd(
+                        toUsd(
+                          viewingGroup.items.reduce(
+                            (s, it) => s + (Number(it.halfMonthAmount) || 0),
+                            0
+                          )
+                        )
+                      )}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {money(
+                        viewingGroup.items.reduce(
+                          (s, it) =>
+                            s +
+                            (Number(it.monthlyAmount) || 0) +
+                            (Number(it.halfMonthAmount) || 0),
+                          0
+                        )
+                      )}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {usd(
+                        toUsd(
+                          viewingGroup.items.reduce(
+                            (s, it) =>
+                              s +
+                              (Number(it.monthlyAmount) || 0) +
+                              (Number(it.halfMonthAmount) || 0),
+                            0
+                          )
+                        )
+                      )}
+                    </td>
+                    <td className="p-2" colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
