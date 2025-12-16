@@ -13,27 +13,40 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
   const totalAdditions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
 
   return (
-    <div ref={ref} className="mx-auto w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-6 text-slate-800">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Payslip</h2>
-          <p className="text-xs text-slate-500">Date Issued: {payslip.date_issued}</p>
-        </div>
-        <div className="text-right text-xs">
-          <div className="font-medium">Employee</div>
-          <div>{employee.name}</div>
-          {employee.position && <div className="text-slate-500">{employee.position}</div>}
+    <div ref={ref} className="mx-auto w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-8 text-slate-800">
+      {/* Company Header */}
+      <div className="mb-6 flex items-start justify-between border-b-2 border-slate-900 pb-4">
+        <div className="flex items-center gap-4">
+          <img src="/logo.jpg" alt="Avensetech Logo" className="h-16 w-16 object-contain" />
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Avensetech Software Development Services</h1>
+            <p className="mt-1 text-xs text-slate-600">2-806, Oakridge Business Park, Banilad, Mandaue City</p>
+            <p className="text-xs text-slate-600">(032) 234-1362 • 09297246296</p>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 p-4">
-          <div className="text-sm font-medium text-slate-700">Pay Period</div>
-          <div className="text-sm">{payslip.period_start} to {payslip.period_end}</div>
+      {/* Payslip Title and Employee Info */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">PAYSLIP</h2>
+          <p className="text-sm text-slate-600">Date Issued: {payslip.date_issued}</p>
         </div>
-        <div className="rounded-lg border border-slate-200 p-4">
-          <div className="text-sm font-medium text-slate-700">Gross Salary</div>
-          <div className="text-lg font-semibold">{money(payslip.gross_salary)}</div>
+        <div className="rounded-lg bg-slate-50 p-4 text-right">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Employee</div>
+          <div className="mt-1 text-base font-bold text-slate-900">{employee.name}</div>
+          {employee.position && <div className="text-sm text-slate-600">{employee.position}</div>}
+        </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-300 bg-slate-50 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pay Period</div>
+          <div className="mt-1 text-sm font-medium text-slate-900">{payslip.period_start} to {payslip.period_end}</div>
+        </div>
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-blue-600">Gross Salary</div>
+          <div className="mt-1 text-xl font-bold text-blue-900">{money(payslip.gross_salary)}</div>
         </div>
       </div>
 
@@ -56,16 +69,24 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 p-4">
-        <div className="text-sm"><span className="text-slate-600">Net Salary</span> <span className="float-right text-lg font-semibold">{money(payslip.net_salary)}</span></div>
+      <div className="mt-6 rounded-lg border-2 border-emerald-600 bg-emerald-50 p-6">
+        <div className="flex items-center justify-between">
+          <span className="text-lg font-bold text-emerald-900">NET SALARY</span>
+          <span className="text-3xl font-bold text-emerald-700">{money(payslip.net_salary)}</span>
+        </div>
       </div>
 
       {payslip.notes && (
-        <div className="mt-4 rounded-lg border border-slate-200 p-4">
-          <div className="text-sm font-medium text-slate-700">Notes</div>
-          <div className="text-sm text-slate-700">{payslip.notes}</div>
+        <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Notes</div>
+          <div className="mt-2 text-sm text-slate-700">{payslip.notes}</div>
         </div>
       )}
+
+      {/* Footer */}
+      <div className="mt-8 border-t border-slate-200 pt-4 text-center">
+        <p className="text-xs text-slate-500">This is a computer-generated payslip and does not require a signature.</p>
+      </div>
     </div>
   )
 })

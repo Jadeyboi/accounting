@@ -25,6 +25,16 @@ export default function Payroll() {
   // Payslip form
   const [editingPayslip, setEditingPayslip] = useState<Payslip | null>(null)
 
+  // Bulk generation
+  const [showBulkModal, setShowBulkModal] = useState(false)
+  const [bulkPeriodStart, setBulkPeriodStart] = useState(today())
+  const [bulkPeriodEnd, setBulkPeriodEnd] = useState(today())
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
+
+  // Salary history
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [historyEmployeeId, setHistoryEmployeeId] = useState<string | null>(null)
+
   const payslipContainerRef = useRef<HTMLDivElement>(null)
 
   const refresh = async () => {
@@ -187,6 +197,75 @@ export default function Payroll() {
     await refresh()
   }
 
+  const onBulkGenerate = async () => {
+    if (selectedEmployees.length === 0) {
+      alert('Please select at least one employee')
+      return
+    }
+
+    const newPayslips = selectedEmployees.map(empId => {
+      const emp = employees.find(e => e.id === empId)
+      const gross = emp?.base_salary ?? 0
+      return {
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
+        employee_id: empId,
+        period_start: bulkPeriodStart,
+        period_end: bulkPeriodEnd,
+        date_issued: today(),
+        gross_salary: gross,
+        sss: 0,
+        pagibig: 0,
+        philhealth: 0,
+        tax: 0,
+        cash_advance: 0,
+        bonuses: 0,
+        allowances: 0,
+        other_deductions: 0,
+        notes: '',
+        net_salary: gross,
+        transaction_id: null,
+      }
+    })
+
+    const { error } = await supabase.from('payslips').insert(newPayslips)
+    if (error) return alert(error.message)
+
+    setShowBulkModal(false)
+    setSelectedEmployees([])
+    await refresh()
+    alert(`${newPayslips.length} payslips generated successfully!`)
+  }
+
+  const toggleEmployeeSelection = (empId: string) => {
+    setSelectedEmployees(prev => 
+      prev.includes(empId) 
+        ? prev.filter(id => id !== empId)
+        : [...prev, empId]
+    )
+  }
+
+  const selectAllEmployees = () => {
+    if (selectedEmployees.length === employees.length) {
+      setSelectedEmployees([])
+    } else {
+      setSelectedEmployees(employees.map(e => e.id))
+    }
+  }
+
+  const employeePayslips = useMemo(() => {
+    if (!historyEmployeeId) return []
+    return payslips.filter(p => p.employee_id === historyEmployeeId)
+  }, [historyEmployeeId, payslips])
+
+  const employeeHistory = useMemo(() => {
+    const emp = employees.find(e => e.id === historyEmployeeId)
+    if (!emp) return null
+    const empPayslips = employeePayslips
+    const totalPaid = empPayslips.reduce((sum, p) => sum + p.net_salary, 0)
+    return { employee: emp, payslips: empPayslips, totalPaid }
+  }, [historyEmployeeId, employees, employeePayslips])
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -196,7 +275,10 @@ export default function Payroll() {
         </div>
         <div className="flex gap-2">
           {mode === 'list' ? (
-            <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700" onClick={() => onEditPayslip()}>New Payslip</button>
+            <>
+              <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700" onClick={() => onEditPayslip()}>New Payslip</button>
+              <button className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-purple-700" onClick={() => setShowBulkModal(true)}>Bulk Generate</button>
+            </>
           ) : (
             <>
               <button className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200" onClick={() => { setMode('list'); setEditingPayslip(null) }}>Back</button>
@@ -237,7 +319,8 @@ export default function Payroll() {
                   <td className="px-3 py-2 text-sm text-slate-700">{e.position ?? ''}</td>
                   <td className="px-3 py-2 text-right text-sm text-slate-900">{e.base_salary != null ? moneyFmt(e.base_salary) : ''}</td>
                   <td className="px-3 py-2 text-right">
-                    <button className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-700 hover:bg-slate-200" onClick={() => onEditEmployee(e)}>Edit</button>
+                    <button className="rounded-md bg-blue-50 px-3 py-1 text-sm text-blue-700 hover:bg-blue-100" onClick={() => { setHistoryEmployeeId(e.id); setShowHistoryModal(true); }}>History</button>
+                    <button className="ml-2 rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-700 hover:bg-slate-200" onClick={() => onEditEmployee(e)}>Edit</button>
                     <button className="ml-2 rounded-md bg-rose-50 px-3 py-1 text-sm text-rose-700 hover:bg-rose-100" onClick={() => onDeleteEmployee(e.id)}>Delete</button>
                   </td>
                 </tr>
@@ -381,6 +464,150 @@ export default function Payroll() {
               <div ref={payslipContainerRef}>
                 {currentEmployee && <PayslipView employee={currentEmployee} payslip={{ ...editingPayslip, net_salary: totals.net }} />}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Generation Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Bulk Generate Payslips</h3>
+              <button onClick={() => setShowBulkModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+
+            <div className="mb-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Period Start</label>
+                  <input
+                    type="date"
+                    value={bulkPeriodStart}
+                    onChange={(e) => setBulkPeriodStart(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Period End</label>
+                  <input
+                    type="date"
+                    value={bulkPeriodEnd}
+                    onChange={(e) => setBulkPeriodEnd(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">Select Employees</label>
+                  <button
+                    onClick={selectAllEmployees}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {selectedEmployees.length === employees.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+                <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3">
+                  {employees.map((emp) => (
+                    <label key={emp.id} className="flex items-center gap-3 rounded p-2 hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.includes(emp.id)}
+                        onChange={() => toggleEmployeeSelection(emp.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">{emp.name}</div>
+                        <div className="text-sm text-gray-500">{emp.position} • {moneyFmt(emp.base_salary)}</div>
+                      </div>
+                    </label>
+                  ))}
+                  {employees.length === 0 && (
+                    <p className="text-center text-sm text-gray-500">No employees available</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowBulkModal(false)}
+                className="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onBulkGenerate}
+                className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+              >
+                Generate {selectedEmployees.length} Payslip{selectedEmployees.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Salary History Modal */}
+      {showHistoryModal && employeeHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Salary History</h3>
+                <p className="text-sm text-gray-600">{employeeHistory.employee.name} • {employeeHistory.employee.position}</p>
+              </div>
+              <button onClick={() => { setShowHistoryModal(false); setHistoryEmployeeId(null); }} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+
+            <div className="mb-6 grid grid-cols-3 gap-4 rounded-lg bg-blue-50 p-4">
+              <div>
+                <div className="text-xs font-medium text-blue-600">Base Salary</div>
+                <div className="mt-1 text-lg font-bold text-blue-900">{moneyFmt(employeeHistory.employee.base_salary)}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-blue-600">Total Payslips</div>
+                <div className="mt-1 text-lg font-bold text-blue-900">{employeeHistory.payslips.length}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-blue-600">Total Paid</div>
+                <div className="mt-1 text-lg font-bold text-blue-900">{moneyFmt(employeeHistory.totalPaid)}</div>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Period</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">Issued</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Gross</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Deductions</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-600">Net</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {employeeHistory.payslips.map((p) => {
+                    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.other_deductions ?? 0)
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">{p.period_start} to {p.period_end}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{p.date_issued}</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium text-gray-900">{moneyFmt(p.gross_salary)}</td>
+                        <td className="px-4 py-3 text-right text-sm text-red-600">{moneyFmt(deductions)}</td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{moneyFmt(p.net_salary)}</td>
+                      </tr>
+                    )
+                  })}
+                  {employeeHistory.payslips.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">No payslips found</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

@@ -140,27 +140,41 @@ export default function Invoice() {
 
   const handlePrint = async () => {
     const invoiceElement = document.getElementById('invoice-content')
-    if (!invoiceElement) return
+    if (!invoiceElement) {
+      alert('Invoice content not found')
+      return
+    }
 
     try {
-      // Hide buttons and show print-only content
-      const printHiddenElements = document.querySelectorAll('.print\\:hidden')
-      const printOnlyElements = document.querySelectorAll('.print\\:block')
+      // Clone the invoice element to avoid modifying the original
+      const clonedElement = invoiceElement.cloneNode(true) as HTMLElement
       
-      printHiddenElements.forEach(el => (el as HTMLElement).style.display = 'none')
-      printOnlyElements.forEach(el => (el as HTMLElement).style.display = 'block')
+      // Remove all elements with print:hidden class from clone
+      const hiddenElements = clonedElement.querySelectorAll('.print\\:hidden')
+      hiddenElements.forEach(el => el.remove())
+      
+      // Show all print:block elements in clone
+      const printOnlyElements = clonedElement.querySelectorAll('.print\\:block')
+      printOnlyElements.forEach(el => {
+        (el as HTMLElement).style.display = 'block'
+      })
 
-      // Generate canvas from the invoice
-      const canvas = await html2canvas(invoiceElement, {
+      // Temporarily add clone to document for rendering
+      clonedElement.style.position = 'absolute'
+      clonedElement.style.left = '-9999px'
+      document.body.appendChild(clonedElement)
+
+      // Generate canvas from the cloned invoice
+      const canvas = await html2canvas(clonedElement, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: 1200
       })
 
-      // Restore visibility
-      printHiddenElements.forEach(el => (el as HTMLElement).style.display = '')
-      printOnlyElements.forEach(el => (el as HTMLElement).style.display = '')
+      // Remove the clone
+      document.body.removeChild(clonedElement)
 
       // Create PDF
       const imgData = canvas.toDataURL('image/png')
@@ -171,9 +185,23 @@ export default function Invoice() {
       })
 
       const imgWidth = 210 // A4 width in mm
+      const pageHeight = 297 // A4 height in mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width
 
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+      let heightLeft = imgHeight
+      let position = 0
+
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+
+      // Add additional pages if needed
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
       
       // Generate filename
       const filename = invoiceNumber 
@@ -349,86 +377,95 @@ export default function Invoice() {
         </div>
       )}
 
-      <div id="invoice-content" className="rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
+      <div id="invoice-content" className="rounded-lg border border-gray-200 bg-white p-12 shadow-sm" style={{ maxWidth: '850px', margin: '0 auto' }}>
         {/* Header Section */}
-        <div className="mb-8 flex justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">INVOICE</h1>
-            <div className="mt-4 space-y-1 text-sm">
-              <p className="font-semibold">Avensetech Software Development Services</p>
-              <p className="text-gray-600">Software Development Company</p>
+        <div className="mb-10 flex items-start justify-between border-b-2 border-gray-900 pb-6">
+          <div className="flex items-start gap-6">
+            <img src="/logo.jpg" alt="Logo" className="h-24 w-24 flex-shrink-0 object-contain" />
+            <div className="pt-1">
+              <p className="text-xl font-bold text-gray-900">Avensetech Software Development Services</p>
+              <p className="mt-1 text-sm text-gray-600">Professional Software Development</p>
             </div>
           </div>
-          <div className="text-right">
-            <img src="/logo.jpg" alt="Logo" className="mb-2 ml-auto h-20 w-20 object-contain print:h-16 print:w-16" />
+          <div className="flex-shrink-0">
+            <h1 className="text-right text-5xl font-bold text-gray-900">INVOICE</h1>
           </div>
         </div>
 
-        {/* Invoice Details */}
-        <div className="mb-8 grid grid-cols-2 gap-8">
+        {/* Invoice Details and Bill To */}
+        <div className="mb-8 grid grid-cols-2 gap-16">
+          {/* Bill To Section */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700 print:hidden">Invoice Number</label>
-            <input
-              type="text"
-              value={invoiceNumber}
-              onChange={(e) => setInvoiceNumber(e.target.value)}
-              placeholder="INV-001"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
-            />
-            {invoiceNumber && <p className="hidden text-sm print:block"><strong>Invoice #:</strong> {invoiceNumber}</p>}
+            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500">Bill To:</h3>
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="Client Name"
+                className="w-full border-0 px-0 py-1 text-sm font-semibold focus:outline-none print:border-0"
+              />
+              {clientName && <p className="hidden text-sm font-semibold text-gray-900 print:block">{clientName}</p>}
+              
+              <input
+                type="email"
+                value={clientEmail}
+                onChange={(e) => setClientEmail(e.target.value)}
+                placeholder="client@email.com"
+                className="w-full border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
+              />
+              {clientEmail && <p className="hidden text-sm text-gray-700 print:block">{clientEmail}</p>}
+              
+              <textarea
+                value={clientAddress}
+                onChange={(e) => setClientAddress(e.target.value)}
+                placeholder="Client Address"
+                rows={2}
+                className="w-full resize-none border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
+              />
+              {clientAddress && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{clientAddress}</p>}
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700 print:hidden">Invoice Date</label>
-            <input
-              type="date"
-              value={invoiceDate}
-              onChange={(e) => setInvoiceDate(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
-            />
-            {invoiceDate && <p className="hidden text-sm print:block"><strong>Date:</strong> {invoiceDate}</p>}
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700 print:hidden">Due Date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
-            />
-            {dueDate && <p className="hidden text-sm print:block"><strong>Due Date:</strong> {dueDate}</p>}
-          </div>
-        </div>
 
-        {/* Bill To Section */}
-        <div className="mb-8">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">BILL TO:</h3>
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Client Name"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
-            />
-            {clientName && <p className="hidden text-sm print:block">{clientName}</p>}
-            
-            <input
-              type="email"
-              value={clientEmail}
-              onChange={(e) => setClientEmail(e.target.value)}
-              placeholder="client@email.com"
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
-            />
-            {clientEmail && <p className="hidden text-sm print:block">{clientEmail}</p>}
-            
-            <textarea
-              value={clientAddress}
-              onChange={(e) => setClientAddress(e.target.value)}
-              placeholder="Client Address"
-              rows={2}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
-            />
-            {clientAddress && <p className="hidden whitespace-pre-line text-sm print:block">{clientAddress}</p>}
+          {/* Invoice Info */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-[120px_1fr] gap-4">
+              <span className="text-xs font-bold uppercase text-gray-500">Invoice #:</span>
+              <div>
+                <input
+                  type="text"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="INV-001"
+                  className="w-full border-0 px-0 py-1 text-right text-sm font-semibold focus:outline-none print:border-0"
+                />
+                {invoiceNumber && <p className="hidden text-right text-sm font-semibold text-gray-900 print:block">{invoiceNumber}</p>}
+              </div>
+            </div>
+            <div className="grid grid-cols-[120px_1fr] gap-4">
+              <span className="text-xs font-bold uppercase text-gray-500">Date:</span>
+              <div>
+                <input
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  className="w-full border-0 px-0 py-1 text-right text-sm focus:outline-none print:border-0"
+                />
+                {invoiceDate && <p className="hidden text-right text-sm text-gray-900 print:block">{invoiceDate}</p>}
+              </div>
+            </div>
+            <div className="grid grid-cols-[120px_1fr] gap-4">
+              <span className="text-xs font-bold uppercase text-gray-500">Due Date:</span>
+              <div>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full border-0 px-0 py-1 text-right text-sm focus:outline-none print:border-0"
+                />
+                {dueDate && <p className="hidden text-right text-sm text-gray-900 print:block">{dueDate}</p>}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -436,10 +473,10 @@ export default function Invoice() {
         <div className="mb-8">
           <table className="w-full">
             <thead>
-              <tr className="border-b-2 border-gray-300">
-                <th className="pb-2 text-left text-xs font-semibold text-gray-700">DESCRIPTION</th>
-                <th className="pb-2 text-right text-xs font-semibold text-gray-700">AMOUNT</th>
-                <th className="pb-2 print:hidden"></th>
+              <tr className="border-b-2 border-gray-800">
+                <th className="py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-700">Description</th>
+                <th className="w-40 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-700">Amount</th>
+                <th className="w-10 print:hidden"></th>
               </tr>
             </thead>
             <tbody>
@@ -452,18 +489,18 @@ export default function Invoice() {
                         value={item.description}
                         onChange={(e) => updateItem(item.id, 'description', e.target.value)}
                         placeholder="Item description"
-                        className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm print:border-0 print:p-0"
+                        className="flex-1 border-0 px-0 py-1 text-sm focus:outline-none print:border-0 print:p-0"
                       />
                       <button
                         type="button"
                         onClick={() => { setSelectedItemId(item.id); setShowDescriptionModal(true); }}
-                        className="rounded bg-purple-100 px-2 py-1 text-xs text-purple-700 hover:bg-purple-200 print:hidden"
+                        className="rounded bg-purple-100 px-2 text-xs text-purple-700 hover:bg-purple-200 print:hidden"
                         title="Load saved description"
                       >
                         📝
                       </button>
                     </div>
-                    {item.description && <p className="hidden text-sm print:block">{item.description}</p>}
+                    {item.description && <p className="hidden text-sm text-gray-900 print:block">{item.description}</p>}
                   </td>
                   <td className="py-3 text-right">
                     <input
@@ -473,11 +510,11 @@ export default function Invoice() {
                       min="0"
                       step="0.01"
                       placeholder="0.00"
-                      className="w-32 rounded border border-gray-300 px-3 py-1 text-right text-sm print:border-0 print:p-0"
+                      className="w-full border-0 px-0 py-1 text-right text-sm font-medium focus:outline-none print:border-0 print:p-0"
                     />
-                    <p className="hidden text-sm font-medium print:block">${item.amount.toFixed(2)}</p>
+                    <p className="hidden text-sm font-medium text-gray-900 print:block">${item.amount.toFixed(2)}</p>
                   </td>
-                  <td className="py-3 text-right print:hidden">
+                  <td className="py-3 text-center print:hidden">
                     <button
                       onClick={() => removeItem(item.id)}
                       className="text-red-600 hover:text-red-800"
@@ -501,17 +538,17 @@ export default function Invoice() {
         {/* Totals */}
         <div className="mb-8 flex justify-end">
           <div className="w-64 space-y-2">
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between border-b border-gray-200 py-2 text-sm">
               <span className="text-gray-600">Subtotal:</span>
-              <span className="font-medium">${subtotal.toFixed(2)}</span>
+              <span className="font-medium text-gray-900">${subtotal.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between border-b border-gray-200 py-2 text-sm">
               <span className="text-gray-600">Tax (0%):</span>
-              <span className="font-medium">${tax.toFixed(2)}</span>
+              <span className="font-medium text-gray-900">${tax.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between border-t-2 border-gray-300 pt-2 text-lg font-bold">
-              <span>Total:</span>
-              <span>${total.toFixed(2)}</span>
+            <div className="flex justify-between border-t-2 border-gray-800 py-3">
+              <span className="text-lg font-bold text-gray-900">Total:</span>
+              <span className="text-xl font-bold text-gray-900">${total.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -519,7 +556,7 @@ export default function Invoice() {
         {/* Notes and Terms */}
         <div className="space-y-4 border-t border-gray-200 pt-6">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-700">NOTES</label>
+            <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Notes</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -527,18 +564,23 @@ export default function Invoice() {
               rows={2}
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
             />
-            {notes && <p className="hidden whitespace-pre-line text-sm print:block">{notes}</p>}
+            {notes && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{notes}</p>}
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-gray-700">TERMS & CONDITIONS</label>
+            <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Terms & Conditions</label>
             <textarea
               value={terms}
               onChange={(e) => setTerms(e.target.value)}
               rows={2}
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
             />
-            {terms && <p className="hidden whitespace-pre-line text-sm print:block">{terms}</p>}
+            {terms && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{terms}</p>}
           </div>
+        </div>
+        
+        {/* Footer */}
+        <div className="mt-8 border-t border-gray-200 pt-4 text-center">
+          <p className="text-xs text-gray-500">Thank you for your business!</p>
         </div>
       </div>
     </div>
