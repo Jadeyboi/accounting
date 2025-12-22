@@ -377,55 +377,59 @@ export default function Invoice() {
         </div>
       )}
 
-      <div id="invoice-content" className="rounded-lg border border-gray-200 bg-white p-12 shadow-sm" style={{ maxWidth: '850px', margin: '0 auto' }}>
+      <div id="invoice-content" className="rounded-lg border border-gray-200 bg-white shadow-lg" style={{ maxWidth: '210mm', margin: '0 auto' }}>
         {/* Header Section */}
-        <div className="mb-10 flex items-start justify-between border-b-2 border-gray-900 pb-6">
-          <div className="flex items-start gap-6">
-            <img src="/logo.jpg" alt="Logo" className="h-24 w-24 flex-shrink-0 object-contain" />
-            <div className="pt-1">
-              <p className="text-xl font-bold text-gray-900">Avensetech Software Development Services</p>
-              <p className="mt-1 text-sm text-gray-600">Professional Software Development</p>
+        <div className="border-b-4 border-blue-600 bg-white p-10">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <img src="/logo.jpg" alt="Avensetech Logo" className="h-20 w-20 rounded object-contain shadow-sm" />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Avensetech Software Development Services</h1>
+                <p className="mt-1 text-sm text-gray-600">2-806, Oakridge Business Park, Banilad, Mandaue City</p>
+                <p className="text-sm text-gray-600">(032) 234-1362 • 09297246296</p>
+              </div>
             </div>
-          </div>
-          <div className="flex-shrink-0">
-            <h1 className="text-right text-5xl font-bold text-gray-900">INVOICE</h1>
+            <div>
+              <h2 className="text-right text-4xl font-bold text-blue-600">INVOICE</h2>
+            </div>
           </div>
         </div>
 
         {/* Invoice Details and Bill To */}
-        <div className="mb-8 grid grid-cols-2 gap-16">
-          {/* Bill To Section */}
-          <div>
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500">Bill To:</h3>
-            <div className="space-y-2">
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                placeholder="Client Name"
-                className="w-full border-0 px-0 py-1 text-sm font-semibold focus:outline-none print:border-0"
-              />
-              {clientName && <p className="hidden text-sm font-semibold text-gray-900 print:block">{clientName}</p>}
-              
-              <input
-                type="email"
-                value={clientEmail}
-                onChange={(e) => setClientEmail(e.target.value)}
-                placeholder="client@email.com"
-                className="w-full border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
-              />
-              {clientEmail && <p className="hidden text-sm text-gray-700 print:block">{clientEmail}</p>}
-              
-              <textarea
-                value={clientAddress}
-                onChange={(e) => setClientAddress(e.target.value)}
-                placeholder="Client Address"
-                rows={2}
-                className="w-full resize-none border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
-              />
-              {clientAddress && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{clientAddress}</p>}
+        <div className="bg-gray-50 p-10">
+          <div className="grid grid-cols-2 gap-12">
+            {/* Bill To Section */}
+            <div>
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500">Bill To:</h3>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  placeholder="Client Name"
+                  className="w-full border-0 px-0 py-1 text-sm font-semibold focus:outline-none print:border-0"
+                />
+                {clientName && <p className="hidden text-sm font-semibold text-gray-900 print:block">{clientName}</p>}
+                
+                <input
+                  type="email"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  placeholder="client@email.com"
+                  className="w-full border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
+                />
+                {clientEmail && <p className="hidden text-sm text-gray-700 print:block">{clientEmail}</p>}
+                
+                <textarea
+                  value={clientAddress}
+                  onChange={(e) => setClientAddress(e.target.value)}
+                  placeholder="Client Address"
+                  rows={2}
+                  className="w-full resize-none border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
+                />
+                {clientAddress && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{clientAddress}</p>}
+              </div>
             </div>
-          </div>
 
           {/* Invoice Info */}
           <div className="space-y-3">
@@ -470,7 +474,7 @@ export default function Invoice() {
         </div>
 
         {/* Items Table */}
-        <div className="mb-8">
+        <div className="p-10">
           <table className="w-full">
             <thead>
               <tr className="border-b-2 border-gray-800">
@@ -536,7 +540,8 @@ export default function Invoice() {
         </div>
 
         {/* Totals */}
-        <div className="mb-8 flex justify-end">
+        <div className="bg-gray-50 p-10">
+          <div className="flex justify-end">
           <div className="w-64 space-y-2">
             <div className="flex justify-between border-b border-gray-200 py-2 text-sm">
               <span className="text-gray-600">Subtotal:</span>
@@ -554,7 +559,7 @@ export default function Invoice() {
         </div>
 
         {/* Notes and Terms */}
-        <div className="space-y-4 border-t border-gray-200 pt-6">
+        <div className="space-y-4 border-t border-gray-200 p-10">
           <div>
             <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Notes</label>
             <textarea
@@ -577,11 +582,13 @@ export default function Invoice() {
             {terms && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{terms}</p>}
           </div>
         </div>
-        
         {/* Footer */}
-        <div className="mt-8 border-t border-gray-200 pt-4 text-center">
-          <p className="text-xs text-gray-500">Thank you for your business!</p>
+        <div className="border-t border-gray-200 bg-gray-100 p-6 text-center">
+          <p className="text-xs text-gray-600">Thank you for your business!</p>
+          <p className="mt-1 text-xs text-gray-500">Avensetech Software Development Services • 2-806, Oakridge Business Park, Banilad, Mandaue City</p>
         </div>
+      </div>
+      </div>
       </div>
     </div>
   )
