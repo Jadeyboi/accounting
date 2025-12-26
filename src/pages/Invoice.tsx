@@ -138,6 +138,30 @@ export default function Invoice() {
   const tax = 0 // No tax
   const total = subtotal + tax
 
+  const saveInvoiceToHistory = () => {
+    const invoice = {
+      id: Date.now().toString(),
+      invoiceNumber,
+      invoiceDate,
+      dueDate,
+      clientName,
+      clientEmail,
+      clientAddress,
+      items,
+      notes,
+      terms,
+      subtotal,
+      tax,
+      total,
+      createdAt: new Date().toISOString()
+    }
+
+    const saved = localStorage.getItem('savedInvoices')
+    const invoices = saved ? JSON.parse(saved) : []
+    invoices.push(invoice)
+    localStorage.setItem('savedInvoices', JSON.stringify(invoices))
+  }
+
   const handlePrint = async () => {
     const invoiceElement = document.getElementById('invoice-content')
     if (!invoiceElement) {
@@ -209,6 +233,10 @@ export default function Invoice() {
         : `Invoice-${new Date().toISOString().split('T')[0]}.pdf`
       
       pdf.save(filename)
+      
+      // Save invoice to history
+      saveInvoiceToHistory()
+      alert('Invoice saved successfully!')
     } catch (error) {
       console.error('Error generating PDF:', error)
       alert('Failed to generate PDF. Please try again.')
@@ -380,11 +408,10 @@ export default function Invoice() {
       <div id="invoice-content" className="rounded-lg border border-gray-200 bg-white shadow-lg" style={{ maxWidth: '210mm', margin: '0 auto' }}>
         {/* Header Section */}
         <div className="border-b-4 border-blue-600 bg-white p-10">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <div className="flex items-center gap-6">
-              <img src="/logo.jpg" alt="Avensetech Logo" className="h-20 w-20 rounded object-contain shadow-sm" />
+              <img src="/avensetech-logo.jpg" alt="Avensetech Logo" className="h-24 w-24 rounded object-contain shadow-sm" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Avensetech Software Development Services</h1>
                 <p className="mt-1 text-sm text-gray-600">2-806, Oakridge Business Park, Banilad, Mandaue City</p>
                 <p className="text-sm text-gray-600">(032) 234-1362 • 09297246296</p>
               </div>
@@ -407,68 +434,56 @@ export default function Invoice() {
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   placeholder="Client Name"
-                  className="w-full border-0 px-0 py-1 text-sm font-semibold focus:outline-none print:border-0"
+                  className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm font-semibold focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
                 />
-                {clientName && <p className="hidden text-sm font-semibold text-gray-900 print:block">{clientName}</p>}
-                
-                <input
-                  type="email"
-                  value={clientEmail}
-                  onChange={(e) => setClientEmail(e.target.value)}
-                  placeholder="client@email.com"
-                  className="w-full border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
-                />
-                {clientEmail && <p className="hidden text-sm text-gray-700 print:block">{clientEmail}</p>}
+                <p className="hidden text-sm font-semibold text-gray-900 print:block">{clientName || 'Client Name'}</p>
                 
                 <textarea
                   value={clientAddress}
                   onChange={(e) => setClientAddress(e.target.value)}
                   placeholder="Client Address"
-                  rows={2}
-                  className="w-full resize-none border-0 px-0 py-1 text-sm focus:outline-none print:border-0"
+                  rows={3}
+                  className="w-full resize-none rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
                 />
-                {clientAddress && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{clientAddress}</p>}
+                <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{clientAddress || 'Client Address'}</p>
               </div>
             </div>
 
           {/* Invoice Info */}
           <div className="space-y-3">
-            <div className="grid grid-cols-[120px_1fr] gap-4">
+            <div className="grid grid-cols-[100px_1fr] gap-3">
               <span className="text-xs font-bold uppercase text-gray-500">Invoice #:</span>
-              <div>
-                <input
-                  type="text"
-                  value={invoiceNumber}
-                  onChange={(e) => setInvoiceNumber(e.target.value)}
-                  placeholder="INV-001"
-                  className="w-full border-0 px-0 py-1 text-right text-sm font-semibold focus:outline-none print:border-0"
-                />
-                {invoiceNumber && <p className="hidden text-right text-sm font-semibold text-gray-900 print:block">{invoiceNumber}</p>}
-              </div>
+              <input
+                type="text"
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+                placeholder="INV-001"
+                className="rounded border border-gray-300 bg-white px-3 py-2 text-right text-sm font-semibold focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
+              />
+              <span className="hidden print:block"></span>
+              <p className="hidden text-right text-sm font-semibold text-gray-900 print:block">{invoiceNumber || 'INV-001'}</p>
             </div>
-            <div className="grid grid-cols-[120px_1fr] gap-4">
+            <div className="grid grid-cols-[100px_1fr] gap-3">
               <span className="text-xs font-bold uppercase text-gray-500">Date:</span>
-              <div>
-                <input
-                  type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="w-full border-0 px-0 py-1 text-right text-sm focus:outline-none print:border-0"
-                />
-                {invoiceDate && <p className="hidden text-right text-sm text-gray-900 print:block">{invoiceDate}</p>}
-              </div>
+              <input
+                type="date"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+                className="rounded border border-gray-300 bg-white px-3 py-2 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
+              />
+              <span className="hidden print:block"></span>
+              <p className="hidden text-right text-sm text-gray-900 print:block">{invoiceDate}</p>
             </div>
-            <div className="grid grid-cols-[120px_1fr] gap-4">
+            <div className="grid grid-cols-[100px_1fr] gap-3">
               <span className="text-xs font-bold uppercase text-gray-500">Due Date:</span>
-              <div>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full border-0 px-0 py-1 text-right text-sm focus:outline-none print:border-0"
-                />
-                {dueDate && <p className="hidden text-right text-sm text-gray-900 print:block">{dueDate}</p>}
-              </div>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="rounded border border-gray-300 bg-white px-3 py-2 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
+              />
+              <span className="hidden print:block"></span>
+              <p className="hidden text-right text-sm text-gray-900 print:block">{dueDate || 'N/A'}</p>
             </div>
           </div>
         </div>
@@ -487,24 +502,24 @@ export default function Invoice() {
               {items.map((item) => (
                 <tr key={item.id} className="border-b border-gray-200">
                   <td className="py-3">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 print:hidden">
                       <input
                         type="text"
                         value={item.description}
                         onChange={(e) => updateItem(item.id, 'description', e.target.value)}
                         placeholder="Item description"
-                        className="flex-1 border-0 px-0 py-1 text-sm focus:outline-none print:border-0 print:p-0"
+                        className="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                       <button
                         type="button"
                         onClick={() => { setSelectedItemId(item.id); setShowDescriptionModal(true); }}
-                        className="rounded bg-purple-100 px-2 text-xs text-purple-700 hover:bg-purple-200 print:hidden"
+                        className="rounded bg-purple-100 px-2 text-xs text-purple-700 hover:bg-purple-200"
                         title="Load saved description"
                       >
                         📝
                       </button>
                     </div>
-                    {item.description && <p className="hidden text-sm text-gray-900 print:block">{item.description}</p>}
+                    <p className="hidden py-1 text-sm text-gray-900 print:block">{item.description || 'Item description'}</p>
                   </td>
                   <td className="py-3 text-right">
                     <input
@@ -514,9 +529,9 @@ export default function Invoice() {
                       min="0"
                       step="0.01"
                       placeholder="0.00"
-                      className="w-full border-0 px-0 py-1 text-right text-sm font-medium focus:outline-none print:border-0 print:p-0"
+                      className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-right text-sm font-medium focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
                     />
-                    <p className="hidden text-sm font-medium text-gray-900 print:block">${item.amount.toFixed(2)}</p>
+                    <p className="hidden py-1 text-sm font-medium text-gray-900 print:block">${item.amount.toFixed(2)}</p>
                   </td>
                   <td className="py-3 text-center print:hidden">
                     <button
@@ -567,9 +582,9 @@ export default function Invoice() {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Additional notes or special instructions"
               rows={2}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
+              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
             />
-            {notes && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{notes}</p>}
+            <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{notes || 'No additional notes'}</p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Terms & Conditions</label>
@@ -577,9 +592,9 @@ export default function Invoice() {
               value={terms}
               onChange={(e) => setTerms(e.target.value)}
               rows={2}
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm print:border-0 print:p-0"
+              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
             />
-            {terms && <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{terms}</p>}
+            <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{terms}</p>
           </div>
         </div>
         {/* Footer */}

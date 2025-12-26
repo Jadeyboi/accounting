@@ -7,6 +7,15 @@ interface Props {
   onChanged: () => void;
 }
 
+const formatDate = (dateString: string): string => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}-${day}-${year}`
+}
+
 export default function TransactionList({ refreshKey, onChanged }: Props) {
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -295,7 +304,7 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
                 </>
               ) : (
                 <>
-                  <td className="px-4 py-2 text-sm text-slate-800">{t.date}</td>
+                  <td className="px-4 py-2 text-sm text-slate-800">{formatDate(t.date)}</td>
                   <td className="px-4 py-2 text-sm">
                     <span
                       className={

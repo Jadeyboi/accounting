@@ -17,6 +17,21 @@ export interface Employee {
   name: string;
   position?: string | null;
   base_salary?: number | null;
+  employee_number?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  birthdate?: string | null;
+  date_hired?: string | null;
+  department?: string | null;
+  status?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_relationship?: string | null;
+  sss_number?: string | null;
+  philhealth_number?: string | null;
+  pagibig_number?: string | null;
+  tin_number?: string | null;
 }
 
 export interface Payslip {

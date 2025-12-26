@@ -6,6 +6,15 @@ import TransactionList from '@/components/TransactionList'
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/types'
 
+const formatDate = (dateString: string): string => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}-${day}-${year}`
+}
+
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [summaryItems, setSummaryItems] = useState<Transaction[]>([])
@@ -183,7 +192,7 @@ export default function Home() {
                   </div>
                   <div>
                     <div className="font-medium text-gray-900">{t.category || 'Uncategorized'}</div>
-                    <div className="text-xs text-gray-500">{t.date} {t.note && `• ${t.note}`}</div>
+                    <div className="text-xs text-gray-500">{formatDate(t.date)} {t.note && `• ${t.note}`}</div>
                   </div>
                 </div>
                 <div className={`text-lg font-semibold ${

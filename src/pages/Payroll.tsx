@@ -7,6 +7,15 @@ type Mode = 'list' | 'edit'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
+const formatDate = (dateString: string): string => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}-${day}-${year}`
+}
+
 const moneyFmt = (v: number | null | undefined) => `₱ ${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export default function Payroll() {
@@ -34,6 +43,9 @@ export default function Payroll() {
   // Salary history
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [historyEmployeeId, setHistoryEmployeeId] = useState<string | null>(null)
+  const [viewingPayslip, setViewingPayslip] = useState<Payslip | null>(null)
+  const [showViewModal, setShowViewModal] = useState(false)
+  const viewPayslipRef = useRef<HTMLDivElement>(null)
 
   const payslipContainerRef = useRef<HTMLDivElement>(null)
 
@@ -70,30 +82,66 @@ export default function Payroll() {
     return { additions, deductions, net }
   }, [editingPayslip])
 
-  const newPayslip = (): Payslip => ({
-    id: crypto.randomUUID(),
-    created_at: new Date().toISOString(),
-    employee_id: employees[0]?.id ?? '',
-    period_start: today(),
-    period_end: today(),
-    date_issued: today(),
-    gross_salary: Number(employees[0]?.base_salary ?? 0),
-    sss: 0,
-    pagibig: 0,
-    philhealth: 0,
-    tax: 0,
-    cash_advance: 0,
-    bonuses: 0,
-    allowances: 0,
-    other_deductions: 0,
-    notes: '',
-    net_salary: 0,
-    transaction_id: null,
-  })
+  const newPayslip = (): Payslip => {
+    const baseSalary = Number(employees[0]?.base_salary ?? 0)
+    return {
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      employee_id: employees[0]?.id ?? '',
+      period_start: today(),
+      period_end: today(),
+      date_issued: today(),
+      gross_salary: baseSalary / 2, // Default to half-month salary
+      sss: 0,
+      pagibig: 0,
+      philhealth: 0,
+      tax: 0,
+      cash_advance: 0,
+      bonuses: 0,
+      allowances: 0,
+      other_deductions: 0,
+      notes: '',
+      net_salary: 0,
+      transaction_id: null,
+    }
+  }
+
+  // Calculate if period is half-month and adjust gross salary accordingly
+  const calculateGrossSalary = (periodStart: string, periodEnd: string, baseSalary: number): number => {
+    const start = new Date(periodStart)
+    const end = new Date(periodEnd)
+    const startDay = start.getDate()
+    const endDay = end.getDate()
+    
+    // Check if it's first half (1-15) or second half (16-end of month)
+    const isFirstHalf = startDay === 1 && endDay === 15
+    const isSecondHalf = startDay === 16 && (endDay >= 28 && endDay <= 31)
+    
+    if (isFirstHalf || isSecondHalf) {
+      return baseSalary / 2 // Half month salary
+    }
+    
+    return baseSalary // Full month salary
+  }
 
   const onEditPayslip = (p?: Payslip) => {
-    if (p) setEditingPayslip(p)
-    else setEditingPayslip(newPayslip())
+    if (p) {
+      setEditingPayslip(p)
+    } else {
+      const newSlip = newPayslip()
+      // Pre-fill with last payslip values for the selected employee
+      const lastPayslip = payslips.find(ps => ps.employee_id === newSlip.employee_id)
+      if (lastPayslip) {
+        newSlip.sss = lastPayslip.sss
+        newSlip.pagibig = lastPayslip.pagibig
+        newSlip.philhealth = lastPayslip.philhealth
+        newSlip.tax = lastPayslip.tax
+        newSlip.bonuses = lastPayslip.bonuses
+        newSlip.allowances = lastPayslip.allowances
+        // Don't copy cash_advance and other_deductions as they're usually one-time
+      }
+      setEditingPayslip(newSlip)
+    }
     setMode('edit')
   }
 
@@ -163,6 +211,27 @@ export default function Payroll() {
     pdf.save(`payslip_${currentEmployee?.name ?? 'employee'}_${editingPayslip.date_issued}.pdf`)
   }
 
+  const onDownloadViewedPayslip = async () => {
+    if (!viewingPayslip || !viewPayslipRef.current) return
+    const el = viewPayslipRef.current
+    const emp = employees.find(e => e.id === viewingPayslip.employee_id)
+    const [jsPDFMod, html2canvasMod] = await Promise.all([
+      import('jspdf'),
+      import('html2canvas'),
+    ])
+    const jsPDF = (jsPDFMod as any).default
+    const html2canvas = (html2canvasMod as any).default
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' })
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' })
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const imgWidth = pageWidth - 40
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+    pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, Math.min(imgHeight, pageHeight - 40))
+    pdf.save(`payslip_${emp?.name ?? 'employee'}_${viewingPayslip.date_issued}.pdf`)
+  }
+
   const onSaveEmployee = async () => {
     const payload: Partial<Employee> = {
       name: empName.trim(),
@@ -205,7 +274,12 @@ export default function Payroll() {
 
     const newPayslips = selectedEmployees.map(empId => {
       const emp = employees.find(e => e.id === empId)
-      const gross = emp?.base_salary ?? 0
+      const baseSalary = emp?.base_salary ?? 0
+      const gross = calculateGrossSalary(bulkPeriodStart, bulkPeriodEnd, baseSalary)
+      
+      // Pre-fill with last payslip values for this employee
+      const lastPayslip = payslips.find(ps => ps.employee_id === empId)
+      
       return {
         id: crypto.randomUUID(),
         created_at: new Date().toISOString(),
@@ -214,16 +288,17 @@ export default function Payroll() {
         period_end: bulkPeriodEnd,
         date_issued: today(),
         gross_salary: gross,
-        sss: 0,
-        pagibig: 0,
-        philhealth: 0,
-        tax: 0,
-        cash_advance: 0,
-        bonuses: 0,
-        allowances: 0,
-        other_deductions: 0,
+        sss: lastPayslip?.sss ?? 0,
+        pagibig: lastPayslip?.pagibig ?? 0,
+        philhealth: lastPayslip?.philhealth ?? 0,
+        tax: lastPayslip?.tax ?? 0,
+        cash_advance: 0, // Don't copy one-time deductions
+        bonuses: lastPayslip?.bonuses ?? 0,
+        allowances: lastPayslip?.allowances ?? 0,
+        other_deductions: 0, // Don't copy one-time deductions
         notes: '',
-        net_salary: gross,
+        net_salary: gross + (lastPayslip?.bonuses ?? 0) + (lastPayslip?.allowances ?? 0) - 
+                    ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0)),
         transaction_id: null,
       }
     })
@@ -359,12 +434,13 @@ export default function Payroll() {
                   return (
                     <tr key={p.id}>
                       <td className="px-3 py-2 text-sm text-slate-800">{emp?.name ?? p.employee_id}</td>
-                      <td className="px-3 py-2 text-sm text-slate-700">{p.period_start} to {p.period_end}</td>
-                      <td className="px-3 py-2 text-sm text-slate-700">{p.date_issued}</td>
+                      <td className="px-3 py-2 text-sm text-slate-700">{formatDate(p.period_start)} to {formatDate(p.period_end)}</td>
+                      <td className="px-3 py-2 text-sm text-slate-700">{formatDate(p.date_issued)}</td>
                       <td className="px-3 py-2 text-right text-sm text-slate-900">{moneyFmt(p.net_salary)}</td>
                       <td className="px-3 py-2 text-sm">{p.transaction_id ? <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-700">Linked</span> : <span className="rounded bg-slate-50 px-2 py-1 text-slate-600">Not Linked</span>}</td>
                       <td className="px-3 py-2 text-right">
-                        <button className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-700 hover:bg-slate-200" onClick={() => onEditPayslip(p)}>Edit</button>
+                        <button className="rounded-md bg-blue-50 px-3 py-1 text-sm text-blue-700 hover:bg-blue-100" onClick={() => { setViewingPayslip(p); setShowViewModal(true); }}>View</button>
+                        <button className="ml-2 rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-700 hover:bg-slate-200" onClick={() => onEditPayslip(p)}>Edit</button>
                         <button className="ml-2 rounded-md bg-rose-50 px-3 py-1 text-sm text-rose-700 hover:bg-rose-100" onClick={() => onDeletePayslip(p.id)}>Delete</button>
                       </td>
                     </tr>
@@ -387,16 +463,64 @@ export default function Payroll() {
             <div className="mb-3 text-base font-semibold text-slate-900">Payslip Details</div>
             <div className="grid grid-cols-1 gap-3">
               <label className="text-sm text-slate-600">Employee
-                <select className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" value={editingPayslip.employee_id} onChange={(e) => setEditingPayslip({ ...editingPayslip, employee_id: e.target.value })}>
+                <select 
+                  className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                  value={editingPayslip.employee_id} 
+                  onChange={(e) => {
+                    const newEmpId = e.target.value
+                    const emp = employees.find(emp => emp.id === newEmpId)
+                    const baseSalary = emp?.base_salary ?? 0
+                    const newGross = calculateGrossSalary(editingPayslip.period_start, editingPayslip.period_end, baseSalary)
+                    
+                    // Pre-fill with last payslip values for this employee
+                    const lastPayslip = payslips.find(ps => ps.employee_id === newEmpId)
+                    
+                    setEditingPayslip({ 
+                      ...editingPayslip, 
+                      employee_id: newEmpId, 
+                      gross_salary: newGross,
+                      sss: lastPayslip?.sss ?? 0,
+                      pagibig: lastPayslip?.pagibig ?? 0,
+                      philhealth: lastPayslip?.philhealth ?? 0,
+                      tax: lastPayslip?.tax ?? 0,
+                      bonuses: lastPayslip?.bonuses ?? 0,
+                      allowances: lastPayslip?.allowances ?? 0,
+                      cash_advance: 0, // Reset one-time deductions
+                      other_deductions: 0, // Reset one-time deductions
+                    })
+                  }}
+                >
                   {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-sm text-slate-600">Period Start
-                  <input type="date" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" value={editingPayslip.period_start} onChange={(e) => setEditingPayslip({ ...editingPayslip, period_start: e.target.value })} />
+                  <input 
+                    type="date" 
+                    className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                    value={editingPayslip.period_start} 
+                    onChange={(e) => {
+                      const newStart = e.target.value
+                      const emp = employees.find(emp => emp.id === editingPayslip.employee_id)
+                      const baseSalary = emp?.base_salary ?? 0
+                      const newGross = calculateGrossSalary(newStart, editingPayslip.period_end, baseSalary)
+                      setEditingPayslip({ ...editingPayslip, period_start: newStart, gross_salary: newGross })
+                    }} 
+                  />
                 </label>
                 <label className="text-sm text-slate-600">Period End
-                  <input type="date" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" value={editingPayslip.period_end} onChange={(e) => setEditingPayslip({ ...editingPayslip, period_end: e.target.value })} />
+                  <input 
+                    type="date" 
+                    className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                    value={editingPayslip.period_end} 
+                    onChange={(e) => {
+                      const newEnd = e.target.value
+                      const emp = employees.find(emp => emp.id === editingPayslip.employee_id)
+                      const baseSalary = emp?.base_salary ?? 0
+                      const newGross = calculateGrossSalary(editingPayslip.period_start, newEnd, baseSalary)
+                      setEditingPayslip({ ...editingPayslip, period_end: newEnd, gross_salary: newGross })
+                    }} 
+                  />
                 </label>
               </div>
               <label className="text-sm text-slate-600">Date Issued
@@ -404,7 +528,23 @@ export default function Payroll() {
               </label>
 
               <label className="text-sm text-slate-600">Gross Salary
-                <input type="number" step="0.01" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" value={editingPayslip.gross_salary} onChange={(e) => setEditingPayslip({ ...editingPayslip, gross_salary: Number(e.target.value) })} />
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" 
+                    value={editingPayslip.gross_salary} 
+                    onChange={(e) => setEditingPayslip({ ...editingPayslip, gross_salary: Number(e.target.value) })} 
+                  />
+                  <div className="mt-1 text-xs text-slate-500">
+                    {(() => {
+                      const emp = employees.find(e => e.id === editingPayslip.employee_id)
+                      const baseSalary = emp?.base_salary ?? 0
+                      const isHalfMonth = editingPayslip.gross_salary === baseSalary / 2
+                      return isHalfMonth ? '(Half-month salary)' : baseSalary > 0 && editingPayslip.gross_salary === baseSalary ? '(Full-month salary)' : ''
+                    })()}
+                  </div>
+                </div>
               </label>
 
               <div className="grid grid-cols-2 gap-3">
@@ -593,8 +733,8 @@ export default function Payroll() {
                     const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.other_deductions ?? 0)
                     return (
                       <tr key={p.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">{p.period_start} to {p.period_end}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{p.date_issued}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{formatDate(p.period_start)} to {formatDate(p.period_end)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{formatDate(p.date_issued)}</td>
                         <td className="px-4 py-3 text-right text-sm font-medium text-gray-900">{moneyFmt(p.gross_salary)}</td>
                         <td className="px-4 py-3 text-right text-sm text-red-600">{moneyFmt(deductions)}</td>
                         <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{moneyFmt(p.net_salary)}</td>
@@ -608,6 +748,40 @@ export default function Payroll() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Payslip Modal */}
+      {showViewModal && viewingPayslip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Payslip Details</h3>
+              <button onClick={() => { setShowViewModal(false); setViewingPayslip(null); }} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+
+            <div ref={viewPayslipRef} className="rounded-lg border border-gray-200 bg-white p-4">
+              <PayslipView 
+                employee={employees.find(e => e.id === viewingPayslip.employee_id)!} 
+                payslip={viewingPayslip} 
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowViewModal(false); setViewingPayslip(null); }}
+                className="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
+              >
+                Close
+              </button>
+              <button
+                onClick={onDownloadViewedPayslip}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Download PDF
+              </button>
             </div>
           </div>
         </div>

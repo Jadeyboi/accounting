@@ -8,6 +8,15 @@ interface Props {
 
 const money = (v: number | null | undefined) => `₱ ${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+const formatDate = (dateString: string): string => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}-${day}-${year}`
+}
+
 const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, ref) => {
   const totalDeductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.other_deductions ?? 0)
   const totalAdditions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
@@ -17,7 +26,7 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
       {/* Company Header */}
       <div className="mb-6 flex items-start justify-between border-b-2 border-slate-900 pb-4">
         <div className="flex items-center gap-4">
-          <img src="/logo.jpg" alt="Avensetech Logo" className="h-16 w-16 object-contain" />
+          <img src="/avensetech-logo.jpg" alt="Avensetech Logo" className="h-16 w-16 object-contain" />
           <div>
             <h1 className="text-xl font-bold text-slate-900">Avensetech Software Development Services</h1>
             <p className="mt-1 text-xs text-slate-600">2-806, Oakridge Business Park, Banilad, Mandaue City</p>
@@ -30,7 +39,7 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">PAYSLIP</h2>
-          <p className="text-sm text-slate-600">Date Issued: {payslip.date_issued}</p>
+          <p className="text-sm text-slate-600">Date Issued: {formatDate(payslip.date_issued)}</p>
         </div>
         <div className="rounded-lg bg-slate-50 p-4 text-right">
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Employee</div>
@@ -42,7 +51,7 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-slate-300 bg-slate-50 p-4">
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pay Period</div>
-          <div className="mt-1 text-sm font-medium text-slate-900">{payslip.period_start} to {payslip.period_end}</div>
+          <div className="mt-1 text-sm font-medium text-slate-900">{formatDate(payslip.period_start)} to {formatDate(payslip.period_end)}</div>
         </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
           <div className="text-xs font-semibold uppercase tracking-wider text-blue-600">Gross Salary</div>
