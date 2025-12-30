@@ -87,3 +87,32 @@ export interface Saving {
   amount: number;
   account?: string | null;
 }
+
+export interface InventoryItem {
+  id: string;
+  created_at: string;
+  item_name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  total_value?: number;
+  location?: string | null;
+  supplier?: string | null;
+  minimum_stock: number;
+  notes?: string | null;
+  last_restocked?: string | null;
+  updated_at: string;
+}
+
+export interface InventoryTransaction {
+  id: string;
+  created_at: string;
+  inventory_id: string;
+  transaction_type: 'in' | 'out';
+  quantity: number;
+  reason?: string | null;
+  performed_by?: string | null;
+  transaction_date: string;
+  notes?: string | null;
+}
