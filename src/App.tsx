@@ -8,6 +8,7 @@ import RequestFunds from "@/pages/RequestFunds";
 import Invoice from "@/pages/Invoice";
 import InvoiceHistory from "@/pages/InvoiceHistory";
 import HRIS from "@/pages/HRIS";
+import Leave from "@/pages/Leave";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -113,6 +114,18 @@ export default function App() {
                   HRIS
                 </NavLink>
                 <NavLink
+                  to="/leave"
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                    }`
+                  }
+                >
+                  Leave
+                </NavLink>
+                <NavLink
                   to="/request-funds"
                   className={({ isActive }) =>
                     `rounded-lg px-4 py-2 font-medium transition-all ${
@@ -160,6 +173,7 @@ export default function App() {
               <Route path="/savings" element={<Savings />} />
               <Route path="/payroll" element={<Payroll />} />
               <Route path="/hris" element={<HRIS />} />
+              <Route path="/leave" element={<Leave />} />
               <Route path="/request-funds" element={<RequestFunds />} />
               <Route path="/invoice" element={<Invoice />} />
               <Route path="/invoice-history" element={<InvoiceHistory />} />

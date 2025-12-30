@@ -32,6 +32,30 @@ export interface Employee {
   philhealth_number?: string | null;
   pagibig_number?: string | null;
   tin_number?: string | null;
+  sick_leave_balance?: number | null;
+  vacation_leave_balance?: number | null;
+  birthday_leave_balance?: number | null;
+  employment_status?: 'probationary' | 'regular' | null;
+  regularization_date?: string | null;
+  bank_name?: string | null;
+  bank_account_number?: string | null;
+  bank_account_name?: string | null;
+  bank_branch?: string | null;
+}
+
+export interface LeaveRequest {
+  id: string;
+  created_at: string;
+  employee_id: string;
+  leave_type: 'sick' | 'vacation' | 'birthday' | 'emergency' | 'unpaid';
+  start_date: string;
+  end_date: string;
+  days_count: number;
+  reason?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  approved_by?: string | null;
+  approved_at?: string | null;
+  notes?: string | null;
 }
 
 export interface Payslip {

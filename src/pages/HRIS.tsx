@@ -18,7 +18,7 @@ export default function HRIS() {
   const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
-  const [activeTab, setActiveTab] = useState<'basic' | 'contact' | 'government'>('basic')
+  const [activeTab, setActiveTab] = useState<'basic' | 'contact' | 'government' | 'banking'>('basic')
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null)
   const [showViewModal, setShowViewModal] = useState(false)
 
@@ -36,6 +36,8 @@ export default function HRIS() {
   const [dateHired, setDateHired] = useState('')
   const [department, setDepartment] = useState('')
   const [status, setStatus] = useState<'active' | 'inactive'>('active')
+  const [employmentStatus, setEmploymentStatus] = useState<'probationary' | 'regular'>('probationary')
+  const [regularizationDate, setRegularizationDate] = useState('')
   const [emergencyContactName, setEmergencyContactName] = useState('')
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('')
   const [emergencyContactRelationship, setEmergencyContactRelationship] = useState('')
@@ -43,6 +45,10 @@ export default function HRIS() {
   const [philhealthNumber, setPhilhealthNumber] = useState('')
   const [pagibigNumber, setPagibigNumber] = useState('')
   const [tinNumber, setTinNumber] = useState('')
+  const [bankName, setBankName] = useState('')
+  const [bankAccountNumber, setBankAccountNumber] = useState('')
+  const [bankAccountName, setBankAccountName] = useState('')
+  const [bankBranch, setBankBranch] = useState('')
 
   useEffect(() => {
     loadEmployees()
@@ -92,6 +98,8 @@ export default function HRIS() {
       setDateHired(employee.date_hired || '')
       setDepartment(employee.department || '')
       setStatus((employee.status as 'active' | 'inactive') || 'active')
+      setEmploymentStatus((employee.employment_status as 'probationary' | 'regular') || 'probationary')
+      setRegularizationDate(employee.regularization_date || '')
       setEmergencyContactName(employee.emergency_contact_name || '')
       setEmergencyContactPhone(employee.emergency_contact_phone || '')
       setEmergencyContactRelationship(employee.emergency_contact_relationship || '')
@@ -99,6 +107,10 @@ export default function HRIS() {
       setPhilhealthNumber(employee.philhealth_number || '')
       setPagibigNumber(employee.pagibig_number || '')
       setTinNumber(employee.tin_number || '')
+      setBankName(employee.bank_name || '')
+      setBankAccountNumber(employee.bank_account_number || '')
+      setBankAccountName(employee.bank_account_name || '')
+      setBankBranch(employee.bank_branch || '')
     } else {
       resetForm()
     }
@@ -120,6 +132,8 @@ export default function HRIS() {
     setDateHired('')
     setDepartment('')
     setStatus('active')
+    setEmploymentStatus('probationary')
+    setRegularizationDate('')
     setEmergencyContactName('')
     setEmergencyContactPhone('')
     setEmergencyContactRelationship('')
@@ -127,6 +141,10 @@ export default function HRIS() {
     setPhilhealthNumber('')
     setPagibigNumber('')
     setTinNumber('')
+    setBankName('')
+    setBankAccountNumber('')
+    setBankAccountName('')
+    setBankBranch('')
   }
 
   const handleSave = async () => {
@@ -174,6 +192,8 @@ export default function HRIS() {
       date_hired: dateHired || null,
       department: department.trim() || null,
       status: status,
+      employment_status: employmentStatus,
+      regularization_date: regularizationDate || null,
       emergency_contact_name: emergencyContactName.trim() || null,
       emergency_contact_phone: emergencyContactPhone.trim() || null,
       emergency_contact_relationship: emergencyContactRelationship.trim() || null,
@@ -181,6 +201,38 @@ export default function HRIS() {
       philhealth_number: philhealthNumber.trim() || null,
       pagibig_number: pagibigNumber.trim() || null,
       tin_number: tinNumber.trim() || null,
+      bank_name: bankName.trim() || null,
+      bank_account_number: bankAccountNumber.trim() || null,
+      bank_account_name: bankAccountName.trim() || null,
+      bank_branch: bankBranch.trim() || null,
+    }
+
+    // Calculate leave balances based on employment status
+    if (!editingEmployee) {
+      // New employee
+      if (employmentStatus === 'probationary') {
+        payload.sick_leave_balance = 2
+        payload.vacation_leave_balance = 2
+      } else {
+        payload.sick_leave_balance = 6
+        payload.vacation_leave_balance = 6
+      }
+      payload.birthday_leave_balance = 1
+    } else if (editingEmployee.employment_status === 'probationary' && employmentStatus === 'regular') {
+      // Employee being regularized
+      const currentYear = new Date().getFullYear()
+      const regDate = regularizationDate ? new Date(regularizationDate) : new Date()
+      const regYear = regDate.getFullYear()
+      
+      // If regularized before January of next year, add 2 to make it 8
+      if (regYear === currentYear) {
+        payload.sick_leave_balance = (editingEmployee.sick_leave_balance ?? 2) + 6
+        payload.vacation_leave_balance = (editingEmployee.vacation_leave_balance ?? 2) + 6
+      } else {
+        // If regularized in a new year, reset to 6
+        payload.sick_leave_balance = 6
+        payload.vacation_leave_balance = 6
+      }
     }
 
     if (editingEmployee) {
@@ -438,6 +490,16 @@ export default function HRIS() {
                 >
                   Government IDs
                 </button>
+                <button
+                  onClick={() => setActiveTab('banking')}
+                  className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    activeTab === 'banking'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Banking Details
+                </button>
               </div>
             </div>
 
@@ -560,6 +622,32 @@ export default function HRIS() {
                         value={dateHired}
                         onChange={(e) => setDateHired(e.target.value)}
                         className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Employment Status</label>
+                      <select
+                        value={employmentStatus}
+                        onChange={(e) => setEmploymentStatus(e.target.value as 'probationary' | 'regular')}
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="probationary">Probationary (2 SL, 2 VL)</option>
+                        <option value="regular">Regular (6 SL, 6 VL)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Regularization Date</label>
+                      <input
+                        type="date"
+                        value={regularizationDate}
+                        onChange={(e) => setRegularizationDate(e.target.value)}
+                        disabled={employmentStatus === 'probationary'}
+                        className={`w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 ${
+                          employmentStatus === 'probationary' ? 'bg-gray-100 cursor-not-allowed' : ''
+                        }`}
                       />
                     </div>
                   </div>
@@ -697,6 +785,63 @@ export default function HRIS() {
                   </div>
                 </div>
               )}
+
+              {/* Banking Details Tab */}
+              {activeTab === 'banking' && (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Bank Name</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="e.g., BDO, BPI, Metrobank"
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Account Number</label>
+                      <input
+                        type="text"
+                        value={bankAccountNumber}
+                        onChange={(e) => setBankAccountNumber(e.target.value)}
+                        placeholder="Bank account number"
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Account Name</label>
+                      <input
+                        type="text"
+                        value={bankAccountName}
+                        onChange={(e) => setBankAccountName(e.target.value)}
+                        placeholder="Name on bank account"
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Bank Branch</label>
+                      <input
+                        type="text"
+                        value={bankBranch}
+                        onChange={(e) => setBankBranch(e.target.value)}
+                        placeholder="e.g., Cebu Business Park"
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-lg bg-green-50 p-4">
+                    <p className="text-sm text-green-800">
+                      <strong>Note:</strong> Banking details are used for salary deposits. Ensure accuracy to avoid payment delays.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
@@ -778,6 +923,14 @@ export default function HRIS() {
                     </p>
                   </div>
                   <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Employment Status</p>
+                    <p className="mt-1">
+                      <span className={viewingEmployee.employment_status === 'regular' ? 'badge-success' : 'badge-warning'}>
+                        {viewingEmployee.employment_status === 'regular' ? 'Regular' : 'Probationary'}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Birthdate</p>
                     <p className="mt-1 text-sm font-medium text-gray-900">{formatDate(viewingEmployee.birthdate)}</p>
                   </div>
@@ -785,6 +938,12 @@ export default function HRIS() {
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Date Hired</p>
                     <p className="mt-1 text-sm font-medium text-gray-900">{formatDate(viewingEmployee.date_hired)}</p>
                   </div>
+                  {viewingEmployee.employment_status === 'regular' && viewingEmployee.regularization_date && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Regularization Date</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">{formatDate(viewingEmployee.regularization_date)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -837,7 +996,7 @@ export default function HRIS() {
               </div>
 
               {/* Government IDs Section */}
-              <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-purple-50 to-white p-6">
+              <div className="mb-6 rounded-xl border border-gray-200 bg-gradient-to-br from-purple-50 to-white p-6">
                 <h4 className="mb-4 flex items-center text-lg font-bold text-gray-900">
                   <svg className="mr-2 h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
@@ -860,6 +1019,34 @@ export default function HRIS() {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">TIN Number</p>
                     <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.tin_number || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Banking Details Section */}
+              <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-green-50 to-white p-6">
+                <h4 className="mb-4 flex items-center text-lg font-bold text-gray-900">
+                  <svg className="mr-2 h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  Banking Details
+                </h4>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Bank Name</p>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.bank_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Account Number</p>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.bank_account_number || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Account Name</p>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.bank_account_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Bank Branch</p>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.bank_branch || '-'}</p>
                   </div>
                 </div>
               </div>
