@@ -1,4 +1,6 @@
-import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
+import { BrowserRouter, NavLink, Route, Routes, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import Home from "@/pages/Home";
 import Monthly from "@/pages/Monthly";
 import Reports from "@/pages/Reports";
@@ -9,9 +11,53 @@ import Invoice from "@/pages/Invoice";
 import InvoiceHistory from "@/pages/InvoiceHistory";
 import HRIS from "@/pages/HRIS";
 import Leave from "@/pages/Leave";
+import Login from "@/pages/Login";
+import UserManagement from "@/pages/UserManagement";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setIsAuthenticated(!!session);
+    
+    if (session) {
+      const { data } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+      setUserRole(data?.role || null);
+    }
+    
+    setLoading(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    setUserRole(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="loading-shimmer h-12 w-48 rounded"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLogin={checkAuth} />;
+  }
+
   function hideLogo(e: SyntheticEvent<HTMLImageElement>) {
     // use currentTarget which is correctly typed and avoids any inline casts
     e.currentTarget.style.display = "none";
@@ -37,6 +83,7 @@ export default function App() {
                     Accounting Tracker — Track cash in, cash out, expenses, and
                     monthly summaries.
                   </p>
+                  <p className="text-xs text-blue-600 mt-1">Role: {userRole || 'Loading...'}</p>
                 </div>
               </div>
               <nav className="flex flex-wrap gap-2 text-sm">
@@ -161,6 +208,26 @@ export default function App() {
                 >
                   History
                 </NavLink>
+                {userRole === 'super_admin' && (
+                  <NavLink
+                    to="/users"
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-2 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    Users
+                  </NavLink>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="rounded-lg bg-red-600 px-4 py-2 font-medium text-white shadow-sm transition-all hover:bg-red-700 hover:shadow-md"
+                >
+                  Logout
+                </button>
               </nav>
             </div>
           </header>
@@ -177,6 +244,9 @@ export default function App() {
               <Route path="/request-funds" element={<RequestFunds />} />
               <Route path="/invoice" element={<Invoice />} />
               <Route path="/invoice-history" element={<InvoiceHistory />} />
+              {userRole === 'super_admin' && (
+                <Route path="/users" element={<UserManagement />} />
+              )}
               <Route path="*" element={<Home />} />
             </Routes>
           </main>
