@@ -71,7 +71,7 @@ export default function Login({ onLogin }: LoginProps) {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="jade.c@avense-tech.com"
                 required
-                className="w-full rounded-lg border-gray-300 px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -85,7 +85,7 @@ export default function Login({ onLogin }: LoginProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
                 required
-                className="w-full rounded-lg border-gray-300 px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
 

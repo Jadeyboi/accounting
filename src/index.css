@@ -189,3 +189,42 @@ body,
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
+
+/* Mobile responsive utilities */
+@media (max-width: 768px) {
+  /* Make tables scrollable on mobile */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Reduce padding on mobile */
+  .mobile-compact {
+    padding: 0.5rem !important;
+  }
+  
+  /* Stack form fields on mobile */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Smaller text on mobile */
+  .mobile-text-sm {
+    font-size: 0.875rem !important;
+  }
+  
+  /* Hide less important columns on mobile */
+  .mobile-hide {
+    display: none !important;
+  }
+}
+
+/* Ensure inputs are visible on all backgrounds */
+input, textarea, select {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #9ca3af !important;
+}
