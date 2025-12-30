@@ -29,7 +29,7 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
           <img src="/avensetech-logo.jpg" alt="Avensetech Logo" className="h-16 w-16 object-contain" />
           <div>
             <h1 className="text-xl font-bold text-slate-900">Avensetech Software Development Services</h1>
-            <p className="mt-1 text-xs text-slate-600">2-806, Oakridge Business Park, Banilad, Mandaue City</p>
+            <p className="mt-1 text-xs text-slate-600">OITC2 - 806, Oakridge Business Park, Banilad, Mandaue City, Cebu</p>
             <p className="text-xs text-slate-600">(032) 234-1362 • 09297246296</p>
           </div>
         </div>

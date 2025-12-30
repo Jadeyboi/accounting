@@ -412,7 +412,7 @@ export default function Invoice() {
             <div className="flex items-center gap-6">
               <img src="/avensetech-logo.jpg" alt="Avensetech Logo" className="h-24 w-24 rounded object-contain shadow-sm" />
               <div>
-                <p className="mt-1 text-sm text-gray-600">2-806, Oakridge Business Park, Banilad, Mandaue City</p>
+                <p className="mt-1 text-sm text-gray-600">OITC2 - 806, Oakridge Business Park, Banilad, Mandaue City, Cebu</p>
                 <p className="text-sm text-gray-600">(032) 234-1362 • 09297246296</p>
               </div>
             </div>
@@ -600,7 +600,7 @@ export default function Invoice() {
         {/* Footer */}
         <div className="border-t border-gray-200 bg-gray-100 p-6 text-center">
           <p className="text-xs text-gray-600">Thank you for your business!</p>
-          <p className="mt-1 text-xs text-gray-500">Avensetech Software Development Services • 2-806, Oakridge Business Park, Banilad, Mandaue City</p>
+          <p className="mt-1 text-xs text-gray-500">Avensetech Software Development Services • OITC2 - 806, Oakridge Business Park, Banilad, Mandaue City, Cebu</p>
         </div>
       </div>
       </div>
