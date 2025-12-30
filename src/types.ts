@@ -91,28 +91,32 @@ export interface Saving {
 export interface InventoryItem {
   id: string;
   created_at: string;
-  item_name: string;
+  asset_tag?: string | null;
+  item_description: string;
   category: string;
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  total_value?: number;
-  location?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  serial_number?: string | null;
+  purchase_date?: string | null;
+  purchase_price?: number | null;
   supplier?: string | null;
-  minimum_stock: number;
+  warranty_expiry?: string | null;
+  assigned_to?: string | null;
+  location?: string | null;
+  status: string;
+  condition?: string | null;
   notes?: string | null;
-  last_restocked?: string | null;
   updated_at: string;
 }
 
-export interface InventoryTransaction {
+export interface InventoryHistory {
   id: string;
   created_at: string;
   inventory_id: string;
-  transaction_type: 'in' | 'out';
-  quantity: number;
-  reason?: string | null;
+  action_type: 'maintenance' | 'repair' | 'transfer' | 'status_change';
+  description: string;
   performed_by?: string | null;
-  transaction_date: string;
+  action_date: string;
+  cost?: number | null;
   notes?: string | null;
 }
