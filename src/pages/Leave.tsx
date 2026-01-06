@@ -238,6 +238,8 @@ export default function Leave() {
   const recalculateAllBalances = async () => {
     if (!confirm('Recalculate all employee leave balances? This will reset all balances to default and then subtract approved leaves.')) return
 
+    console.log('Starting balance recalculation...')
+    
     for (const employee of employees) {
       // Set default balances based on employment status
       const isRegular = employee.employment_status === 'regular'
@@ -245,21 +247,30 @@ export default function Leave() {
       let vacationLeave = isRegular ? 6 : 2
       let birthdayLeave = 1
 
+      console.log(`${employee.name} - Initial balances: Sick: ${sickLeave}, Vacation: ${vacationLeave}, Birthday: ${birthdayLeave}`)
+
       // Calculate total approved leaves for this employee
       const approvedLeaves = leaveRequests.filter(
         l => l.employee_id === employee.id && l.status === 'approved'
       )
 
+      console.log(`${employee.name} - Found ${approvedLeaves.length} approved leaves:`, approvedLeaves.map(l => `${l.leave_type}: ${l.days_count} days`))
+
       // Subtract approved leaves from balances
       for (const leave of approvedLeaves) {
         if (leave.leave_type === 'sick') {
           sickLeave -= leave.days_count
+          console.log(`${employee.name} - Subtracting ${leave.days_count} sick days, new balance: ${sickLeave}`)
         } else if (leave.leave_type === 'vacation') {
           vacationLeave -= leave.days_count
+          console.log(`${employee.name} - Subtracting ${leave.days_count} vacation days, new balance: ${vacationLeave}`)
         } else if (leave.leave_type === 'birthday') {
           birthdayLeave -= leave.days_count
+          console.log(`${employee.name} - Subtracting ${leave.days_count} birthday days, new balance: ${birthdayLeave}`)
         }
       }
+
+      console.log(`${employee.name} - Final balances: Sick: ${sickLeave}, Vacation: ${vacationLeave}, Birthday: ${birthdayLeave}`)
 
       // Update employee balances
       const { error } = await supabase
@@ -272,6 +283,7 @@ export default function Leave() {
         .eq('id', employee.id)
 
       if (error) {
+        console.error(`Error updating balances for ${employee.name}:`, error)
         alert(`Error updating balances for ${employee.name}: ${error.message}`)
         return
       }
@@ -279,6 +291,54 @@ export default function Leave() {
 
     await loadData()
     alert('All leave balances have been recalculated successfully!')
+  }
+
+  const showBalanceBreakdown = (employee: Employee) => {
+    const approvedLeaves = leaveRequests.filter(
+      l => l.employee_id === employee.id && l.status === 'approved'
+    )
+
+    const isRegular = employee.employment_status === 'regular'
+    const defaultSick = isRegular ? 6 : 2
+    const defaultVacation = isRegular ? 6 : 2
+    const defaultBirthday = 1
+
+    const sickUsed = approvedLeaves.filter(l => l.leave_type === 'sick').reduce((sum, l) => sum + l.days_count, 0)
+    const vacationUsed = approvedLeaves.filter(l => l.leave_type === 'vacation').reduce((sum, l) => sum + l.days_count, 0)
+    const birthdayUsed = approvedLeaves.filter(l => l.leave_type === 'birthday').reduce((sum, l) => sum + l.days_count, 0)
+
+    const calculatedSick = defaultSick - sickUsed
+    const calculatedVacation = defaultVacation - vacationUsed
+    const calculatedBirthday = defaultBirthday - birthdayUsed
+
+    const breakdown = `
+${employee.name} Leave Balance Breakdown:
+
+Employment Status: ${employee.employment_status} (${isRegular ? 'Regular' : 'Probationary'})
+
+SICK LEAVE:
+- Default: ${defaultSick} days
+- Used (Approved): ${sickUsed} days
+- Should be: ${calculatedSick} days
+- Currently showing: ${employee.sick_leave_balance ?? 'N/A'} days
+
+VACATION LEAVE:
+- Default: ${defaultVacation} days  
+- Used (Approved): ${vacationUsed} days
+- Should be: ${calculatedVacation} days
+- Currently showing: ${employee.vacation_leave_balance ?? 'N/A'} days
+
+BIRTHDAY LEAVE:
+- Default: ${defaultBirthday} day
+- Used (Approved): ${birthdayUsed} days
+- Should be: ${calculatedBirthday} days
+- Currently showing: ${employee.birthday_leave_balance ?? 'N/A'} days
+
+Approved Leaves:
+${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate(l.start_date)} to ${formatDate(l.end_date)})`).join('\n') || 'None'}
+    `
+
+    alert(breakdown)
   }
 
   const resetEmployeeBalances = async (employeeId: string) => {
@@ -541,19 +601,12 @@ export default function Leave() {
             <div key={emp.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-medium text-gray-900">{emp.name}</span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <span className={`rounded-full px-2 py-1 text-xs font-medium ${
                     emp.employment_status === 'regular' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                   }`}>
                     {emp.employment_status === 'regular' ? 'Regular' : 'Probationary'}
                   </span>
-                  <button
-                    onClick={() => resetEmployeeBalances(emp.id)}
-                    className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
-                    title="Reset to default balances"
-                  >
-                    Reset
-                  </button>
                 </div>
               </div>
               <div className="flex justify-between text-sm">
@@ -564,9 +617,25 @@ export default function Leave() {
                 <span className="text-gray-600">Vacation Leave:</span>
                 <span className="font-medium text-blue-600">{emp.vacation_leave_balance ?? 2} days</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-600">Birthday Leave:</span>
                 <span className="font-medium text-pink-600">{emp.birthday_leave_balance ?? 1} day</span>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => showBalanceBreakdown(emp)}
+                  className="rounded bg-gray-600 px-2 py-1 text-xs text-white hover:bg-gray-700 flex-1"
+                  title="Show calculation breakdown"
+                >
+                  Check
+                </button>
+                <button
+                  onClick={() => resetEmployeeBalances(emp.id)}
+                  className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 flex-1"
+                  title="Reset to default balances"
+                >
+                  Reset
+                </button>
               </div>
             </div>
           ))}
