@@ -3,10 +3,13 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 type Status = "N/A" | "Partially Paid" | "Fully Paid";
+type RequestType = "whole_month" | "half_month" | "one_time";
 
 interface RequestItem {
   id: string;
   description: string;
+  amount: number | "";
+  requestType: RequestType;
   monthlyAmount: number | "";
   halfMonthAmount: number | "";
   remarks: string;
@@ -24,6 +27,8 @@ interface SavedGroup {
 export default function RequestFunds() {
   const [items, setItems] = useState<RequestItem[]>([]);
   const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState<string>("");
+  const [requestType, setRequestType] = useState<RequestType>("whole_month");
   const [monthlyAmount, setMonthlyAmount] = useState<string>("");
   const [halfMonthAmount, setHalfMonthAmount] = useState<string>("");
   const [remarks, setRemarks] = useState("");
@@ -96,22 +101,41 @@ export default function RequestFunds() {
   }, [savedGroups]);
 
   const addItem = () => {
-    const m = monthlyAmount ? Number(monthlyAmount) : 0;
-    const h = m / 2;
     if (!description.trim()) return alert("Enter a description");
-    if (isNaN(m) || isNaN(h)) return alert("Invalid amounts");
+    
+    let monthlyAmt = 0;
+    let halfMonthAmt = 0;
+    let itemAmount = 0;
+
+    if (requestType === "whole_month") {
+      monthlyAmt = amount ? Number(amount) : 0;
+      halfMonthAmt = monthlyAmt / 2;
+      itemAmount = monthlyAmt;
+    } else if (requestType === "half_month") {
+      halfMonthAmt = amount ? Number(amount) : 0;
+      monthlyAmt = halfMonthAmt * 2;
+      itemAmount = halfMonthAmt;
+    } else { // one_time
+      itemAmount = amount ? Number(amount) : 0;
+      monthlyAmt = 0;
+      halfMonthAmt = 0;
+    }
+
+    if (isNaN(itemAmount) || itemAmount <= 0) return alert("Enter a valid amount");
+
     const it: RequestItem = {
       id: crypto.randomUUID(),
       description: description.trim(),
-      monthlyAmount: m,
-      halfMonthAmount: h,
+      amount: itemAmount,
+      requestType,
+      monthlyAmount: monthlyAmt,
+      halfMonthAmount: halfMonthAmt,
       remarks: remarks.trim(),
       status,
     };
     setItems((prev) => [...prev, it]);
     setDescription("");
-    setMonthlyAmount("");
-    setHalfMonthAmount("");
+    setAmount("");
     setRemarks("");
     setStatus("N/A");
   };
@@ -178,25 +202,24 @@ export default function RequestFunds() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editFields, setEditFields] = useState<{
     description: string;
-    monthlyAmount: string;
-    halfMonthAmount: string;
+    amount: string;
+    requestType: RequestType;
     remarks: string;
     status: Status;
   }>({
     description: "",
-    monthlyAmount: "",
-    halfMonthAmount: "",
+    amount: "",
+    requestType: "whole_month",
     remarks: "",
     status: "N/A",
   });
 
   const startEdit = (it: RequestItem) => {
-    const m = Number(it.monthlyAmount) || 0;
     setEditId(it.id);
     setEditFields({
       description: it.description,
-      monthlyAmount: String(m),
-      halfMonthAmount: String(Number(it.halfMonthAmount) || 0 || m / 2),
+      amount: String(Number(it.amount) || 0),
+      requestType: it.requestType,
       remarks: it.remarks,
       status: it.status,
     });
@@ -206,8 +229,8 @@ export default function RequestFunds() {
     setEditId(null);
     setEditFields({
       description: "",
-      monthlyAmount: "",
-      halfMonthAmount: "",
+      amount: "",
+      requestType: "whole_month",
       remarks: "",
       status: "N/A",
     });
@@ -215,18 +238,35 @@ export default function RequestFunds() {
 
   const saveEdit = () => {
     if (!editId) return;
-    const m = editFields.monthlyAmount ? Number(editFields.monthlyAmount) : 0;
-    const h = m / 2;
     if (!editFields.description.trim()) return alert("Enter a description");
-    if (isNaN(m) || isNaN(h)) return alert("Invalid amounts");
+    
+    const itemAmount = editFields.amount ? Number(editFields.amount) : 0;
+    if (isNaN(itemAmount) || itemAmount <= 0) return alert("Enter a valid amount");
+
+    let monthlyAmt = 0;
+    let halfMonthAmt = 0;
+
+    if (editFields.requestType === "whole_month") {
+      monthlyAmt = itemAmount;
+      halfMonthAmt = itemAmount / 2;
+    } else if (editFields.requestType === "half_month") {
+      halfMonthAmt = itemAmount;
+      monthlyAmt = itemAmount * 2;
+    } else { // one_time
+      monthlyAmt = 0;
+      halfMonthAmt = 0;
+    }
+
     setItems((prev) =>
       prev.map((x) =>
         x.id === editId
           ? {
               ...x,
               description: editFields.description.trim(),
-              monthlyAmount: m,
-              halfMonthAmount: h,
+              amount: itemAmount,
+              requestType: editFields.requestType,
+              monthlyAmount: monthlyAmt,
+              halfMonthAmount: halfMonthAmt,
               remarks: editFields.remarks.trim(),
               status: editFields.status,
             }
@@ -245,7 +285,11 @@ export default function RequestFunds() {
       (s, it) => s + (Number(it.halfMonthAmount) || 0),
       0
     );
-    return { monthly, half, overall: monthly + half };
+    const oneTime = items.reduce(
+      (s, it) => it.requestType === 'one_time' ? s + (Number(it.amount) || 0) : s,
+      0
+    );
+    return { monthly, half, oneTime, overall: monthly + half + oneTime };
   }, [items]);
 
   const money = (v: number) =>
@@ -394,34 +438,29 @@ export default function RequestFunds() {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-600">
-              Monthly Amount
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={monthlyAmount}
-              onChange={(e) => {
-                const val = e.target.value;
-                setMonthlyAmount(val);
-                const num = val ? Number(val) : 0;
-                if (!isNaN(num)) setHalfMonthAmount(String(num / 2));
-                else setHalfMonthAmount("");
-              }}
+            <label className="block text-sm text-slate-600">Request Type</label>
+            <select
+              value={requestType}
+              onChange={(e) => setRequestType(e.target.value as RequestType)}
               className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="0.00"
-            />
+            >
+              <option value="whole_month">Whole Month</option>
+              <option value="half_month">Half Month</option>
+              <option value="one_time">One-time</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm text-slate-600">
-              Half-Month Amount
+              {requestType === "whole_month" ? "Monthly Amount" : 
+               requestType === "half_month" ? "Half-Month Amount" : 
+               "Amount"}
             </label>
             <input
               type="number"
               step="0.01"
-              value={halfMonthAmount}
-              readOnly
-              className="mt-1 w-full cursor-not-allowed rounded-md border-slate-300 bg-slate-50 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
               placeholder="0.00"
             />
           </div>
@@ -508,14 +547,13 @@ export default function RequestFunds() {
                     />
                   </th>
                   <th className="p-2">Description</th>
+                  <th className="p-2">Type</th>
+                  <th className="p-2 text-right text-slate-900">Amount</th>
+                  <th className="p-2 text-right text-slate-900">Amount (USD)</th>
                   <th className="p-2 text-right text-slate-900">Monthly</th>
-                  <th className="p-2 text-right text-slate-900">
-                    Monthly (USD)
-                  </th>
+                  <th className="p-2 text-right text-slate-900">Monthly (USD)</th>
                   <th className="p-2 text-right text-slate-900">Half-Month</th>
                   <th className="p-2 text-right text-slate-900">Half (USD)</th>
-                  <th className="p-2 text-right text-slate-900">Total</th>
-                  <th className="p-2 text-right text-slate-900">Total (USD)</th>
                   <th className="p-2">Status</th>
                   <th className="p-2">Remarks</th>
                   <th className="p-2 print:hidden">Actions</th>
@@ -525,16 +563,20 @@ export default function RequestFunds() {
                 {items.map((it) => {
                   const isEditing = editId === it.id;
                   if (isEditing) {
-                    const monthlyPhp = editFields.monthlyAmount
-                      ? Number(editFields.monthlyAmount)
-                      : 0;
-                    const halfPhp = monthlyPhp / 2;
-                    const totalPhp = monthlyPhp + halfPhp;
+                    const itemAmount = editFields.amount ? Number(editFields.amount) : 0;
+                    let monthlyPhp = 0;
+                    let halfPhp = 0;
+                    
+                    if (editFields.requestType === "whole_month") {
+                      monthlyPhp = itemAmount;
+                      halfPhp = itemAmount / 2;
+                    } else if (editFields.requestType === "half_month") {
+                      halfPhp = itemAmount;
+                      monthlyPhp = itemAmount * 2;
+                    }
+
                     return (
-                      <tr
-                        key={it.id}
-                        className="border-b border-slate-100 bg-yellow-50"
-                      >
+                      <tr key={it.id} className="border-b border-slate-100 bg-yellow-50">
                         <td className="p-2 print:hidden">
                           <input
                             type="checkbox"
@@ -547,69 +589,53 @@ export default function RequestFunds() {
                           <input
                             type="text"
                             value={editFields.description}
-                            onChange={(e) =>
-                              setEditFields((f) => ({
-                                ...f,
-                                description: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => setEditFields((f) => ({ ...f, description: e.target.value }))}
                             className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           />
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={editFields.requestType}
+                            onChange={(e) => setEditFields((f) => ({ ...f, requestType: e.target.value as RequestType }))}
+                            className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="whole_month">Whole Month</option>
+                            <option value="half_month">Half Month</option>
+                            <option value="one_time">One-time</option>
+                          </select>
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                           <input
                             type="number"
                             step="0.01"
-                            value={editFields.monthlyAmount}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEditFields((f) => ({
-                                ...f,
-                                monthlyAmount: val,
-                                halfMonthAmount: val
-                                  ? String(Number(val) / 2)
-                                  : "",
-                              }));
-                            }}
+                            value={editFields.amount}
+                            onChange={(e) => setEditFields((f) => ({ ...f, amount: e.target.value }))}
                             className="w-full rounded-md border-slate-300 text-right font-normal shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           />
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {usd(toUsd(itemAmount))}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {money(monthlyPhp)}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                           {usd(toUsd(monthlyPhp))}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={String(halfPhp)}
-                            readOnly
-                            className="w-full cursor-not-allowed rounded-md border-slate-300 bg-slate-100 text-right font-normal shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          />
+                          {money(halfPhp)}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                           {usd(toUsd(halfPhp))}
                         </td>
-                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                          {money(totalPhp)}
-                        </td>
-                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                          {usd(toUsd(totalPhp))}
-                        </td>
                         <td className="p-2">
                           <select
                             value={editFields.status}
-                            onChange={(e) =>
-                              setEditFields((f) => ({
-                                ...f,
-                                status: e.target.value as Status,
-                              }))
-                            }
+                            onChange={(e) => setEditFields((f) => ({ ...f, status: e.target.value as Status }))}
                             className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           >
                             <option value="N/A">N/A</option>
-                            <option value="Partially Paid">
-                              Partially Paid
-                            </option>
+                            <option value="Partially Paid">Partially Paid</option>
                             <option value="Fully Paid">Fully Paid</option>
                           </select>
                         </td>
@@ -617,12 +643,7 @@ export default function RequestFunds() {
                           <input
                             type="text"
                             value={editFields.remarks}
-                            onChange={(e) =>
-                              setEditFields((f) => ({
-                                ...f,
-                                remarks: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => setEditFields((f) => ({ ...f, remarks: e.target.value }))}
                             className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           />
                         </td>
@@ -643,11 +664,18 @@ export default function RequestFunds() {
                       </tr>
                     );
                   }
+
+                  const getRequestTypeLabel = (type: RequestType) => {
+                    switch (type) {
+                      case "whole_month": return "Whole Month";
+                      case "half_month": return "Half Month";
+                      case "one_time": return "One-time";
+                      default: return type;
+                    }
+                  };
+
                   return (
-                    <tr
-                      key={it.id}
-                      className="border-b border-slate-100 odd:bg-white even:bg-slate-50"
-                    >
+                    <tr key={it.id} className="border-b border-slate-100 odd:bg-white even:bg-slate-50">
                       <td className="p-2 print:hidden">
                         <input
                           type="checkbox"
@@ -657,6 +685,21 @@ export default function RequestFunds() {
                         />
                       </td>
                       <td className="p-2 text-slate-900">{it.description}</td>
+                      <td className="p-2 text-slate-900">
+                        <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                          it.requestType === 'whole_month' ? 'bg-blue-100 text-blue-800' :
+                          it.requestType === 'half_month' ? 'bg-green-100 text-green-800' :
+                          'bg-purple-100 text-purple-800'
+                        }`}>
+                          {getRequestTypeLabel(it.requestType)}
+                        </span>
+                      </td>
+                      <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                        {money(Number(it.amount) || 0)}
+                      </td>
+                      <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                        {usd(toUsd(Number(it.amount) || 0))}
+                      </td>
                       <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                         {money(Number(it.monthlyAmount) || 0)}
                       </td>
@@ -668,20 +711,6 @@ export default function RequestFunds() {
                       </td>
                       <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                         {usd(toUsd(Number(it.halfMonthAmount) || 0))}
-                      </td>
-                      <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                        {money(
-                          (Number(it.monthlyAmount) || 0) +
-                            (Number(it.halfMonthAmount) || 0)
-                        )}
-                      </td>
-                      <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                        {usd(
-                          toUsd(
-                            (Number(it.monthlyAmount) || 0) +
-                              (Number(it.halfMonthAmount) || 0)
-                          )
-                        )}
                       </td>
                       <td className="p-2">{it.status}</td>
                       <td className="p-2">{it.remarks || ""}</td>
@@ -707,6 +736,13 @@ export default function RequestFunds() {
                 <tr className="font-medium bg-slate-100">
                   <td className="p-2 print:hidden"></td>
                   <td className="p-2 text-slate-900">Totals</td>
+                  <td className="p-2"></td>
+                  <td className="p-2 text-right font-mono tabular-nums">
+                    {money(totals.oneTime)}
+                  </td>
+                  <td className="p-2 text-right font-mono tabular-nums">
+                    {usd(toUsd(totals.oneTime))}
+                  </td>
                   <td className="p-2 text-right font-mono tabular-nums">
                     {money(totals.monthly)}
                   </td>
@@ -718,12 +754,6 @@ export default function RequestFunds() {
                   </td>
                   <td className="p-2 text-right font-mono tabular-nums">
                     {usd(toUsd(totals.half))}
-                  </td>
-                  <td className="p-2 text-right font-mono tabular-nums">
-                    {money(totals.overall)}
-                  </td>
-                  <td className="p-2 text-right font-mono tabular-nums">
-                    {usd(toUsd(totals.overall))}
                   </td>
                   <td className="p-2" colSpan={2}></td>
                 </tr>
