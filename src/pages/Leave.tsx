@@ -293,6 +293,52 @@ export default function Leave() {
     alert('All leave balances have been recalculated successfully!')
   }
 
+  const fixEmployeeBalance = async (employeeId: string) => {
+    const employee = employees.find(e => e.id === employeeId)
+    if (!employee) return
+
+    // Get all approved leaves for this employee
+    const approvedLeaves = leaveRequests.filter(
+      l => l.employee_id === employee.id && l.status === 'approved'
+    )
+
+    // Calculate correct balances
+    const isRegular = employee.employment_status === 'regular'
+    const defaultSick = isRegular ? 6 : 2
+    const defaultVacation = isRegular ? 6 : 2
+    const defaultBirthday = 1
+
+    const sickUsed = approvedLeaves.filter(l => l.leave_type === 'sick').reduce((sum, l) => sum + l.days_count, 0)
+    const vacationUsed = approvedLeaves.filter(l => l.leave_type === 'vacation').reduce((sum, l) => sum + l.days_count, 0)
+    const birthdayUsed = approvedLeaves.filter(l => l.leave_type === 'birthday').reduce((sum, l) => sum + l.days_count, 0)
+
+    const correctSick = defaultSick - sickUsed
+    const correctVacation = defaultVacation - vacationUsed
+    const correctBirthday = defaultBirthday - birthdayUsed
+
+    if (!confirm(`Fix ${employee.name}'s leave balances?\n\nCurrent: Sick: ${employee.sick_leave_balance}, Vacation: ${employee.vacation_leave_balance}, Birthday: ${employee.birthday_leave_balance}\nCorrect: Sick: ${correctSick}, Vacation: ${correctVacation}, Birthday: ${correctBirthday}`)) {
+      return
+    }
+
+    // Update with correct balances
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        sick_leave_balance: correctSick,
+        vacation_leave_balance: correctVacation,
+        birthday_leave_balance: correctBirthday
+      })
+      .eq('id', employeeId)
+
+    if (error) {
+      alert(`Error fixing balances: ${error.message}`)
+      return
+    }
+
+    await loadData()
+    alert(`${employee.name}'s leave balances have been corrected!`)
+  }
+
   const showBalanceBreakdown = (employee: Employee) => {
     const approvedLeaves = leaveRequests.filter(
       l => l.employee_id === employee.id && l.status === 'approved'
@@ -382,12 +428,23 @@ ${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate
           <h2 className="text-2xl font-bold text-gray-900">Leave Management</h2>
           <p className="text-sm text-gray-600">Track sick leave and vacation requests</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              if (!confirm('Fix all employee leave balances? This will correct any calculation errors.')) return
+              for (const emp of employees) {
+                await fixEmployeeBalance(emp.id)
+              }
+            }}
+            className="btn-success"
+          >
+            Fix All Balances
+          </button>
           <button
             onClick={recalculateAllBalances}
             className="btn-secondary"
           >
-            Recalculate All Balances
+            Recalculate All
           </button>
           <button
             onClick={() => { resetForm(); setShowModal(true); }}
@@ -628,6 +685,13 @@ ${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate
                   title="Show calculation breakdown"
                 >
                   Check
+                </button>
+                <button
+                  onClick={() => fixEmployeeBalance(emp.id)}
+                  className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 flex-1"
+                  title="Fix balance calculation"
+                >
+                  Fix
                 </button>
                 <button
                   onClick={() => resetEmployeeBalances(emp.id)}
