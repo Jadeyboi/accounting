@@ -177,6 +177,45 @@ export default function Leave() {
   const handleDelete = async (leaveId: string) => {
     if (!confirm('Delete this leave request?')) return
 
+    // Get the leave request details before deleting
+    const leaveToDelete = leaveRequests.find(l => l.id === leaveId)
+    if (!leaveToDelete) return
+
+    // If the leave was approved, we need to restore the balance
+    if (leaveToDelete.status === 'approved') {
+      const employee = employees.find(e => e.id === leaveToDelete.employee_id)
+      if (employee) {
+        let newSickBalance = employee.sick_leave_balance ?? 2
+        let newVacationBalance = employee.vacation_leave_balance ?? 2
+        let newBirthdayBalance = employee.birthday_leave_balance ?? 1
+
+        // Restore the balance based on leave type
+        if (leaveToDelete.leave_type === 'sick') {
+          newSickBalance += leaveToDelete.days_count
+        } else if (leaveToDelete.leave_type === 'vacation') {
+          newVacationBalance += leaveToDelete.days_count
+        } else if (leaveToDelete.leave_type === 'birthday') {
+          newBirthdayBalance += leaveToDelete.days_count
+        }
+
+        // Update employee balances
+        const { error: empError } = await supabase
+          .from('employees')
+          .update({
+            sick_leave_balance: newSickBalance,
+            vacation_leave_balance: newVacationBalance,
+            birthday_leave_balance: newBirthdayBalance
+          })
+          .eq('id', leaveToDelete.employee_id)
+
+        if (empError) {
+          alert(`Error restoring leave balance: ${empError.message}`)
+          return
+        }
+      }
+    }
+
+    // Delete the leave request
     const { error } = await supabase
       .from('leave_requests')
       .delete()
@@ -196,6 +235,82 @@ export default function Leave() {
     return true
   })
 
+  const recalculateAllBalances = async () => {
+    if (!confirm('Recalculate all employee leave balances? This will reset all balances to default and then subtract approved leaves.')) return
+
+    for (const employee of employees) {
+      // Set default balances based on employment status
+      const isRegular = employee.employment_status === 'regular'
+      let sickLeave = isRegular ? 6 : 2
+      let vacationLeave = isRegular ? 6 : 2
+      let birthdayLeave = 1
+
+      // Calculate total approved leaves for this employee
+      const approvedLeaves = leaveRequests.filter(
+        l => l.employee_id === employee.id && l.status === 'approved'
+      )
+
+      // Subtract approved leaves from balances
+      for (const leave of approvedLeaves) {
+        if (leave.leave_type === 'sick') {
+          sickLeave -= leave.days_count
+        } else if (leave.leave_type === 'vacation') {
+          vacationLeave -= leave.days_count
+        } else if (leave.leave_type === 'birthday') {
+          birthdayLeave -= leave.days_count
+        }
+      }
+
+      // Update employee balances
+      const { error } = await supabase
+        .from('employees')
+        .update({
+          sick_leave_balance: sickLeave,
+          vacation_leave_balance: vacationLeave,
+          birthday_leave_balance: birthdayLeave
+        })
+        .eq('id', employee.id)
+
+      if (error) {
+        alert(`Error updating balances for ${employee.name}: ${error.message}`)
+        return
+      }
+    }
+
+    await loadData()
+    alert('All leave balances have been recalculated successfully!')
+  }
+
+  const resetEmployeeBalances = async (employeeId: string) => {
+    const employee = employees.find(e => e.id === employeeId)
+    if (!employee) return
+
+    if (!confirm(`Reset leave balances for ${employee.name}? This will set balances to default values based on employment status.`)) return
+
+    // Set default balances based on employment status
+    // Regular employees get more leave days
+    const isRegular = employee.employment_status === 'regular'
+    const sickLeave = isRegular ? 6 : 2
+    const vacationLeave = isRegular ? 6 : 2
+    const birthdayLeave = 1
+
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        sick_leave_balance: sickLeave,
+        vacation_leave_balance: vacationLeave,
+        birthday_leave_balance: birthdayLeave
+      })
+      .eq('id', employeeId)
+
+    if (error) {
+      alert(`Error resetting balances: ${error.message}`)
+      return
+    }
+
+    await loadData()
+  }
+
   const totalPending = leaveRequests.filter(l => l.status === 'pending').length
   const totalApproved = leaveRequests.filter(l => l.status === 'approved').length
 
@@ -207,12 +322,20 @@ export default function Leave() {
           <h2 className="text-2xl font-bold text-gray-900">Leave Management</h2>
           <p className="text-sm text-gray-600">Track sick leave and vacation requests</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowModal(true); }}
-          className="btn-primary"
-        >
-          + New Leave Request
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={recalculateAllBalances}
+            className="btn-secondary"
+          >
+            Recalculate All Balances
+          </button>
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="btn-primary"
+          >
+            + New Leave Request
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -418,11 +541,20 @@ export default function Leave() {
             <div key={emp.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-medium text-gray-900">{emp.name}</span>
-                <span className={`rounded-full px-2 py-1 text-xs font-medium ${
-                  emp.employment_status === 'regular' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {emp.employment_status === 'regular' ? 'Regular' : 'Probationary'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                    emp.employment_status === 'regular' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {emp.employment_status === 'regular' ? 'Regular' : 'Probationary'}
+                  </span>
+                  <button
+                    onClick={() => resetEmployeeBalances(emp.id)}
+                    className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
+                    title="Reset to default balances"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Sick Leave:</span>
