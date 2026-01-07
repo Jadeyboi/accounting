@@ -93,15 +93,22 @@ export default function Payroll() {
   const refresh = async () => {
     setLoading(true)
     setError(null)
-    const [empRes, payRes] = await Promise.all([
-      supabase.from('employees').select('*').order('created_at', { ascending: false }),
-      supabase.from('payslips').select('*').order('created_at', { ascending: false }),
-    ])
-    if (empRes.error) setError(empRes.error.message)
-    if (payRes.error) setError((prev) => prev ?? payRes.error!.message)
-    setEmployees((empRes.data ?? []) as Employee[])
-    setPayslips((payRes.data ?? []) as Payslip[])
-    setLoading(false)
+    try {
+      const [empRes, payRes] = await Promise.all([
+        supabase.from('employees').select('*').order('created_at', { ascending: false }),
+        supabase.from('payslips').select('*').order('created_at', { ascending: false }),
+      ])
+      if (empRes.error) setError(empRes.error.message)
+      if (payRes.error) setError((prev) => prev ?? payRes.error!.message)
+      setEmployees((empRes.data ?? []) as Employee[])
+      setPayslips((payRes.data ?? []) as Payslip[])
+      console.log('Refreshed payslips with transaction_ids:', payRes.data?.map(p => ({ id: p.id, transaction_id: p.transaction_id, employee_id: p.employee_id })))
+    } catch (error) {
+      console.error('Refresh error:', error)
+      setError('Failed to refresh data')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -212,13 +219,13 @@ export default function Payroll() {
     if (p.transaction_id) {
       const { error: txErr } = await supabase
         .from('transactions')
-        .update({ amount: p.net_salary, type: 'expense', category: 'Payroll', note })
+        .update({ amount: p.gross_salary, type: 'expense', category: 'Payroll', note })
         .eq('id', p.transaction_id)
       if (txErr) return alert(txErr.message)
     } else {
       const { data: txData, error: insErr } = await supabase
         .from('transactions')
-        .insert({ date: p.date_issued, type: 'expense', amount: p.net_salary, category: 'Payroll', note })
+        .insert({ date: p.date_issued, type: 'expense', amount: p.gross_salary, category: 'Payroll', note })
         .select('id')
         .single()
       if (insErr) return alert(insErr.message)
@@ -313,44 +320,103 @@ export default function Payroll() {
       return
     }
 
-    const newPayslips = selectedEmployees.map(empId => {
-      const emp = employees.find(e => e.id === empId)
-      const baseSalary = emp?.base_salary ?? 0
-      const gross = calculateGrossSalary(bulkPeriodStart, bulkPeriodEnd, baseSalary)
-      
-      // Pre-fill with last payslip values for this employee
-      const lastPayslip = payslips.find(ps => ps.employee_id === empId)
-      
-      return {
-        id: crypto.randomUUID(),
-        created_at: new Date().toISOString(),
-        employee_id: empId,
-        period_start: bulkPeriodStart,
-        period_end: bulkPeriodEnd,
-        date_issued: today(),
-        gross_salary: gross,
-        sss: lastPayslip?.sss ?? 0,
-        pagibig: lastPayslip?.pagibig ?? 0,
-        philhealth: lastPayslip?.philhealth ?? 0,
-        tax: lastPayslip?.tax ?? 0,
-        cash_advance: 0, // Don't copy one-time deductions
-        bonuses: lastPayslip?.bonuses ?? 0,
-        allowances: lastPayslip?.allowances ?? 0,
-        other_deductions: 0, // Don't copy one-time deductions
-        notes: '',
-        net_salary: gross + (lastPayslip?.bonuses ?? 0) + (lastPayslip?.allowances ?? 0) - 
-                    ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0)),
-        transaction_id: null,
+    try {
+      const newPayslips = selectedEmployees.map(empId => {
+        const emp = employees.find(e => e.id === empId)
+        const baseSalary = emp?.base_salary ?? 0
+        const gross = calculateGrossSalary(bulkPeriodStart, bulkPeriodEnd, baseSalary)
+        
+        // Pre-fill with last payslip values for this employee
+        const lastPayslip = payslips.find(ps => ps.employee_id === empId)
+        
+        return {
+          id: crypto.randomUUID(),
+          created_at: new Date().toISOString(),
+          employee_id: empId,
+          period_start: bulkPeriodStart,
+          period_end: bulkPeriodEnd,
+          date_issued: today(),
+          gross_salary: gross,
+          sss: lastPayslip?.sss ?? 0,
+          pagibig: lastPayslip?.pagibig ?? 0,
+          philhealth: lastPayslip?.philhealth ?? 0,
+          tax: lastPayslip?.tax ?? 0,
+          cash_advance: 0, // Don't copy one-time deductions
+          bonuses: lastPayslip?.bonuses ?? 0,
+          allowances: lastPayslip?.allowances ?? 0,
+          other_deductions: 0, // Don't copy one-time deductions
+          notes: '',
+          net_salary: gross + (lastPayslip?.bonuses ?? 0) + (lastPayslip?.allowances ?? 0) - 
+                      ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0)),
+          transaction_id: null,
+        }
+      })
+
+      // Create expense transactions first
+      const expenseTransactions = newPayslips.map(payslip => {
+        const emp = employees.find(e => e.id === payslip.employee_id)
+        const note = `Payroll: ${emp?.name ?? payslip.employee_id} (${payslip.period_start} to ${payslip.period_end})`
+        
+        return {
+          date: payslip.date_issued,
+          type: 'expense' as const,
+          amount: payslip.gross_salary, // Use gross salary instead of net
+          category: 'Payroll',
+          note
+        }
+      })
+
+      console.log('Creating expense transactions:', expenseTransactions)
+      const { data: transactionData, error: transactionError } = await supabase
+        .from('transactions')
+        .insert(expenseTransactions)
+        .select('id')
+
+      if (transactionError) {
+        console.error('Transaction error:', transactionError)
+        alert(`Error creating expense transactions: ${transactionError.message}`)
+        return
       }
-    })
 
-    const { error } = await supabase.from('payslips').insert(newPayslips)
-    if (error) return alert(error.message)
+      console.log('Created transactions:', transactionData)
 
-    setShowBulkModal(false)
-    setSelectedEmployees([])
-    await refresh()
-    alert(`${newPayslips.length} payslips generated successfully!`)
+      // Update payslips with transaction IDs
+      if (transactionData && transactionData.length === newPayslips.length) {
+        newPayslips.forEach((payslip, index) => {
+          payslip.transaction_id = transactionData[index].id
+          console.log(`Setting payslip ${payslip.id} transaction_id to:`, transactionData[index].id)
+        })
+      } else {
+        console.error('Transaction data length mismatch:', transactionData?.length, 'vs', newPayslips.length)
+        alert('Error: Transaction creation count mismatch')
+        return
+      }
+
+      console.log('Payslips with transaction IDs:', newPayslips.map(p => ({ id: p.id, transaction_id: p.transaction_id })))
+
+      // Insert payslips with linked transaction IDs
+      const { error: payslipError } = await supabase.from('payslips').insert(newPayslips)
+      if (payslipError) {
+        console.error('Payslip error:', payslipError)
+        alert(`Error creating payslips: ${payslipError.message}`)
+        return
+      }
+
+      console.log('Successfully created payslips with transaction links')
+
+      setShowBulkModal(false)
+      setSelectedEmployees([])
+      
+      // Add a small delay to ensure database operations are complete
+      setTimeout(async () => {
+        await refresh()
+      }, 500)
+      
+      alert(`${newPayslips.length} payslips generated successfully with linked expense transactions!`)
+    } catch (error) {
+      console.error('Bulk generation error:', error)
+      alert(`Error during bulk generation: ${error}`)
+    }
   }
 
   const toggleEmployeeSelection = (empId: string) => {
@@ -394,6 +460,7 @@ export default function Payroll() {
             <>
               <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700" onClick={() => onEditPayslip()}>New Payslip</button>
               <button className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-purple-700" onClick={() => setShowBulkModal(true)}>Bulk Generate</button>
+              <button className="rounded-md bg-gray-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-gray-700" onClick={refresh}>Refresh</button>
             </>
           ) : (
             <>
