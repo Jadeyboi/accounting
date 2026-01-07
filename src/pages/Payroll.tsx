@@ -49,6 +49,47 @@ export default function Payroll() {
 
   const payslipContainerRef = useRef<HTMLDivElement>(null)
 
+  // Group payslips by period for summary
+  const payrollPeriods = useMemo(() => {
+    const periods = new Map<string, Payslip[]>()
+    
+    payslips.forEach(payslip => {
+      const periodKey = `${payslip.period_start}_${payslip.period_end}`
+      if (!periods.has(periodKey)) {
+        periods.set(periodKey, [])
+      }
+      periods.get(periodKey)!.push(payslip)
+    })
+    
+    // Convert to array and sort by period start date (newest first)
+    return Array.from(periods.entries())
+      .map(([key, payslips]) => {
+        const [periodStart, periodEnd] = key.split('_')
+        const totalGross = payslips.reduce((sum, p) => sum + p.gross_salary, 0)
+        const totalNet = payslips.reduce((sum, p) => sum + p.net_salary, 0)
+        const totalDeductions = payslips.reduce((sum, p) => {
+          const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.other_deductions ?? 0)
+          return sum + deductions
+        }, 0)
+        const totalAdditions = payslips.reduce((sum, p) => {
+          const additions = (p.bonuses ?? 0) + (p.allowances ?? 0)
+          return sum + additions
+        }, 0)
+        
+        return {
+          periodStart,
+          periodEnd,
+          payslips,
+          employeeCount: payslips.length,
+          totalGross,
+          totalAdditions,
+          totalDeductions,
+          totalNet
+        }
+      })
+      .sort((a, b) => new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime())
+  }, [payslips])
+
   const refresh = async () => {
     setLoading(true)
     setError(null)
@@ -410,11 +451,110 @@ export default function Payroll() {
         </div>
       </div>
 
+      {/* Payroll Period Summaries */}
+      {mode === 'list' && payrollPeriods.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-slate-900">Payroll Period Summaries</h3>
+            <span className="text-sm text-slate-600">{payrollPeriods.length} periods</span>
+          </div>
+          <div className="space-y-4">
+            {payrollPeriods.map((period, index) => (
+              <div key={`${period.periodStart}_${period.periodEnd}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-slate-900">
+                      Period: {formatDate(period.periodStart)} to {formatDate(period.periodEnd)}
+                    </h4>
+                    <p className="text-sm text-slate-600">{period.employeeCount} employees</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-slate-900">{moneyFmt(period.totalNet)}</p>
+                    <p className="text-sm text-slate-600">Total Net Pay</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="text-center">
+                    <p className="font-medium text-slate-900">{moneyFmt(period.totalGross)}</p>
+                    <p className="text-slate-600">Gross Salary</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-green-700">{moneyFmt(period.totalAdditions)}</p>
+                    <p className="text-slate-600">Additions</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-red-700">{moneyFmt(period.totalDeductions)}</p>
+                    <p className="text-slate-600">Deductions</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-blue-700">{moneyFmt(period.totalNet)}</p>
+                    <p className="text-slate-600">Net Pay</p>
+                  </div>
+                </div>
+
+                {/* Employee breakdown for this period */}
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-medium text-slate-700 hover:text-slate-900">
+                    View Employee Breakdown ({period.employeeCount} employees)
+                  </summary>
+                  <div className="mt-2 overflow-hidden rounded border border-slate-200">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Employee</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Gross</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Additions</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Deductions</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Net</th>
+                          <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-600">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {period.payslips.map((payslip) => {
+                          const emp = employees.find((e) => e.id === payslip.employee_id)
+                          const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
+                          const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.other_deductions ?? 0)
+                          
+                          return (
+                            <tr key={payslip.id} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 text-slate-800">{emp?.name ?? payslip.employee_id}</td>
+                              <td className="px-3 py-2 text-right text-slate-900">{moneyFmt(payslip.gross_salary)}</td>
+                              <td className="px-3 py-2 text-right text-green-700">{moneyFmt(additions)}</td>
+                              <td className="px-3 py-2 text-right text-red-700">{moneyFmt(deductions)}</td>
+                              <td className="px-3 py-2 text-right font-medium text-slate-900">{moneyFmt(payslip.net_salary)}</td>
+                              <td className="px-3 py-2 text-center">
+                                <button 
+                                  className="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-1" 
+                                  onClick={() => { setViewingPayslip(payslip); setShowViewModal(true); }}
+                                >
+                                  View
+                                </button>
+                                <button 
+                                  className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200" 
+                                  onClick={() => onEditPayslip(payslip)}
+                                >
+                                  Edit
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Payslips */}
       {mode === 'list' && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-slate-900">Payslips</h3>
+            <h3 className="text-base font-semibold text-slate-900">All Payslips</h3>
           </div>
           <div className="overflow-hidden rounded-lg border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200">
