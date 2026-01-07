@@ -62,6 +62,7 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingsTotal, setSavingsTotal] = useState<number>(0);
+  const [savingsItems, setSavingsItems] = useState<any[]>([]);
   const [usdRate, setUsdRate] = useState<string>("56");
   const [isLoadingRate, setIsLoadingRate] = useState(false);
   const [rateError, setRateError] = useState<string>("");
@@ -135,21 +136,24 @@ export default function Reports() {
       // Load savings total for the same period
       const { data: savingsData, error: savingsErr } = await supabase
         .from("savings")
-        .select("amount, date")
+        .select("*")
         .gte("date", start)
-        .lte("date", end);
+        .lte("date", end)
+        .order("date", { ascending: true });
 
       if (!cancel) {
         if (savingsErr) {
           // don't block reports on savings error; surface softly
           console.warn("Savings load error:", savingsErr.message);
           setSavingsTotal(0);
+          setSavingsItems([]);
         } else {
           const sTotal = (savingsData ?? []).reduce(
             (sum: number, row: any) => sum + (row.amount ?? 0),
             0
           );
           setSavingsTotal(sTotal);
+          setSavingsItems(savingsData ?? []);
         }
       }
       setLoading(false);
@@ -683,6 +687,98 @@ export default function Reports() {
                 </tfoot>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* Savings Breakdown Table */}
+        {!loading && !error && savingsItems.length > 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">
+                  Savings Breakdown
+                </div>
+                <div className="text-sm text-slate-600">
+                  Period: {selectedMonthsText} • {savingsItems.length} entries
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-indigo-600">
+                  {money(savingsTotal)}
+                </div>
+                <div className="text-sm text-slate-600">
+                  {usd(toUsd(savingsTotal))}
+                </div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-indigo-50">
+                    <th className="px-3 py-2 text-left font-medium text-slate-700">Date</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-700">Description</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-700">Account</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-700">Amount (PHP)</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-700">Amount (USD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {savingsItems.map((saving, index) => (
+                    <tr key={saving.id || index} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2 text-slate-900">{saving.date}</td>
+                      <td className="px-3 py-2 text-slate-700">{saving.description || '-'}</td>
+                      <td className="px-3 py-2 text-slate-600">{saving.account || '-'}</td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-900">
+                        {money(saving.amount)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-600">
+                        {usd(toUsd(saving.amount))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-indigo-300 bg-indigo-100 font-medium">
+                    <td colSpan={3} className="px-3 py-2 text-slate-900">Total Savings</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-900">
+                      {money(savingsTotal)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-600">
+                      {usd(toUsd(savingsTotal))}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Savings Summary by Account */}
+            {savingsItems.length > 0 && (
+              <div className="mt-6">
+                <div className="mb-3 text-base font-semibold text-slate-900">
+                  Savings by Account
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(
+                    savingsItems.reduce((acc: Record<string, number>, saving) => {
+                      const account = saving.account || 'Unspecified';
+                      acc[account] = (acc[account] || 0) + saving.amount;
+                      return acc;
+                    }, {})
+                  )
+                    .sort(([, a], [, b]) => b - a) // Sort by amount descending
+                    .map(([account, total]) => (
+                      <div key={account} className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                        <div className="text-sm font-medium text-slate-700">{account}</div>
+                        <div className="text-lg font-bold text-indigo-600">{money(total)}</div>
+                        <div className="text-xs text-slate-600">{usd(toUsd(total))}</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          {((total / savingsTotal) * 100).toFixed(1)}% of total
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
