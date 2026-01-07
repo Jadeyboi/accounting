@@ -1,6 +1,7 @@
 import { BrowserRouter, NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import NotificationsBell from "@/components/NotificationsBell";
 import Home from "@/pages/Home";
 import Monthly from "@/pages/Monthly";
 import Reports from "@/pages/Reports";
@@ -104,7 +105,9 @@ export default function App() {
               </button>
 
               {/* Desktop Navigation */}
-              <nav className="hidden lg:flex flex-wrap gap-2 text-sm">
+              <div className="hidden lg:flex items-center gap-4">
+                <NotificationsBell />
+                <nav className="flex flex-wrap gap-2 text-sm">
                 <NavLink
                   to="/"
                   end
@@ -258,12 +261,18 @@ export default function App() {
                 >
                   Logout
                 </button>
-              </nav>
+                </nav>
+              </div>
             </div>
 
             {/* Mobile Navigation Menu */}
             {mobileMenuOpen && (
               <nav className="lg:hidden mt-4 flex flex-col gap-2 text-sm animate-slideIn">
+                {/* Mobile Notifications */}
+                <div className="flex items-center justify-between rounded-lg bg-white px-4 py-3 shadow-sm">
+                  <span className="font-medium text-blue-700">Notifications</span>
+                  <NotificationsBell />
+                </div>
                 <NavLink
                   to="/"
                   end

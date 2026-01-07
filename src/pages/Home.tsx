@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import SummaryCards from '@/components/SummaryCards'
 import TransactionForm from '@/components/TransactionForm'
 import TransactionList from '@/components/TransactionList'
+import Notifications from '@/components/Notifications'
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/types'
 
@@ -72,6 +73,9 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Notifications */}
+      <Notifications />
 
       {/* Summary Cards */}
       <div>

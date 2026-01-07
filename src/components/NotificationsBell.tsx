@@ -1,0 +1,194 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import type { Employee } from '@/types'
+import Notifications from './Notifications'
+
+interface Notification {
+  id: string
+  type: 'birthday' | 'regularization' | 'anniversary'
+  employee: Employee
+  date: string
+  daysUntil: number
+  message: string
+}
+
+export default function NotificationsBell() {
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const calculateDaysUntil = (targetDate: string): number => {
+    const today = new Date()
+    const target = new Date(targetDate)
+    
+    // For birthdays and anniversaries, we need to check this year's date
+    if (target.getFullYear() !== today.getFullYear()) {
+      target.setFullYear(today.getFullYear())
+      
+      // If the date has already passed this year, check next year
+      if (target < today) {
+        target.setFullYear(today.getFullYear() + 1)
+      }
+    }
+    
+    const diffTime = target.getTime() - today.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  }
+
+  const generateNotifications = (employees: Employee[]): Notification[] => {
+    const notifications: Notification[] = []
+    const today = new Date()
+
+    employees.forEach(employee => {
+      // Birthday notifications (30 days ahead)
+      if (employee.birthdate) {
+        const daysUntil = calculateDaysUntil(employee.birthdate)
+        if (daysUntil >= 0 && daysUntil <= 30) {
+          notifications.push({
+            id: `birthday-${employee.id}`,
+            type: 'birthday',
+            employee,
+            date: employee.birthdate,
+            daysUntil,
+            message: daysUntil === 0 
+              ? `🎉 Today is ${employee.name}'s birthday!`
+              : daysUntil === 1
+              ? `🎂 ${employee.name}'s birthday is tomorrow`
+              : `🎂 ${employee.name}'s birthday is in ${daysUntil} days`
+          })
+        }
+      }
+
+      // Regularization notifications (for probationary employees)
+      if (employee.employment_status === 'probationary' && employee.date_hired) {
+        const hiredDate = new Date(employee.date_hired)
+        const regularizationDate = new Date(hiredDate)
+        regularizationDate.setMonth(regularizationDate.getMonth() + 6) // 6 months after hire date
+        
+        const daysUntil = Math.ceil((regularizationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+        
+        if (daysUntil >= 0 && daysUntil <= 30) {
+          notifications.push({
+            id: `regularization-${employee.id}`,
+            type: 'regularization',
+            employee,
+            date: regularizationDate.toISOString().split('T')[0],
+            daysUntil,
+            message: daysUntil === 0
+              ? `📋 ${employee.name} is eligible for regularization today!`
+              : daysUntil === 1
+              ? `📋 ${employee.name} is eligible for regularization tomorrow`
+              : `📋 ${employee.name} is eligible for regularization in ${daysUntil} days`
+          })
+        }
+      }
+
+      // Work anniversary notifications (yearly)
+      if (employee.date_hired) {
+        const hiredDate = new Date(employee.date_hired)
+        const thisYearAnniversary = new Date(today.getFullYear(), hiredDate.getMonth(), hiredDate.getDate())
+        
+        // If this year's anniversary has passed, check next year
+        if (thisYearAnniversary < today) {
+          thisYearAnniversary.setFullYear(today.getFullYear() + 1)
+        }
+        
+        const daysUntil = Math.ceil((thisYearAnniversary.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+        const yearsOfService = today.getFullYear() - hiredDate.getFullYear()
+        
+        // Only show if it's at least 1 year and within 30 days
+        if (yearsOfService >= 1 && daysUntil >= 0 && daysUntil <= 30) {
+          const nextYearOfService = yearsOfService + (thisYearAnniversary.getFullYear() > today.getFullYear() ? 0 : 1)
+          
+          notifications.push({
+            id: `anniversary-${employee.id}`,
+            type: 'anniversary',
+            employee,
+            date: thisYearAnniversary.toISOString().split('T')[0],
+            daysUntil,
+            message: daysUntil === 0
+              ? `🎊 Today is ${employee.name}'s ${nextYearOfService} year work anniversary!`
+              : daysUntil === 1
+              ? `🎊 ${employee.name}'s ${nextYearOfService} year work anniversary is tomorrow`
+              : `🎊 ${employee.name}'s ${nextYearOfService} year work anniversary is in ${daysUntil} days`
+          })
+        }
+      }
+    })
+
+    // Sort by days until (most urgent first)
+    return notifications.sort((a, b) => a.daysUntil - b.daysUntil)
+  }
+
+  const fetchNotifications = async () => {
+    setLoading(true)
+    try {
+      const { data: employees, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('name')
+
+      if (error) throw error
+
+      const generatedNotifications = generateNotifications(employees || [])
+      setNotifications(generatedNotifications)
+    } catch (error) {
+      console.error('Error fetching notifications:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchNotifications()
+  }, [])
+
+  const urgentCount = notifications.filter(n => n.daysUntil <= 7).length
+  const hasNotifications = notifications.length > 0
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowDropdown(!showDropdown)}
+        className={`relative rounded-lg p-2 transition-all ${
+          hasNotifications 
+            ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+            : 'bg-white text-gray-600 hover:bg-gray-100'
+        } shadow-sm hover:shadow-md`}
+      >
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM11 19H6.5A2.5 2.5 0 014 16.5v-9A2.5 2.5 0 016.5 5h11A2.5 2.5 0 0120 7.5v3.5" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7v6l4 4" />
+        </svg>
+        
+        {/* Notification badge */}
+        {hasNotifications && (
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+            {notifications.length > 9 ? '9+' : notifications.length}
+          </span>
+        )}
+        
+        {/* Urgent indicator */}
+        {urgentCount > 0 && (
+          <span className="absolute -top-1 -left-1 h-3 w-3 rounded-full bg-orange-500 animate-pulse"></span>
+        )}
+      </button>
+
+      {/* Dropdown */}
+      {showDropdown && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setShowDropdown(false)}
+          />
+          
+          {/* Dropdown content */}
+          <div className="absolute right-0 top-full z-20 mt-2 w-80 max-h-96 overflow-y-auto">
+            <Notifications onClose={() => setShowDropdown(false)} />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
