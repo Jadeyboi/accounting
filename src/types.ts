@@ -25,6 +25,8 @@ export interface Employee {
   date_hired?: string | null;
   department?: string | null;
   status?: string | null;
+  gender?: 'male' | 'female' | 'other' | null;
+  marital_status?: 'single' | 'married' | 'divorced' | 'widowed' | null;
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
   emergency_contact_relationship?: string | null;

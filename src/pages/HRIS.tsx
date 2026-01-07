@@ -36,6 +36,8 @@ export default function HRIS() {
   const [dateHired, setDateHired] = useState('')
   const [department, setDepartment] = useState('')
   const [status, setStatus] = useState<'active' | 'inactive'>('active')
+  const [gender, setGender] = useState<'male' | 'female' | 'other' | ''>('')
+  const [maritalStatus, setMaritalStatus] = useState<'single' | 'married' | 'divorced' | 'widowed' | ''>('')
   const [employmentStatus, setEmploymentStatus] = useState<'probationary' | 'regular'>('probationary')
   const [regularizationDate, setRegularizationDate] = useState('')
   const [emergencyContactName, setEmergencyContactName] = useState('')
@@ -98,6 +100,8 @@ export default function HRIS() {
       setDateHired(employee.date_hired || '')
       setDepartment(employee.department || '')
       setStatus((employee.status as 'active' | 'inactive') || 'active')
+      setGender((employee.gender as 'male' | 'female' | 'other') || '')
+      setMaritalStatus((employee.marital_status as 'single' | 'married' | 'divorced' | 'widowed') || '')
       setEmploymentStatus((employee.employment_status as 'probationary' | 'regular') || 'probationary')
       setRegularizationDate(employee.regularization_date || '')
       setEmergencyContactName(employee.emergency_contact_name || '')
@@ -132,6 +136,8 @@ export default function HRIS() {
     setDateHired('')
     setDepartment('')
     setStatus('active')
+    setGender('')
+    setMaritalStatus('')
     setEmploymentStatus('probationary')
     setRegularizationDate('')
     setEmergencyContactName('')
@@ -192,6 +198,8 @@ export default function HRIS() {
       date_hired: dateHired || null,
       department: department.trim() || null,
       status: status,
+      gender: gender || null,
+      marital_status: maritalStatus || null,
       employment_status: employmentStatus,
       regularization_date: regularizationDate || null,
       emergency_contact_name: emergencyContactName.trim() || null,
@@ -579,6 +587,47 @@ export default function HRIS() {
                         className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
+                      <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value as 'active' | 'inactive')}
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Gender</label>
+                      <select
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value as 'male' | 'female' | 'other' | '')}
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Marital Status</label>
+                      <select
+                        value={maritalStatus}
+                        onChange={(e) => setMaritalStatus(e.target.value as 'single' | 'married' | 'divorced' | 'widowed' | '')}
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select Marital Status</option>
+                        <option value="single">Single</option>
+                        <option value="married">Married</option>
+                        <option value="divorced">Divorced</option>
+                        <option value="widowed">Widowed</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
@@ -591,17 +640,6 @@ export default function HRIS() {
                         placeholder="25000"
                         className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                       />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
-                      <select
-                        value={status}
-                        onChange={(e) => setStatus(e.target.value as 'active' | 'inactive')}
-                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
                     </div>
                   </div>
 
@@ -920,6 +958,18 @@ export default function HRIS() {
                       <span className={viewingEmployee.status === 'active' ? 'badge-success' : 'badge-error'}>
                         {viewingEmployee.status || 'Active'}
                       </span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Gender</p>
+                    <p className="mt-1 text-sm font-medium text-gray-900">
+                      {viewingEmployee.gender ? viewingEmployee.gender.charAt(0).toUpperCase() + viewingEmployee.gender.slice(1) : '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Marital Status</p>
+                    <p className="mt-1 text-sm font-medium text-gray-900">
+                      {viewingEmployee.marital_status ? viewingEmployee.marital_status.charAt(0).toUpperCase() + viewingEmployee.marital_status.slice(1) : '-'}
                     </p>
                   </div>
                   <div>
