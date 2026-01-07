@@ -24,13 +24,25 @@ interface SavedGroup {
   items: RequestItem[];
 }
 
+interface FundRequestHistory {
+  id: string;
+  period: string; // e.g., "2024-01" for January 2024
+  periodLabel: string; // e.g., "January 2024"
+  createdAt: string;
+  items: RequestItem[];
+  totalMonthly: number;
+  totalHalfMonth: number;
+  totalOneTime: number;
+  totalAmount: number;
+  usdRate: number;
+  notes?: string;
+}
+
 export default function RequestFunds() {
   const [items, setItems] = useState<RequestItem[]>([]);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState<string>("");
   const [requestType, setRequestType] = useState<RequestType>("whole_month");
-  const [monthlyAmount, setMonthlyAmount] = useState<string>("");
-  const [halfMonthAmount, setHalfMonthAmount] = useState<string>("");
   const [remarks, setRemarks] = useState("");
   const [status, setStatus] = useState<Status>("N/A");
   const [usdRate, setUsdRate] = useState<string>("56");
@@ -38,9 +50,15 @@ export default function RequestFunds() {
   const [rateError, setRateError] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [savedGroups, setSavedGroups] = useState<SavedGroup[]>([]);
+  const [fundHistory, setFundHistory] = useState<FundRequestHistory[]>([]);
   const [groupName, setGroupName] = useState<string>("");
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [viewingGroup, setViewingGroup] = useState<SavedGroup | null>(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [viewingHistory, setViewingHistory] = useState<FundRequestHistory | null>(null);
+  const [showSaveHistoryModal, setShowSaveHistoryModal] = useState(false);
+  const [historyPeriod, setHistoryPeriod] = useState<string>("");
+  const [historyNotes, setHistoryNotes] = useState<string>("");
 
   const printableRef = useRef<HTMLDivElement | null>(null);
 
@@ -89,6 +107,13 @@ export default function RequestFunds() {
         if (Array.isArray(parsed)) setSavedGroups(parsed);
       } catch {}
     }
+    const historyRaw = localStorage.getItem("request-funds-history");
+    if (historyRaw) {
+      try {
+        const parsed = JSON.parse(historyRaw);
+        if (Array.isArray(parsed)) setFundHistory(parsed);
+      } catch {}
+    }
   }, []);
 
   // Persist to localStorage
@@ -99,6 +124,10 @@ export default function RequestFunds() {
   useEffect(() => {
     localStorage.setItem("request-funds-groups", JSON.stringify(savedGroups));
   }, [savedGroups]);
+
+  useEffect(() => {
+    localStorage.setItem("request-funds-history", JSON.stringify(fundHistory));
+  }, [fundHistory]);
 
   const addItem = () => {
     if (!description.trim()) return alert("Enter a description");
@@ -196,6 +225,101 @@ export default function RequestFunds() {
 
   const closeGroupView = () => {
     setViewingGroup(null);
+  };
+
+  const saveToHistory = () => {
+    if (items.length === 0) {
+      return alert("No items to save to history");
+    }
+    // Auto-generate period based on current date
+    const now = new Date();
+    const defaultPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    setHistoryPeriod(defaultPeriod);
+    setHistoryNotes("");
+    setShowSaveHistoryModal(true);
+  };
+
+  const confirmSaveHistory = () => {
+    if (!historyPeriod.trim()) {
+      return alert("Please enter a period");
+    }
+
+    // Check if period already exists
+    const existingHistory = fundHistory.find(h => h.period === historyPeriod.trim());
+    if (existingHistory) {
+      if (!confirm("A record for this period already exists. Do you want to overwrite it?")) {
+        return;
+      }
+    }
+
+    // Parse period to create label
+    const [year, month] = historyPeriod.split('-');
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const periodLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
+
+    const historyRecord: FundRequestHistory = {
+      id: crypto.randomUUID(),
+      period: historyPeriod.trim(),
+      periodLabel,
+      createdAt: new Date().toISOString(),
+      items: [...items],
+      totalMonthly: totals.monthly,
+      totalHalfMonth: totals.half,
+      totalOneTime: totals.oneTime,
+      totalAmount: totals.overall,
+      usdRate: Number(usdRate) || 56,
+      notes: historyNotes.trim() || undefined,
+    };
+
+    if (existingHistory) {
+      // Update existing record
+      setFundHistory(prev => prev.map(h => h.period === historyPeriod.trim() ? historyRecord : h));
+    } else {
+      // Add new record
+      setFundHistory(prev => [...prev, historyRecord]);
+    }
+
+    setShowSaveHistoryModal(false);
+    setHistoryPeriod("");
+    setHistoryNotes("");
+    alert("Successfully saved to history!");
+  };
+
+  const deleteHistory = (historyId: string) => {
+    if (!confirm("Are you sure you want to delete this history record?")) return;
+    setFundHistory(prev => prev.filter(h => h.id !== historyId));
+  };
+
+  const viewHistory = (history: FundRequestHistory) => {
+    setViewingHistory(history);
+    setShowHistoryModal(true);
+  };
+
+  const closeHistoryView = () => {
+    setViewingHistory(null);
+    setShowHistoryModal(false);
+  };
+
+  const loadFromHistory = (history: FundRequestHistory) => {
+    if (items.length > 0) {
+      if (!confirm("This will replace your current items. Continue?")) {
+        return;
+      }
+    }
+    
+    // Load items from history
+    const historyItems = history.items.map(item => ({
+      ...item,
+      id: crypto.randomUUID(), // Generate new IDs to avoid conflicts
+    }));
+    
+    setItems(historyItems);
+    setUsdRate(String(history.usdRate));
+    closeHistoryView();
+    alert("Items loaded from history!");
   };
 
   // Inline edit state
@@ -417,12 +541,26 @@ export default function RequestFunds() {
             <span className="text-xs text-red-600">{rateError}</span>
           )}
         </div>
-        <button
-          onClick={exportPDF}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700"
-        >
-          Save as PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={saveToHistory}
+            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-indigo-700"
+          >
+            Save to History
+          </button>
+          <button
+            onClick={() => setShowHistoryModal(true)}
+            className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-purple-700"
+          >
+            View History
+          </button>
+          <button
+            onClick={exportPDF}
+            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700"
+          >
+            Save as PDF
+          </button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -988,6 +1126,305 @@ export default function RequestFunds() {
                           )
                         )
                       )}
+                    </td>
+                    <td className="p-2" colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save to History Modal */}
+      {showSaveHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">
+              Save Current Request to History
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm text-slate-600 mb-2">
+                Period (YYYY-MM)
+              </label>
+              <input
+                type="month"
+                value={historyPeriod}
+                onChange={(e) => setHistoryPeriod(e.target.value)}
+                className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm text-slate-600 mb-2">
+                Notes (Optional)
+              </label>
+              <textarea
+                value={historyNotes}
+                onChange={(e) => setHistoryNotes(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="Additional notes about this request period..."
+              />
+            </div>
+            <div className="mb-4 rounded-lg bg-blue-50 p-3">
+              <div className="text-sm text-blue-800">
+                <strong>Summary:</strong>
+                <div className="mt-1 text-xs">
+                  • {items.length} items
+                  • Monthly: {money(totals.monthly)}
+                  • Half-Month: {money(totals.half)}
+                  • One-time: {money(totals.oneTime)}
+                  • Total: {money(totals.overall)}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowSaveHistoryModal(false);
+                  setHistoryPeriod("");
+                  setHistoryNotes("");
+                }}
+                className="rounded-md bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSaveHistory}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              >
+                Save to History
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History List Modal */}
+      {showHistoryModal && !viewingHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Fund Request History
+              </h3>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="rounded-md bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+              >
+                Close
+              </button>
+            </div>
+
+            {fundHistory.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-slate-500 mb-2">No history records found</div>
+                <div className="text-sm text-slate-400">Save your current request to create the first history record</div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {fundHistory
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map((history) => (
+                    <div
+                      key={history.id}
+                      className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium text-slate-900">{history.periodLabel}</div>
+                          <div className="text-sm text-slate-600 mt-1">
+                            {history.items.length} items • Created {new Date(history.createdAt).toLocaleDateString()}
+                          </div>
+                          {history.notes && (
+                            <div className="text-sm text-slate-500 mt-1 italic">"{history.notes}"</div>
+                          )}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
+                            <div>
+                              <div className="text-slate-500">Monthly</div>
+                              <div className="font-medium text-slate-900">{money(history.totalMonthly)}</div>
+                            </div>
+                            <div>
+                              <div className="text-slate-500">Half-Month</div>
+                              <div className="font-medium text-slate-900">{money(history.totalHalfMonth)}</div>
+                            </div>
+                            <div>
+                              <div className="text-slate-500">One-time</div>
+                              <div className="font-medium text-slate-900">{money(history.totalOneTime)}</div>
+                            </div>
+                            <div>
+                              <div className="text-slate-500">Total</div>
+                              <div className="font-semibold text-slate-900">{money(history.totalAmount)}</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => viewHistory(history)}
+                            className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                          >
+                            View Details
+                          </button>
+                          <button
+                            onClick={() => loadFromHistory(history)}
+                            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                          >
+                            Load Items
+                          </button>
+                          <button
+                            onClick={() => deleteHistory(history.id)}
+                            className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* View History Details Modal */}
+      {viewingHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-6xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  {viewingHistory.periodLabel} - Fund Request Details
+                </h3>
+                <p className="text-sm text-slate-500">
+                  {viewingHistory.items.length} items • Created {new Date(viewingHistory.createdAt).toLocaleDateString()}
+                  {viewingHistory.notes && ` • ${viewingHistory.notes}`}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => loadFromHistory(viewingHistory)}
+                  className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  Load Items
+                </button>
+                <button
+                  onClick={closeHistoryView}
+                  className="rounded-md bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
+              <div className="text-center">
+                <div className="text-sm text-slate-500">Monthly Total</div>
+                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.totalMonthly)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.totalMonthly / viewingHistory.usdRate)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-slate-500">Half-Month Total</div>
+                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.totalHalfMonth)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.totalHalfMonth / viewingHistory.usdRate)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-slate-500">One-time Total</div>
+                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.totalOneTime)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.totalOneTime / viewingHistory.usdRate)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-slate-500">Grand Total</div>
+                <div className="text-xl font-bold text-slate-900">{money(viewingHistory.totalAmount)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.totalAmount / viewingHistory.usdRate)}</div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full table-fixed text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                    <th className="p-2">Description</th>
+                    <th className="p-2">Type</th>
+                    <th className="p-2 text-right text-slate-900">Amount</th>
+                    <th className="p-2 text-right text-slate-900">Amount (USD)</th>
+                    <th className="p-2 text-right text-slate-900">Monthly</th>
+                    <th className="p-2 text-right text-slate-900">Monthly (USD)</th>
+                    <th className="p-2 text-right text-slate-900">Half-Month</th>
+                    <th className="p-2 text-right text-slate-900">Half (USD)</th>
+                    <th className="p-2">Status</th>
+                    <th className="p-2">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewingHistory.items.map((item) => {
+                    const getRequestTypeLabel = (type: RequestType) => {
+                      switch (type) {
+                        case "whole_month": return "Whole Month";
+                        case "half_month": return "Half Month";
+                        case "one_time": return "One-time";
+                        default: return type;
+                      }
+                    };
+
+                    return (
+                      <tr key={item.id} className="border-b border-slate-100 odd:bg-white even:bg-slate-50">
+                        <td className="p-2 text-slate-900">{item.description}</td>
+                        <td className="p-2 text-slate-900">
+                          <span className={`rounded-full px-2 py-1 text-xs font-medium ${
+                            item.requestType === 'whole_month' ? 'bg-blue-100 text-blue-800' :
+                            item.requestType === 'half_month' ? 'bg-green-100 text-green-800' :
+                            'bg-purple-100 text-purple-800'
+                          }`}>
+                            {getRequestTypeLabel(item.requestType)}
+                          </span>
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {money(Number(item.amount) || 0)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {usd((Number(item.amount) || 0) / viewingHistory.usdRate)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {money(Number(item.monthlyAmount) || 0)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {usd((Number(item.monthlyAmount) || 0) / viewingHistory.usdRate)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {money(Number(item.halfMonthAmount) || 0)}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums text-slate-900">
+                          {usd((Number(item.halfMonthAmount) || 0) / viewingHistory.usdRate)}
+                        </td>
+                        <td className="p-2">{item.status}</td>
+                        <td className="p-2">{item.remarks || ""}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="font-medium bg-slate-100">
+                    <td className="p-2 text-slate-900">Totals</td>
+                    <td className="p-2"></td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {money(viewingHistory.totalOneTime)}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {usd(viewingHistory.totalOneTime / viewingHistory.usdRate)}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {money(viewingHistory.totalMonthly)}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {usd(viewingHistory.totalMonthly / viewingHistory.usdRate)}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {money(viewingHistory.totalHalfMonth)}
+                    </td>
+                    <td className="p-2 text-right font-mono tabular-nums">
+                      {usd(viewingHistory.totalHalfMonth / viewingHistory.usdRate)}
                     </td>
                     <td className="p-2" colSpan={2}></td>
                   </tr>
