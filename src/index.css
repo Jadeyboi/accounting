@@ -6,11 +6,17 @@
   .print\:hidden {
     display: none !important;
   }
+  .print\:block {
+    display: block !important;
+  }
 }
 
 /* During PDF capture, hide elements and enforce darker numeric text */
 .pdf-mode .print\:hidden {
   display: none !important;
+}
+.pdf-mode .print\:block {
+  display: block !important;
 }
 .pdf-mode .text-slate-900 {
   color: #000000 !important;
@@ -18,6 +24,12 @@
 .pdf-mode .font-mono.tabular-nums {
   color: #000000 !important;
   font-weight: 700;
+}
+.pdf-mode .text-slate-600 {
+  color: #374151 !important;
+}
+.pdf-mode .text-slate-700 {
+  color: #374151 !important;
 }
 
 :root {

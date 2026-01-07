@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Transaction } from "@/types";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -60,6 +62,39 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingsTotal, setSavingsTotal] = useState<number>(0);
+  const [usdRate, setUsdRate] = useState<string>("56");
+  const [isLoadingRate, setIsLoadingRate] = useState(false);
+  const [rateError, setRateError] = useState<string>("");
+
+  const reportRef = useRef<HTMLDivElement | null>(null);
+
+  // Fetch current USD to PHP rate
+  const fetchCurrentRate = async () => {
+    setIsLoadingRate(true);
+    setRateError("");
+    try {
+      const response = await fetch(
+        "https://api.exchangerate-api.com/v4/latest/USD"
+      );
+      if (!response.ok) throw new Error("Failed to fetch exchange rate");
+      const data = await response.json();
+      if (data.rates && data.rates.PHP) {
+        setUsdRate(String(data.rates.PHP));
+      } else {
+        throw new Error("PHP rate not found in response");
+      }
+    } catch (error) {
+      console.error("Error fetching exchange rate:", error);
+      setRateError("Failed to fetch current rate");
+    } finally {
+      setIsLoadingRate(false);
+    }
+  };
+
+  // Auto-fetch rate on component mount
+  useEffect(() => {
+    fetchCurrentRate();
+  }, []);
 
   useEffect(() => {
     let cancel = false;
@@ -213,6 +248,92 @@ export default function Reports() {
       maximumFractionDigits: 2,
     })}`;
 
+  const usd = (v: number) =>
+    `$ ${v.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const toUsd = (php: number) => {
+    const rate = Number(usdRate);
+    if (!rate || isNaN(rate) || rate <= 0) return 0;
+    return php / rate;
+  };
+
+  const exportPDF = async () => {
+    if (!reportRef.current) return;
+    
+    const element = reportRef.current;
+    document.body.classList.add("pdf-mode");
+    
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        letterRendering: true,
+      });
+      
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgWidth = pageWidth - 40; // 20pt margin each side
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let y = 20;
+      
+      if (imgHeight <= pageHeight - 40) {
+        pdf.addImage(imgData, "PNG", 20, y, imgWidth, imgHeight);
+      } else {
+        let position = 0;
+        const sliceHeight = (canvas.width * (pageHeight - 40)) / imgWidth;
+        
+        while (position < canvas.height) {
+          const slice = document.createElement("canvas");
+          slice.width = canvas.width;
+          slice.height = Math.min(sliceHeight, canvas.height - position);
+          const sctx = slice.getContext("2d");
+          
+          if (sctx) {
+            sctx.drawImage(
+              canvas,
+              0,
+              position,
+              canvas.width,
+              slice.height,
+              0,
+              0,
+              canvas.width,
+              slice.height
+            );
+          }
+          
+          const sliceData = slice.toDataURL("image/png");
+          pdf.addImage(
+            sliceData,
+            "PNG",
+            20,
+            20,
+            imgWidth,
+            (slice.height * imgWidth) / canvas.width
+          );
+          
+          position += slice.height;
+          if (position < canvas.height) pdf.addPage();
+        }
+      }
+      
+      const filename = `financial-report-${selectedMonthsText.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.pdf`;
+      pdf.save(filename);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("Error generating PDF. Please try again.");
+    } finally {
+      document.body.classList.remove("pdf-mode");
+    }
+  };
+
   const barData = {
     labels,
     datasets: [
@@ -258,7 +379,33 @@ export default function Reports() {
             Visualize cash flow over time and summarize by period.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-slate-600" title="PHP per 1 USD">
+              USD Rate
+            </label>
+            <input
+              type="number"
+              step="0.0001"
+              min="0"
+              value={usdRate}
+              onChange={(e) => setUsdRate(e.target.value)}
+              className="w-24 rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              placeholder="56.00"
+              disabled={isLoadingRate}
+            />
+            <button
+              onClick={fetchCurrentRate}
+              disabled={isLoadingRate}
+              className="rounded-md bg-blue-600 px-2 py-1.5 text-xs font-medium text-white shadow hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed"
+              title="Refresh current rate"
+            >
+              {isLoadingRate ? "..." : "↻"}
+            </button>
+          </div>
+          {rateError && (
+            <span className="text-xs text-red-600">{rateError}</span>
+          )}
           <div className="inline-flex overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
             <button
               className={`px-3 py-2 text-sm ${
@@ -337,108 +484,207 @@ export default function Reports() {
               )}
             </>
           )}
+          <button
+            onClick={exportPDF}
+            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700"
+          >
+            Export PDF
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-2 text-sm font-medium text-slate-700">
-            Credit vs Debit
-          </div>
-          {loading ? (
-            <div className="text-sm text-slate-500">Loading...</div>
-          ) : error ? (
-            <div className="text-sm text-rose-600">{error}</div>
-          ) : labels.length === 0 ? (
-            <div className="text-sm text-slate-500">No data.</div>
-          ) : (
-            <Bar
-              data={barData}
-              options={{
-                responsive: true,
-                plugins: { legend: { position: "bottom" as const } },
-              }}
-            />
-          )}
+      <div ref={reportRef} className="space-y-6 bg-white p-6 rounded-xl">
+        {/* Report Header for PDF */}
+        <div className="mb-6 text-center border-b border-slate-200 pb-4 print:block hidden">
+          <h1 className="text-2xl font-bold text-slate-900">Financial Report</h1>
+          <p className="text-sm text-slate-600 mt-1">Period: {selectedMonthsText}</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Generated: {new Date().toLocaleDateString()} • 
+            Exchange Rate: 1 USD = {Number(usdRate || 0).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 4,
+            })} PHP
+          </p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-2 text-sm font-medium text-slate-700">
-            Remaining (Cumulative)
-          </div>
-          {loading ? (
-            <div className="text-sm text-slate-500">Loading...</div>
-          ) : error ? (
-            <div className="text-sm text-rose-600">{error}</div>
-          ) : labels.length === 0 ? (
-            <div className="text-sm text-slate-500">No data.</div>
-          ) : (
-            <Line
-              data={lineData}
-              options={{
-                responsive: true,
-                plugins: { legend: { display: false } },
-              }}
-            />
-          )}
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Total Credit
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 text-sm font-medium text-slate-700">
+              Credit vs Debit
+            </div>
+            {loading ? (
+              <div className="text-sm text-slate-500">Loading...</div>
+            ) : error ? (
+              <div className="text-sm text-rose-600">{error}</div>
+            ) : labels.length === 0 ? (
+              <div className="text-sm text-slate-500">No data.</div>
+            ) : (
+              <Bar
+                data={barData}
+                options={{
+                  responsive: true,
+                  plugins: { legend: { position: "bottom" as const } },
+                }}
+              />
+            )}
           </div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">
-            {money(totals.credit)}
-          </div>
-        </div>
-        <div className="rounded-xl border border-rose-100 bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Total Debit
-          </div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">
-            {money(totals.debit)}
-          </div>
-        </div>
-        <div
-          className={`rounded-xl border ${
-            remaining >= 0 ? "border-emerald-200" : "border-rose-200"
-          } bg-white p-4 shadow-sm`}
-        >
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Remaining
-          </div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">
-            {money(remaining)}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 text-sm font-medium text-slate-700">
+              Remaining (Cumulative)
+            </div>
+            {loading ? (
+              <div className="text-sm text-slate-500">Loading...</div>
+            ) : error ? (
+              <div className="text-sm text-rose-600">{error}</div>
+            ) : labels.length === 0 ? (
+              <div className="text-sm text-slate-500">No data.</div>
+            ) : (
+              <Line
+                data={lineData}
+                options={{
+                  responsive: true,
+                  plugins: { legend: { display: false } },
+                }}
+              />
+            )}
           </div>
         </div>
 
-        <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Savings (Selected Period)
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Total Credit
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
+              {money(totals.credit)}
+            </div>
+            <div className="text-sm text-slate-600 mt-1">
+              {usd(toUsd(totals.credit))}
+            </div>
           </div>
-          <div className="text-[11px] text-slate-500">
-            Months: {selectedMonthsText}
+          <div className="rounded-xl border border-rose-100 bg-white p-4 shadow-sm">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Total Debit
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
+              {money(totals.debit)}
+            </div>
+            <div className="text-sm text-slate-600 mt-1">
+              {usd(toUsd(totals.debit))}
+            </div>
           </div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">
-            {money(savingsTotal)}
+          <div
+            className={`rounded-xl border ${
+              remaining >= 0 ? "border-emerald-200" : "border-rose-200"
+            } bg-white p-4 shadow-sm`}
+          >
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Remaining
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
+              {money(remaining)}
+            </div>
+            <div className="text-sm text-slate-600 mt-1">
+              {usd(toUsd(remaining))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Savings (Selected Period)
+            </div>
+            <div className="text-[11px] text-slate-500">
+              Months: {selectedMonthsText}
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
+              {money(savingsTotal)}
+            </div>
+            <div className="text-sm text-slate-600 mt-1">
+              {usd(toUsd(savingsTotal))}
+            </div>
+          </div>
+
+          <div
+            className={`rounded-xl border ${
+              remaining - savingsTotal >= 0
+                ? "border-emerald-300"
+                : "border-rose-300"
+            } bg-white p-4 shadow-sm sm:col-span-2`}
+          >
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Remaining After Savings
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-slate-900">
+              {money(remaining - savingsTotal)}
+            </div>
+            <div className="text-sm text-slate-600 mt-1">
+              {usd(toUsd(remaining - savingsTotal))}
+            </div>
           </div>
         </div>
 
-        <div
-          className={`rounded-xl border ${
-            remaining - savingsTotal >= 0
-              ? "border-emerald-300"
-              : "border-rose-300"
-          } bg-white p-4 shadow-sm sm:col-span-3`}
-        >
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Remaining After Savings
+        {/* Detailed Breakdown Table */}
+        {!loading && !error && items.length > 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 text-lg font-semibold text-slate-900">
+              Transaction Breakdown
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-3 py-2 text-left font-medium text-slate-700">Date</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-700">Type</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-700">Category</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-700">Amount (PHP)</th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-700">Amount (USD)</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-700">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((transaction) => (
+                    <tr key={transaction.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2 text-slate-900">{transaction.date}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
+                          transaction.type === 'in' 
+                            ? 'bg-green-100 text-green-800' 
+                            : transaction.type === 'out'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {transaction.type === 'in' ? 'Credit' : transaction.type === 'out' ? 'Debit' : 'Expense'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{transaction.category || '-'}</td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-900">
+                        {money(transaction.amount)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-slate-600">
+                        {usd(toUsd(transaction.amount))}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 max-w-xs truncate">
+                        {transaction.note || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 bg-slate-100 font-medium">
+                    <td colSpan={3} className="px-3 py-2 text-slate-900">Total</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-900">
+                      {money(items.reduce((sum, t) => sum + (t.type === 'in' ? t.amount : -t.amount), 0))}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-600">
+                      {usd(toUsd(items.reduce((sum, t) => sum + (t.type === 'in' ? t.amount : -t.amount), 0)))}
+                    </td>
+                    <td className="px-3 py-2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">
-            {money(remaining - savingsTotal)}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
