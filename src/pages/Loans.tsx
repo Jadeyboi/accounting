@@ -31,7 +31,7 @@ export default function Loans() {
   const [loanType, setLoanType] = useState<'cash_advance' | 'emergency_loan' | 'salary_loan' | 'equipment_loan' | 'other'>('cash_advance')
   const [principalAmount, setPrincipalAmount] = useState('')
   const [interestRate, setInterestRate] = useState('0')
-  const [monthlyDeduction, setMonthlyDeduction] = useState('')
+  const [bimonthlyDeduction, setBimonthlyDeduction] = useState('')
   const [loanDate, setLoanDate] = useState(new Date().toISOString().split('T')[0])
   const [startDeductionDate, setStartDeductionDate] = useState(new Date().toISOString().split('T')[0])
   const [purpose, setPurpose] = useState('')
@@ -78,7 +78,7 @@ export default function Loans() {
       setLoanType(loan.loan_type)
       setPrincipalAmount(loan.principal_amount.toString())
       setInterestRate(loan.interest_rate.toString())
-      setMonthlyDeduction(loan.monthly_deduction.toString())
+      setBimonthlyDeduction(loan.bimonthly_deduction.toString())
       setLoanDate(loan.loan_date)
       setStartDeductionDate(loan.start_deduction_date)
       setPurpose(loan.purpose || '')
@@ -95,7 +95,7 @@ export default function Loans() {
     setLoanType('cash_advance')
     setPrincipalAmount('')
     setInterestRate('0')
-    setMonthlyDeduction('')
+    setBimonthlyDeduction('')
     setLoanDate(new Date().toISOString().split('T')[0])
     setStartDeductionDate(new Date().toISOString().split('T')[0])
     setPurpose('')
@@ -105,29 +105,30 @@ export default function Loans() {
   const calculateTotalAmount = () => {
     const principal = Number(principalAmount) || 0
     const rate = Number(interestRate) || 0
-    const monthly = Number(monthlyDeduction) || 0
+    const bimonthly = Number(bimonthlyDeduction) || 0
     
-    if (principal <= 0 || monthly <= 0) return principal
+    if (principal <= 0 || bimonthly <= 0) return principal
     
-    // Simple interest calculation
-    const months = Math.ceil(principal / monthly)
-    const interest = (principal * rate * months) / (12 * 100)
+    // Simple interest calculation - bimonthly payments (24 payments per year)
+    const totalPayments = Math.ceil(principal / bimonthly)
+    const years = totalPayments / 24 // 24 payments per year (twice monthly)
+    const interest = (principal * rate * years) / 100
     return principal + interest
   }
 
   const handleSave = async () => {
-    if (!employeeId || !principalAmount || !monthlyDeduction) {
+    if (!employeeId || !principalAmount || !bimonthlyDeduction) {
       alert('Please fill in all required fields')
       return
     }
 
     const principal = Number(principalAmount)
-    const monthly = Number(monthlyDeduction)
+    const bimonthly = Number(bimonthlyDeduction)
     const rate = Number(interestRate) || 0
     const totalAmount = calculateTotalAmount()
 
-    if (principal <= 0 || monthly <= 0) {
-      alert('Principal amount and monthly deduction must be greater than 0')
+    if (principal <= 0 || bimonthly <= 0) {
+      alert('Principal amount and bi-monthly deduction must be greater than 0')
       return
     }
 
@@ -137,7 +138,7 @@ export default function Loans() {
       principal_amount: principal,
       interest_rate: rate,
       total_amount: totalAmount,
-      monthly_deduction: monthly,
+      bimonthly_deduction: bimonthly,
       remaining_balance: editingLoan ? editingLoan.remaining_balance : totalAmount,
       loan_date: loanDate,
       start_deduction_date: startDeductionDate,
@@ -379,7 +380,7 @@ export default function Loans() {
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Employee</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Type</th>
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Total Amount</th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Monthly Deduction</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Bi-monthly Deduction</th>
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Remaining</th>
                     <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
                     <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Actions</th>
@@ -412,7 +413,7 @@ export default function Loans() {
                           {moneyFmt(loan.total_amount)}
                         </td>
                         <td className="px-6 py-4 text-right text-sm text-gray-900">
-                          {moneyFmt(loan.monthly_deduction)}
+                          {moneyFmt(loan.bimonthly_deduction)}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="text-sm font-medium text-gray-900">{moneyFmt(loan.remaining_balance)}</div>
@@ -539,12 +540,12 @@ export default function Loans() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Deduction *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bi-monthly Deduction *</label>
                   <input
                     type="number"
                     step="0.01"
-                    value={monthlyDeduction}
-                    onChange={(e) => setMonthlyDeduction(e.target.value)}
+                    value={bimonthlyDeduction}
+                    onChange={(e) => setBimonthlyDeduction(e.target.value)}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     placeholder="0.00"
                     required
@@ -552,15 +553,15 @@ export default function Loans() {
                 </div>
               </div>
 
-              {principalAmount && monthlyDeduction && (
+              {principalAmount && bimonthlyDeduction && (
                 <div className="rounded-lg bg-blue-50 p-4">
                   <div className="text-sm text-blue-800">
                     <strong>Calculation Preview:</strong>
                     <div className="mt-2 grid grid-cols-2 gap-4">
                       <div>Principal: {moneyFmt(Number(principalAmount))}</div>
                       <div>Total Amount: {moneyFmt(calculateTotalAmount())}</div>
-                      <div>Monthly Payment: {moneyFmt(Number(monthlyDeduction))}</div>
-                      <div>Estimated Months: {Math.ceil(Number(principalAmount) / Number(monthlyDeduction))}</div>
+                      <div>Bi-monthly Payment: {moneyFmt(Number(bimonthlyDeduction))}</div>
+                      <div>Estimated Payments: {Math.ceil(Number(principalAmount) / Number(bimonthlyDeduction))}</div>
                     </div>
                   </div>
                 </div>
@@ -673,8 +674,8 @@ export default function Loans() {
                 <div className="text-xl font-bold text-green-900">{moneyFmt(viewingLoan.remaining_balance)}</div>
               </div>
               <div className="rounded-lg bg-purple-50 p-4">
-                <div className="text-sm text-purple-600">Monthly Deduction</div>
-                <div className="text-xl font-bold text-purple-900">{moneyFmt(viewingLoan.monthly_deduction)}</div>
+                <div className="text-sm text-purple-600">Bi-monthly Deduction</div>
+                <div className="text-xl font-bold text-purple-900">{moneyFmt(viewingLoan.bimonthly_deduction)}</div>
               </div>
               <div className="rounded-lg bg-indigo-50 p-4">
                 <div className="text-sm text-indigo-600">Progress</div>

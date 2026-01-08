@@ -146,7 +146,7 @@ export default function Payroll() {
   // Calculate total loan deductions for an employee
   const calculateLoanDeductions = (employeeId: string, payrollDate: string) => {
     const activeLoans = getActiveLoansForEmployee(employeeId, payrollDate)
-    return activeLoans.reduce((total, loan) => total + loan.monthly_deduction, 0)
+    return activeLoans.reduce((total, loan) => total + loan.bimonthly_deduction, 0)
   }
 
   // Process loan payments when payslip is saved
@@ -156,7 +156,7 @@ export default function Payroll() {
     const activeLoans = getActiveLoansForEmployee(employeeId, payrollDate)
     
     for (const loan of activeLoans) {
-      const paymentAmount = Math.min(loan.monthly_deduction, loan.remaining_balance)
+      const paymentAmount = Math.min(loan.bimonthly_deduction, loan.remaining_balance)
       if (paymentAmount <= 0) continue
 
       const balanceBefore = loan.remaining_balance

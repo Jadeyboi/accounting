@@ -132,7 +132,7 @@ export interface Loan {
   principal_amount: number;
   interest_rate: number;
   total_amount: number;
-  monthly_deduction: number;
+  bimonthly_deduction: number;
   remaining_balance: number;
   loan_date: string;
   start_deduction_date: string;

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.loans (
   principal_amount DECIMAL(12,2) NOT NULL CHECK (principal_amount > 0),
   interest_rate DECIMAL(5,2) DEFAULT 0 CHECK (interest_rate >= 0),
   total_amount DECIMAL(12,2) NOT NULL CHECK (total_amount > 0),
-  monthly_deduction DECIMAL(12,2) NOT NULL CHECK (monthly_deduction > 0),
+  bimonthly_deduction DECIMAL(12,2) NOT NULL CHECK (bimonthly_deduction > 0),
   remaining_balance DECIMAL(12,2) NOT NULL CHECK (remaining_balance >= 0),
   loan_date DATE NOT NULL,
   start_deduction_date DATE NOT NULL,
@@ -84,7 +84,7 @@ COMMENT ON COLUMN public.loans.loan_type IS 'Type of loan: cash_advance, emergen
 COMMENT ON COLUMN public.loans.principal_amount IS 'Original loan amount without interest';
 COMMENT ON COLUMN public.loans.interest_rate IS 'Annual interest rate percentage (0 for no interest)';
 COMMENT ON COLUMN public.loans.total_amount IS 'Total amount to be repaid (principal + interest)';
-COMMENT ON COLUMN public.loans.monthly_deduction IS 'Amount to deduct from payroll each month';
+COMMENT ON COLUMN public.loans.bimonthly_deduction IS 'Amount to deduct from each payroll (twice per month)';
 COMMENT ON COLUMN public.loans.remaining_balance IS 'Current outstanding balance';
 COMMENT ON COLUMN public.loans.start_deduction_date IS 'Date when payroll deductions should start';
 COMMENT ON COLUMN public.loans.status IS 'Loan status: active, completed, cancelled';
