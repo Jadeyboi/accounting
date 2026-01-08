@@ -221,7 +221,7 @@ export default function Loans() {
       await loadData()
       
       // Update viewing loan
-      const updatedLoan = { ...viewingLoan, remaining_balance: balanceAfter, status: newStatus }
+      const updatedLoan = { ...viewingLoan, remaining_balance: balanceAfter, status: newStatus as 'active' | 'completed' | 'cancelled' }
       setViewingLoan(updatedLoan)
     } catch (err: any) {
       alert(err.message)
