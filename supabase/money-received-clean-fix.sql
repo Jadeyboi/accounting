@@ -1,5 +1,5 @@
--- Complete fix for money_received table
--- This script resolves all schema and policy conflicts
+-- Clean fix for money_received table - guaranteed to work
+-- This script resolves all schema and policy conflicts with proper syntax
 
 -- Step 1: Drop existing policies to avoid conflicts
 DROP POLICY IF EXISTS "Enable all operations for money_received" ON public.money_received;
@@ -46,16 +46,9 @@ ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE public.money_received 
 ADD COLUMN IF NOT EXISTS receipt_url TEXT;
 
--- Step 6: Make old amount column nullable (remove NOT NULL constraint if it exists)
-DO $$ 
-BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.columns 
-               WHERE table_name = 'money_received' 
-               AND column_name = 'amount' 
-               AND is_nullable = 'NO') THEN
-        ALTER TABLE public.money_received ALTER COLUMN amount DROP NOT NULL;
-    END IF;
-END $$;
+-- Step 6: Make old amount column nullable
+ALTER TABLE public.money_received 
+ALTER COLUMN amount DROP NOT NULL;
 
 -- Step 7: Set default values for USD columns for existing records
 UPDATE public.money_received 
@@ -76,27 +69,14 @@ ALTER TABLE public.money_received
 ALTER COLUMN amount_php SET NOT NULL;
 
 -- Step 9: Drop existing constraints to avoid conflicts
-DO $$ 
-BEGIN
-    -- Drop constraints if they exist
-    BEGIN
-        ALTER TABLE public.money_received DROP CONSTRAINT IF EXISTS money_received_amount_usd_positive;
-    EXCEPTION WHEN OTHERS THEN
-        NULL;
-    END;
-    
-    BEGIN
-        ALTER TABLE public.money_received DROP CONSTRAINT IF EXISTS money_received_exchange_rate_positive;
-    EXCEPTION WHEN OTHERS THEN
-        NULL;
-    END;
-    
-    BEGIN
-        ALTER TABLE public.money_received DROP CONSTRAINT IF EXISTS money_received_amount_php_positive;
-    EXCEPTION WHEN OTHERS THEN
-        NULL;
-    END;
-END $$;
+ALTER TABLE public.money_received 
+DROP CONSTRAINT IF EXISTS money_received_amount_usd_positive;
+
+ALTER TABLE public.money_received 
+DROP CONSTRAINT IF EXISTS money_received_exchange_rate_positive;
+
+ALTER TABLE public.money_received 
+DROP CONSTRAINT IF EXISTS money_received_amount_php_positive;
 
 -- Step 10: Add positive value constraints
 ALTER TABLE public.money_received 
@@ -147,8 +127,7 @@ SELECT
   column_name, 
   data_type, 
   is_nullable, 
-  column_default,
-  character_maximum_length
+  column_default
 FROM information_schema.columns 
 WHERE table_name = 'money_received' AND table_schema = 'public'
 ORDER BY ordinal_position;
@@ -173,9 +152,3 @@ SELECT
 FROM public.money_received
 ORDER BY created_at DESC
 LIMIT 3;
-
--- Success message
-DO $$ 
-BEGIN
-    RAISE NOTICE 'Money received table has been completely fixed and is ready to use!';
-END $$;

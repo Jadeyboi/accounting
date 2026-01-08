@@ -104,4 +104,8 @@ FROM public.money_received
 ORDER BY created_at DESC
 LIMIT 3;
 
-RAISE NOTICE 'Money received table schema has been updated successfully!';
+-- Success message
+DO $$ 
+BEGIN
+    RAISE NOTICE 'Money received table schema has been updated successfully!';
+END $$;
