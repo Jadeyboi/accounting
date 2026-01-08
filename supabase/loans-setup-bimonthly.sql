@@ -98,12 +98,12 @@ CREATE INDEX IF NOT EXISTS loan_payments_payment_date_idx ON public.loan_payment
 
 -- Add trigger for updated_at if it doesn't exist
 CREATE OR REPLACE FUNCTION update_loans_updated_at()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS loans_updated_at_trigger ON public.loans;
 CREATE TRIGGER loans_updated_at_trigger
