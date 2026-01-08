@@ -157,3 +157,19 @@ export interface LoanPayment {
   payment_type: 'payroll_deduction' | 'manual_payment' | 'adjustment';
   notes?: string | null;
 }
+
+export interface MoneyReceived {
+  id: string;
+  created_at: string;
+  date_received: string;
+  amount: number;
+  sender_name: string;
+  sender_contact?: string | null;
+  payment_method: 'bank_transfer' | 'cash' | 'check' | 'gcash' | 'paymaya' | 'paypal' | 'other';
+  reference_number?: string | null;
+  purpose: string;
+  category?: string | null;
+  notes?: string | null;
+  receipt_url?: string | null;
+  status: 'pending' | 'confirmed' | 'cleared';
+}

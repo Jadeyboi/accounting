@@ -14,6 +14,7 @@ import HRIS from "@/pages/HRIS";
 import Leave from "@/pages/Leave";
 import Inventory from "@/pages/Inventory";
 import Loans from "@/pages/Loans";
+import MoneyReceived from "@/pages/MoneyReceived";
 import Login from "@/pages/Login";
 import UserManagement from "@/pages/UserManagement";
 import type { SyntheticEvent } from "react";
@@ -219,6 +220,18 @@ export default function App() {
                   Loans
                 </NavLink>
                 <NavLink
+                  to="/money-received"
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                    }`
+                  }
+                >
+                  Money Received
+                </NavLink>
+                <NavLink
                   to="/request-funds"
                   className={({ isActive }) =>
                     `rounded-lg px-4 py-2 font-medium transition-all ${
@@ -405,6 +418,19 @@ export default function App() {
                   Loans
                 </NavLink>
                 <NavLink
+                  to="/money-received"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-3 font-medium transition-all ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                    }`
+                  }
+                >
+                  Money Received
+                </NavLink>
+                <NavLink
                   to="/request-funds"
                   onClick={() => setMobileMenuOpen(false)}
                   className={({ isActive }) =>
@@ -482,6 +508,7 @@ export default function App() {
               <Route path="/leave" element={<Leave />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/loans" element={<Loans />} />
+              <Route path="/money-received" element={<MoneyReceived />} />
               <Route path="/request-funds" element={<RequestFunds />} />
               <Route path="/invoice" element={<Invoice />} />
               <Route path="/invoice-history" element={<InvoiceHistory />} />
