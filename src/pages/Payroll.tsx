@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Employee, Payslip } from '@/types'
+import type { Employee, Payslip, Loan } from '@/types'
 import PayslipView from '@/components/PayslipView'
 
 type Mode = 'list' | 'edit'
@@ -22,6 +22,7 @@ export default function Payroll() {
   const [mode, setMode] = useState<Mode>('list')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [payslips, setPayslips] = useState<Payslip[]>([])
+  const [loans, setLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -68,7 +69,7 @@ export default function Payroll() {
         const totalGross = payslips.reduce((sum, p) => sum + p.gross_salary, 0)
         const totalNet = payslips.reduce((sum, p) => sum + p.net_salary, 0)
         const totalDeductions = payslips.reduce((sum, p) => {
-          const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.other_deductions ?? 0)
+          const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
           return sum + deductions
         }, 0)
         const totalAdditions = payslips.reduce((sum, p) => {
@@ -94,14 +95,17 @@ export default function Payroll() {
     setLoading(true)
     setError(null)
     try {
-      const [empRes, payRes] = await Promise.all([
+      const [empRes, payRes, loansRes] = await Promise.all([
         supabase.from('employees').select('*').order('created_at', { ascending: false }),
         supabase.from('payslips').select('*').order('created_at', { ascending: false }),
+        supabase.from('loans').select('*').eq('status', 'active').order('created_at', { ascending: false }),
       ])
       if (empRes.error) setError(empRes.error.message)
       if (payRes.error) setError((prev) => prev ?? payRes.error!.message)
+      if (loansRes.error) setError((prev) => prev ?? loansRes.error!.message)
       setEmployees((empRes.data ?? []) as Employee[])
       setPayslips((payRes.data ?? []) as Payslip[])
+      setLoans((loansRes.data ?? []) as Loan[])
       console.log('Refreshed payslips with transaction_ids:', payRes.data?.map(p => ({ id: p.id, transaction_id: p.transaction_id, employee_id: p.employee_id })))
     } catch (error) {
       console.error('Refresh error:', error)
@@ -125,17 +129,88 @@ export default function Payroll() {
     if (!editingPayslip) return { additions: 0, deductions: 0, net: 0 }
     const p = editingPayslip
     const additions = (p.bonuses ?? 0) + (p.allowances ?? 0)
-    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.other_deductions ?? 0)
+    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
     const net = p.gross_salary + additions - deductions
     return { additions, deductions, net }
   }, [editingPayslip])
 
+  // Get active loans for an employee
+  const getActiveLoansForEmployee = (employeeId: string, payrollDate: string) => {
+    return loans.filter(loan => 
+      loan.employee_id === employeeId && 
+      loan.status === 'active' &&
+      new Date(loan.start_deduction_date) <= new Date(payrollDate)
+    )
+  }
+
+  // Calculate total loan deductions for an employee
+  const calculateLoanDeductions = (employeeId: string, payrollDate: string) => {
+    const activeLoans = getActiveLoansForEmployee(employeeId, payrollDate)
+    return activeLoans.reduce((total, loan) => total + loan.monthly_deduction, 0)
+  }
+
+  // Process loan payments when payslip is saved
+  const processLoanPayments = async (payslipId: string, employeeId: string, payrollDate: string, loanDeductionAmount: number) => {
+    if (loanDeductionAmount <= 0) return
+
+    const activeLoans = getActiveLoansForEmployee(employeeId, payrollDate)
+    
+    for (const loan of activeLoans) {
+      const paymentAmount = Math.min(loan.monthly_deduction, loan.remaining_balance)
+      if (paymentAmount <= 0) continue
+
+      const balanceBefore = loan.remaining_balance
+      const balanceAfter = balanceBefore - paymentAmount
+      const newStatus = balanceAfter <= 0 ? 'completed' : 'active'
+
+      try {
+        // Create loan payment record
+        const { error: paymentError } = await supabase
+          .from('loan_payments')
+          .insert({
+            loan_id: loan.id,
+            payslip_id: payslipId,
+            payment_date: payrollDate,
+            amount: paymentAmount,
+            balance_before: balanceBefore,
+            balance_after: balanceAfter,
+            payment_type: 'payroll_deduction',
+            notes: `Automatic payroll deduction for payslip ${payslipId}`
+          })
+
+        if (paymentError) {
+          console.error('Error creating loan payment:', paymentError)
+          continue
+        }
+
+        // Update loan balance and status
+        const { error: loanError } = await supabase
+          .from('loans')
+          .update({ 
+            remaining_balance: balanceAfter,
+            status: newStatus,
+            end_date: newStatus === 'completed' ? payrollDate : null
+          })
+          .eq('id', loan.id)
+
+        if (loanError) {
+          console.error('Error updating loan balance:', loanError)
+        }
+      } catch (error) {
+        console.error('Error processing loan payment:', error)
+      }
+    }
+  }
+
   const newPayslip = (): Payslip => {
     const baseSalary = Number(employees[0]?.base_salary ?? 0)
+    const employeeId = employees[0]?.id ?? ''
+    const loanDeductions = calculateLoanDeductions(employeeId, today())
+    
     return {
       id: crypto.randomUUID(),
       created_at: new Date().toISOString(),
-      employee_id: employees[0]?.id ?? '',
+      employee_id: employeeId,
       period_start: today(),
       period_end: today(),
       date_issued: today(),
@@ -145,6 +220,7 @@ export default function Payroll() {
       philhealth: 0,
       tax: 0,
       cash_advance: 0,
+      loan_deductions: loanDeductions,
       bonuses: 0,
       allowances: 0,
       other_deductions: 0,
@@ -188,6 +264,8 @@ export default function Payroll() {
         newSlip.allowances = lastPayslip.allowances
         // Don't copy cash_advance and other_deductions as they're usually one-time
       }
+      // Calculate loan deductions for this employee
+      newSlip.loan_deductions = calculateLoanDeductions(newSlip.employee_id, newSlip.date_issued)
       setEditingPayslip(newSlip)
     }
     setMode('edit')
@@ -207,12 +285,17 @@ export default function Payroll() {
     const p = { ...editingPayslip }
     // Recompute net on save
     const additions = (p.bonuses ?? 0) + (p.allowances ?? 0)
-    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.other_deductions ?? 0)
+    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
     p.net_salary = p.gross_salary + additions - deductions
 
     // Upsert payslip
     const { error: upsertError } = await supabase.from('payslips').upsert(p, { onConflict: 'id' })
     if (upsertError) return alert(upsertError.message)
+
+    // Process loan payments if there are loan deductions
+    if (p.loan_deductions && p.loan_deductions > 0) {
+      await processLoanPayments(p.id, p.employee_id, p.date_issued, p.loan_deductions)
+    }
 
     // Create or update linked expense transaction
     const note = `Payroll: ${currentEmployee?.name ?? p.employee_id} (${p.period_start} to ${p.period_end})`
@@ -325,6 +408,7 @@ export default function Payroll() {
         const emp = employees.find(e => e.id === empId)
         const baseSalary = emp?.base_salary ?? 0
         const gross = calculateGrossSalary(bulkPeriodStart, bulkPeriodEnd, baseSalary)
+        const loanDeductions = calculateLoanDeductions(empId, today())
         
         // Pre-fill with last payslip values for this employee
         const lastPayslip = payslips.find(ps => ps.employee_id === empId)
@@ -342,12 +426,13 @@ export default function Payroll() {
           philhealth: lastPayslip?.philhealth ?? 0,
           tax: lastPayslip?.tax ?? 0,
           cash_advance: 0, // Don't copy one-time deductions
+          loan_deductions: loanDeductions,
           bonuses: lastPayslip?.bonuses ?? 0,
           allowances: lastPayslip?.allowances ?? 0,
           other_deductions: 0, // Don't copy one-time deductions
           notes: '',
           net_salary: gross + (lastPayslip?.bonuses ?? 0) + (lastPayslip?.allowances ?? 0) - 
-                      ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0)),
+                      ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0) + loanDeductions),
           transaction_id: null,
         }
       })
@@ -404,6 +489,13 @@ export default function Payroll() {
 
       console.log('Successfully created payslips with transaction links')
 
+      // Process loan payments for each payslip with loan deductions
+      for (const payslip of newPayslips) {
+        if (payslip.loan_deductions && payslip.loan_deductions > 0) {
+          await processLoanPayments(payslip.id, payslip.employee_id, payslip.date_issued, payslip.loan_deductions)
+        }
+      }
+
       setShowBulkModal(false)
       setSelectedEmployees([])
       
@@ -412,7 +504,7 @@ export default function Payroll() {
         await refresh()
       }, 500)
       
-      alert(`${newPayslips.length} payslips generated successfully with linked expense transactions!`)
+      alert(`${newPayslips.length} payslips generated successfully with linked expense transactions and loan deductions!`)
     } catch (error) {
       console.error('Bulk generation error:', error)
       alert(`Error during bulk generation: ${error}`)
@@ -581,7 +673,7 @@ export default function Payroll() {
                         {period.payslips.map((payslip) => {
                           const emp = employees.find((e) => e.id === payslip.employee_id)
                           const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
-                          const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.other_deductions ?? 0)
+                          const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
                           
                           return (
                             <tr key={payslip.id} className="hover:bg-slate-50">
@@ -693,6 +785,7 @@ export default function Payroll() {
                       bonuses: lastPayslip?.bonuses ?? 0,
                       allowances: lastPayslip?.allowances ?? 0,
                       cash_advance: 0, // Reset one-time deductions
+                      loan_deductions: calculateLoanDeductions(newEmpId, editingPayslip.date_issued),
                       other_deductions: 0, // Reset one-time deductions
                     })
                   }}
@@ -778,6 +871,17 @@ export default function Payroll() {
                 </label>
                 <label className="text-sm text-slate-600">Cash Advance
                   <input type="number" step="0.01" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm" value={editingPayslip.cash_advance ?? 0} onChange={(e) => setEditingPayslip({ ...editingPayslip, cash_advance: Number(e.target.value) })} />
+                </label>
+                <label className="text-sm text-slate-600">Loan Deductions
+                  <div className="relative">
+                    <input type="number" step="0.01" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm" value={editingPayslip.loan_deductions ?? 0} onChange={(e) => setEditingPayslip({ ...editingPayslip, loan_deductions: Number(e.target.value) })} />
+                    <div className="mt-1 text-xs text-slate-500">
+                      {(() => {
+                        const activeLoans = getActiveLoansForEmployee(editingPayslip.employee_id, editingPayslip.date_issued)
+                        return activeLoans.length > 0 ? `${activeLoans.length} active loan(s)` : 'No active loans'
+                      })()}
+                    </div>
+                  </div>
                 </label>
                 <label className="text-sm text-slate-600">Other Deductions
                   <input type="number" step="0.01" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm" value={editingPayslip.other_deductions ?? 0} onChange={(e) => setEditingPayslip({ ...editingPayslip, other_deductions: Number(e.target.value) })} />
@@ -937,7 +1041,7 @@ export default function Payroll() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {employeeHistory.payslips.map((p) => {
-                    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.other_deductions ?? 0)
+                    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
                     return (
                       <tr key={p.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm text-gray-900">{formatDate(p.period_start)} to {formatDate(p.period_end)}</td>

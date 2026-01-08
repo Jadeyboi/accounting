@@ -73,6 +73,7 @@ export interface Payslip {
   philhealth?: number | null;
   tax?: number | null;
   cash_advance?: number | null;
+  loan_deductions?: number | null;
   bonuses?: number | null;
   allowances?: number | null;
   other_deductions?: number | null;
@@ -120,5 +121,39 @@ export interface InventoryHistory {
   performed_by?: string | null;
   action_date: string;
   cost?: number | null;
+  notes?: string | null;
+}
+
+export interface Loan {
+  id: string;
+  created_at: string;
+  employee_id: string;
+  loan_type: 'cash_advance' | 'emergency_loan' | 'salary_loan' | 'equipment_loan' | 'other';
+  principal_amount: number;
+  interest_rate: number;
+  total_amount: number;
+  monthly_deduction: number;
+  remaining_balance: number;
+  loan_date: string;
+  start_deduction_date: string;
+  end_date?: string | null;
+  status: 'active' | 'completed' | 'cancelled';
+  purpose?: string | null;
+  notes?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  updated_at: string;
+}
+
+export interface LoanPayment {
+  id: string;
+  created_at: string;
+  loan_id: string;
+  payslip_id?: string | null;
+  payment_date: string;
+  amount: number;
+  balance_before: number;
+  balance_after: number;
+  payment_type: 'payroll_deduction' | 'manual_payment' | 'adjustment';
   notes?: string | null;
 }
