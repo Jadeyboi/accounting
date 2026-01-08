@@ -11,7 +11,10 @@ const formatDate = (dateString: string | null | undefined): string => {
   return `${month}-${day}-${year}`
 }
 
-const moneyFmt = (v: number | null | undefined) => 
+const moneyFmtUSD = (v: number | null | undefined) => 
+  `$ ${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+const moneyFmtPHP = (v: number | null | undefined) => 
   `₱ ${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -24,10 +27,12 @@ export default function MoneyReceived() {
   const [editingRecord, setEditingRecord] = useState<MoneyReceived | null>(null)
   const [showViewModal, setShowViewModal] = useState(false)
   const [viewingRecord, setViewingRecord] = useState<MoneyReceived | null>(null)
+  const [exchangeRate, setExchangeRate] = useState<number>(56) // Default rate
 
   // Form fields
   const [dateReceived, setDateReceived] = useState(today())
-  const [amount, setAmount] = useState('')
+  const [amountUSD, setAmountUSD] = useState('')
+  const [customExchangeRate, setCustomExchangeRate] = useState('')
   const [senderName, setSenderName] = useState('')
   const [senderContact, setSenderContact] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'cash' | 'check' | 'gcash' | 'paymaya' | 'paypal' | 'other'>('bank_transfer')
@@ -45,7 +50,22 @@ export default function MoneyReceived() {
 
   useEffect(() => {
     loadData()
+    fetchExchangeRate()
   }, [])
+
+  const fetchExchangeRate = async () => {
+    try {
+      // Using a free exchange rate API
+      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
+      const data = await response.json()
+      if (data.rates && data.rates.PHP) {
+        setExchangeRate(data.rates.PHP)
+      }
+    } catch (error) {
+      console.error('Failed to fetch exchange rate:', error)
+      // Keep default rate if API fails
+    }
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -70,7 +90,8 @@ export default function MoneyReceived() {
     if (record) {
       setEditingRecord(record)
       setDateReceived(record.date_received)
-      setAmount(record.amount.toString())
+      setAmountUSD(record.amount_usd.toString())
+      setCustomExchangeRate(record.exchange_rate.toString())
       setSenderName(record.sender_name)
       setSenderContact(record.sender_contact || '')
       setPaymentMethod(record.payment_method)
@@ -88,7 +109,8 @@ export default function MoneyReceived() {
   const resetForm = () => {
     setEditingRecord(null)
     setDateReceived(today())
-    setAmount('')
+    setAmountUSD('')
+    setCustomExchangeRate(exchangeRate.toString())
     setSenderName('')
     setSenderContact('')
     setPaymentMethod('bank_transfer')
@@ -100,20 +122,31 @@ export default function MoneyReceived() {
   }
 
   const handleSave = async () => {
-    if (!dateReceived || !amount || !senderName || !purpose) {
+    if (!dateReceived || !amountUSD || !senderName || !purpose) {
       alert('Please fill in all required fields')
       return
     }
 
-    const amountNum = Number(amount)
-    if (amountNum <= 0) {
+    const amountUSDNum = Number(amountUSD)
+    const rate = Number(customExchangeRate) || exchangeRate
+    
+    if (amountUSDNum <= 0) {
       alert('Amount must be greater than 0')
       return
     }
 
+    if (rate <= 0) {
+      alert('Exchange rate must be greater than 0')
+      return
+    }
+
+    const amountPHP = amountUSDNum * rate
+
     const payload: Partial<MoneyReceived> = {
       date_received: dateReceived,
-      amount: amountNum,
+      amount_usd: amountUSDNum,
+      exchange_rate: rate,
+      amount_php: amountPHP,
       sender_name: senderName.trim(),
       sender_contact: senderContact.trim() || null,
       payment_method: paymentMethod,
@@ -196,10 +229,14 @@ export default function MoneyReceived() {
   })
 
   // Calculate totals
-  const totalAmount = filteredRecords.reduce((sum, record) => sum + record.amount, 0)
-  const totalPending = filteredRecords.filter(r => r.status === 'pending').reduce((sum, record) => sum + record.amount, 0)
-  const totalConfirmed = filteredRecords.filter(r => r.status === 'confirmed').reduce((sum, record) => sum + record.amount, 0)
-  const totalCleared = filteredRecords.filter(r => r.status === 'cleared').reduce((sum, record) => sum + record.amount, 0)
+  const totalAmountUSD = filteredRecords.reduce((sum, record) => sum + record.amount_usd, 0)
+  const totalAmountPHP = filteredRecords.reduce((sum, record) => sum + record.amount_php, 0)
+  const totalPendingUSD = filteredRecords.filter(r => r.status === 'pending').reduce((sum, record) => sum + record.amount_usd, 0)
+  const totalPendingPHP = filteredRecords.filter(r => r.status === 'pending').reduce((sum, record) => sum + record.amount_php, 0)
+  const totalConfirmedUSD = filteredRecords.filter(r => r.status === 'confirmed').reduce((sum, record) => sum + record.amount_usd, 0)
+  const totalConfirmedPHP = filteredRecords.filter(r => r.status === 'confirmed').reduce((sum, record) => sum + record.amount_php, 0)
+  const totalClearedUSD = filteredRecords.filter(r => r.status === 'cleared').reduce((sum, record) => sum + record.amount_usd, 0)
+  const totalClearedPHP = filteredRecords.filter(r => r.status === 'cleared').reduce((sum, record) => sum + record.amount_php, 0)
 
   return (
     <div className="space-y-6">
@@ -223,7 +260,8 @@ export default function MoneyReceived() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-blue-600">Total Received</p>
-              <p className="mt-2 text-3xl font-bold text-blue-900">{moneyFmt(totalAmount)}</p>
+              <p className="mt-1 text-2xl font-bold text-blue-900">{moneyFmtUSD(totalAmountUSD)}</p>
+              <p className="text-lg font-semibold text-blue-700">{moneyFmtPHP(totalAmountPHP)}</p>
             </div>
             <div className="rounded-full bg-blue-200 p-3">
               <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,7 +275,8 @@ export default function MoneyReceived() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-yellow-600">Pending</p>
-              <p className="mt-2 text-3xl font-bold text-yellow-900">{moneyFmt(totalPending)}</p>
+              <p className="mt-1 text-2xl font-bold text-yellow-900">{moneyFmtUSD(totalPendingUSD)}</p>
+              <p className="text-lg font-semibold text-yellow-700">{moneyFmtPHP(totalPendingPHP)}</p>
             </div>
             <div className="rounded-full bg-yellow-200 p-3">
               <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,7 +290,8 @@ export default function MoneyReceived() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-green-600">Confirmed</p>
-              <p className="mt-2 text-3xl font-bold text-green-900">{moneyFmt(totalConfirmed)}</p>
+              <p className="mt-1 text-2xl font-bold text-green-900">{moneyFmtUSD(totalConfirmedUSD)}</p>
+              <p className="text-lg font-semibold text-green-700">{moneyFmtPHP(totalConfirmedPHP)}</p>
             </div>
             <div className="rounded-full bg-green-200 p-3">
               <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -265,7 +305,8 @@ export default function MoneyReceived() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-indigo-600">Cleared</p>
-              <p className="mt-2 text-3xl font-bold text-indigo-900">{moneyFmt(totalCleared)}</p>
+              <p className="mt-1 text-2xl font-bold text-indigo-900">{moneyFmtUSD(totalClearedUSD)}</p>
+              <p className="text-lg font-semibold text-indigo-700">{moneyFmtPHP(totalClearedPHP)}</p>
             </div>
             <div className="rounded-full bg-indigo-200 p-3">
               <svg className="h-8 w-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -369,7 +410,8 @@ export default function MoneyReceived() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Date</th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Amount</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Amount (USD)</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Amount (PHP)</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Sender</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Method</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Purpose</th>
@@ -384,7 +426,11 @@ export default function MoneyReceived() {
                         {formatDate(record.date_received)}
                       </td>
                       <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">
-                        {moneyFmt(record.amount)}
+                        {moneyFmtUSD(record.amount_usd)}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">
+                        {moneyFmtPHP(record.amount_php)}
+                        <div className="text-xs text-gray-500">Rate: {record.exchange_rate.toFixed(2)}</div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{record.sender_name}</div>
@@ -471,18 +517,48 @@ export default function MoneyReceived() {
                   />
                 </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (USD) *</label>
                   <input
                     type="number"
                     step="0.01"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    value={amountUSD}
+                    onChange={(e) => setAmountUSD(e.target.value)}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     placeholder="0.00"
                     required
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Exchange Rate (USD to PHP)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={customExchangeRate}
+                    onChange={(e) => setCustomExchangeRate(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder={exchangeRate.toString()}
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    Current rate: {exchangeRate.toFixed(2)}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (PHP)</label>
+                  <div className="w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900">
+                    {amountUSD && (customExchangeRate || exchangeRate) ? 
+                      moneyFmtPHP(Number(amountUSD) * (Number(customExchangeRate) || exchangeRate)) : 
+                      moneyFmtPHP(0)
+                    }
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Calculated automatically
+                  </div>
+                </div>
+              </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -631,8 +707,19 @@ export default function MoneyReceived() {
                   <div className="font-medium">{formatDate(viewingRecord.date_received)}</div>
                 </div>
                 <div>
-                  <span className="text-sm text-gray-500">Amount:</span>
-                  <div className="font-medium text-lg">{moneyFmt(viewingRecord.amount)}</div>
+                  <span className="text-sm text-gray-500">Exchange Rate:</span>
+                  <div className="font-medium">{viewingRecord.exchange_rate.toFixed(2)} PHP per USD</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-sm text-gray-500">Amount (USD):</span>
+                  <div className="font-medium text-lg">{moneyFmtUSD(viewingRecord.amount_usd)}</div>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Amount (PHP):</span>
+                  <div className="font-medium text-lg">{moneyFmtPHP(viewingRecord.amount_php)}</div>
                 </div>
               </div>
 

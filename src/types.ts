@@ -162,7 +162,9 @@ export interface MoneyReceived {
   id: string;
   created_at: string;
   date_received: string;
-  amount: number;
+  amount_usd: number;
+  exchange_rate: number;
+  amount_php: number;
   sender_name: string;
   sender_contact?: string | null;
   payment_method: 'bank_transfer' | 'cash' | 'check' | 'gcash' | 'paymaya' | 'paypal' | 'other';
