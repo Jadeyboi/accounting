@@ -39,6 +39,8 @@ export default function RequestFunds() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [savedGroups, setSavedGroups] = useState<SavedGroup[]>([]);
   const [fundHistory, setFundHistory] = useState<FundRequestHistory[]>([]);
+  const [historyError, setHistoryError] = useState<string>('');
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [groupName, setGroupName] = useState<string>("");
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [viewingGroup, setViewingGroup] = useState<SavedGroup | null>(null);
@@ -119,14 +121,33 @@ export default function RequestFunds() {
   };
 
   const loadFundHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    
     try {
       console.log('Loading fund history from database...');
+      
+      // First check if table exists by trying a simple count
+      const { count, error: countError } = await supabase
+        .from('fund_request_history')
+        .select('*', { count: 'exact', head: true });
+        
+      console.log('Table count check:', { count, error: countError });
+      
+      if (countError) {
+        if (countError.message.includes('relation "public.fund_request_history" does not exist')) {
+          setHistoryError('Database tables not set up. Please run the setup script.');
+          return;
+        }
+        throw countError;
+      }
+
       const { data, error } = await supabase
         .from('fund_request_history')
         .select('*')
         .order('created_at', { ascending: false });
 
-      console.log('Fund history query result:', { data, error });
+      console.log('Fund history query result:', { data, error, count: data?.length });
 
       if (error) throw error;
       
@@ -147,8 +168,15 @@ export default function RequestFunds() {
       
       console.log('Converted history:', history);
       setFundHistory(history);
-    } catch (error) {
+      
+      if (history.length === 0) {
+        setHistoryError('No history records found in database. Save some history first.');
+      }
+    } catch (error: any) {
       console.error('Error loading fund history:', error);
+      setHistoryError(`Database error: ${error.message}`);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -1319,10 +1347,24 @@ export default function RequestFunds() {
               </button>
             </div>
 
-            {fundHistory.length === 0 ? (
+            {historyLoading ? (
+              <div className="text-center py-8">
+                <div className="text-slate-500 mb-2">Loading history...</div>
+              </div>
+            ) : fundHistory.length === 0 ? (
               <div className="text-center py-8">
                 <div className="text-slate-500 mb-2">No history records found</div>
-                <div className="text-sm text-slate-400">Save your current request to create the first history record</div>
+                {historyError ? (
+                  <div className="text-sm text-red-600 mb-2">{historyError}</div>
+                ) : (
+                  <div className="text-sm text-slate-400">Save your current request to create the first history record</div>
+                )}
+                <button
+                  onClick={loadFundHistory}
+                  className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Retry Loading
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
