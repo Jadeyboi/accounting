@@ -120,10 +120,13 @@ export default function RequestFunds() {
 
   const loadFundHistory = async () => {
     try {
+      console.log('Loading fund history from database...');
       const { data, error } = await supabase
         .from('fund_request_history')
         .select('*')
         .order('created_at', { ascending: false });
+
+      console.log('Fund history query result:', { data, error });
 
       if (error) throw error;
       
@@ -142,6 +145,7 @@ export default function RequestFunds() {
         notes: item.notes
       }));
       
+      console.log('Converted history:', history);
       setFundHistory(history);
     } catch (error) {
       console.error('Error loading fund history:', error);
@@ -299,12 +303,16 @@ export default function RequestFunds() {
     }
 
     try {
+      console.log('Saving history to database...');
+      
       // Check if period already exists
       const { data: existingData } = await supabase
         .from('fund_request_history')
         .select('id')
         .eq('period', historyPeriod.trim())
         .single();
+
+      console.log('Existing data check:', existingData);
 
       if (existingData) {
         if (!confirm("A record for this period already exists. Do you want to overwrite it?")) {
@@ -332,6 +340,8 @@ export default function RequestFunds() {
         notes: historyNotes.trim() || null,
       };
 
+      console.log('History record to save:', historyRecord);
+
       let error;
       if (existingData) {
         // Update existing record
@@ -340,12 +350,14 @@ export default function RequestFunds() {
           .update(historyRecord)
           .eq('id', existingData.id);
         error = updateError;
+        console.log('Update result:', { error: updateError });
       } else {
         // Insert new record
-        const { error: insertError } = await supabase
+        const { error: insertError, data: insertData } = await supabase
           .from('fund_request_history')
           .insert(historyRecord);
         error = insertError;
+        console.log('Insert result:', { error: insertError, data: insertData });
       }
 
       if (error) throw error;
