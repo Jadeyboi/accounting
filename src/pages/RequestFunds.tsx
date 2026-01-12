@@ -158,16 +158,17 @@ export default function RequestFunds() {
       // Convert database format to component format
       const history: FundRequestHistory[] = (data || []).map(item => ({
         id: item.id,
+        created_at: item.created_at,
         period: item.period,
-        periodLabel: item.period_label,
-        createdAt: item.created_at,
+        period_label: item.period_label,
         items: item.items,
-        totalMonthly: item.total_monthly,
-        totalHalfMonth: item.total_half_month,
-        totalOneTime: item.total_one_time,
-        totalAmount: item.total_amount,
-        usdRate: item.usd_rate,
-        notes: item.notes
+        total_monthly: item.total_monthly,
+        total_half_month: item.total_half_month,
+        total_one_time: item.total_one_time,
+        total_amount: item.total_amount,
+        usd_rate: item.usd_rate,
+        notes: item.notes,
+        updated_at: item.updated_at
       }));
       
       console.log('Converted history:', history);
@@ -451,7 +452,7 @@ export default function RequestFunds() {
     }));
     
     setItems(historyItems);
-    setUsdRate(String(history.usdRate));
+    setUsdRate(String(history.usd_rate));
     closeHistoryView();
     alert("Items loaded from history!");
   };
@@ -1373,7 +1374,7 @@ export default function RequestFunds() {
             ) : (
               <div className="space-y-3">
                 {fundHistory
-                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                   .map((history) => (
                     <div
                       key={history.id}
@@ -1381,9 +1382,9 @@ export default function RequestFunds() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="font-medium text-slate-900">{history.periodLabel}</div>
+                          <div className="font-medium text-slate-900">{history.period_label}</div>
                           <div className="text-sm text-slate-600 mt-1">
-                            {history.items.length} items • Created {new Date(history.createdAt).toLocaleDateString()}
+                            {history.items.length} items • Created {new Date(history.created_at).toLocaleDateString()}
                           </div>
                           {history.notes && (
                             <div className="text-sm text-slate-500 mt-1 italic">"{history.notes}"</div>
@@ -1391,15 +1392,15 @@ export default function RequestFunds() {
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
                             <div>
                               <div className="text-slate-500">Monthly</div>
-                              <div className="font-medium text-slate-900">{money(history.totalMonthly)}</div>
+                              <div className="font-medium text-slate-900">{money(history.total_monthly)}</div>
                             </div>
                             <div>
                               <div className="text-slate-500">Half-Month</div>
-                              <div className="font-medium text-slate-900">{money(history.totalHalfMonth)}</div>
+                              <div className="font-medium text-slate-900">{money(history.total_half_month)}</div>
                             </div>
                             <div>
                               <div className="text-slate-500">One-time</div>
-                              <div className="font-medium text-slate-900">{money(history.totalOneTime)}</div>
+                              <div className="font-medium text-slate-900">{money(history.total_one_time)}</div>
                             </div>
                             <div>
                               <div className="text-slate-500">Total</div>
@@ -1443,7 +1444,7 @@ export default function RequestFunds() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
-                  {viewingHistory.periodLabel} - Fund Request Details
+                  {viewingHistory.period_label} - Fund Request Details
                 </h3>
                 <p className="text-sm text-slate-500">
                   {viewingHistory.items.length} items • Created {new Date(viewingHistory.createdAt).toLocaleDateString()}
