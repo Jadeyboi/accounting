@@ -632,7 +632,7 @@ export default function RequestFunds() {
       <div className="flex items-end justify-between gap-4">
         <div className="flex-1">
           <h2 className="text-xl font-semibold text-slate-900">
-            Request Funds
+            Request Funds - DATABASE VERSION
           </h2>
           <p className="text-sm text-slate-600">
             Prepare a request with monthly and half-month items, remarks, and
