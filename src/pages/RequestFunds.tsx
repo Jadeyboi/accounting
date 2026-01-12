@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { supabase } from '@/lib/supabase';
+import type { FundRequestHistory, FundRequestGroup } from '@/types';
 
 type Status = "N/A" | "Partially Paid" | "Fully Paid";
 type RequestType = "whole_month" | "half_month" | "one_time";
@@ -22,20 +24,6 @@ interface SavedGroup {
   name: string;
   createdAt: string;
   items: RequestItem[];
-}
-
-interface FundRequestHistory {
-  id: string;
-  period: string; // e.g., "2024-01" for January 2024
-  periodLabel: string; // e.g., "January 2024"
-  createdAt: string;
-  items: RequestItem[];
-  totalMonthly: number;
-  totalHalfMonth: number;
-  totalOneTime: number;
-  totalAmount: number;
-  usdRate: number;
-  notes?: string;
 }
 
 export default function RequestFunds() {
@@ -91,8 +79,9 @@ export default function RequestFunds() {
     fetchCurrentRate();
   }, []);
 
-  // Load from localStorage
+  // Load from localStorage and database
   useEffect(() => {
+    // Load current items from localStorage (these are temporary/working items)
     const raw = localStorage.getItem("request-funds-items");
     if (raw) {
       try {
@@ -100,34 +89,71 @@ export default function RequestFunds() {
         if (Array.isArray(parsed)) setItems(parsed);
       } catch {}
     }
-    const groupsRaw = localStorage.getItem("request-funds-groups");
-    if (groupsRaw) {
-      try {
-        const parsed = JSON.parse(groupsRaw);
-        if (Array.isArray(parsed)) setSavedGroups(parsed);
-      } catch {}
-    }
-    const historyRaw = localStorage.getItem("request-funds-history");
-    if (historyRaw) {
-      try {
-        const parsed = JSON.parse(historyRaw);
-        if (Array.isArray(parsed)) setFundHistory(parsed);
-      } catch {}
-    }
+    
+    // Load saved groups and history from database
+    loadSavedGroups();
+    loadFundHistory();
   }, []);
 
-  // Persist to localStorage
+  const loadSavedGroups = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('fund_request_groups')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      // Convert database format to component format
+      const groups: SavedGroup[] = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        createdAt: item.created_at,
+        items: item.items
+      }));
+      
+      setSavedGroups(groups);
+    } catch (error) {
+      console.error('Error loading saved groups:', error);
+    }
+  };
+
+  const loadFundHistory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('fund_request_history')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      // Convert database format to component format
+      const history: FundRequestHistory[] = (data || []).map(item => ({
+        id: item.id,
+        period: item.period,
+        periodLabel: item.period_label,
+        createdAt: item.created_at,
+        items: item.items,
+        totalMonthly: item.total_monthly,
+        totalHalfMonth: item.total_half_month,
+        totalOneTime: item.total_one_time,
+        totalAmount: item.total_amount,
+        usdRate: item.usd_rate,
+        notes: item.notes
+      }));
+      
+      setFundHistory(history);
+    } catch (error) {
+      console.error('Error loading fund history:', error);
+    }
+  };
+
+  // Persist current items to localStorage only (working data)
   useEffect(() => {
     localStorage.setItem("request-funds-items", JSON.stringify(items));
   }, [items]);
 
-  useEffect(() => {
-    localStorage.setItem("request-funds-groups", JSON.stringify(savedGroups));
-  }, [savedGroups]);
-
-  useEffect(() => {
-    localStorage.setItem("request-funds-history", JSON.stringify(fundHistory));
-  }, [fundHistory]);
+  // Groups and history are now saved to database, not localStorage
 
   const addItem = () => {
     if (!description.trim()) return alert("Enter a description");
@@ -197,26 +223,54 @@ export default function RequestFunds() {
     setShowGroupModal(true);
   };
 
-  const confirmSaveGroup = () => {
+  const confirmSaveGroup = async () => {
     if (!groupName.trim()) {
       return alert("Please enter a group name");
     }
-    const selectedItemsData = items.filter((it) => selectedItems.has(it.id));
-    const newGroup: SavedGroup = {
-      id: crypto.randomUUID(),
-      name: groupName.trim(),
-      createdAt: new Date().toISOString(),
-      items: selectedItemsData,
-    };
-    setSavedGroups((prev) => [...prev, newGroup]);
-    setGroupName("");
-    setShowGroupModal(false);
-    setSelectedItems(new Set());
+    
+    try {
+      const selectedItemsData = items.filter((it) => selectedItems.has(it.id));
+      
+      const { error } = await supabase
+        .from('fund_request_groups')
+        .insert({
+          name: groupName.trim(),
+          items: selectedItemsData
+        });
+
+      if (error) throw error;
+
+      // Reload groups from database
+      await loadSavedGroups();
+
+      setGroupName("");
+      setShowGroupModal(false);
+      setSelectedItems(new Set());
+      alert("Group saved successfully!");
+    } catch (error: any) {
+      console.error('Error saving group:', error);
+      alert(`Error saving group: ${error.message}`);
+    }
   };
 
-  const deleteGroup = (groupId: string) => {
+  const deleteGroup = async (groupId: string) => {
     if (!confirm("Are you sure you want to delete this group?")) return;
-    setSavedGroups((prev) => prev.filter((g) => g.id !== groupId));
+    
+    try {
+      const { error } = await supabase
+        .from('fund_request_groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      // Reload groups from database
+      await loadSavedGroups();
+      alert("Group deleted successfully!");
+    } catch (error: any) {
+      console.error('Error deleting group:', error);
+      alert(`Error deleting group: ${error.message}`);
+    }
   };
 
   const showGroupItems = (group: SavedGroup) => {
@@ -239,58 +293,94 @@ export default function RequestFunds() {
     setShowSaveHistoryModal(true);
   };
 
-  const confirmSaveHistory = () => {
+  const confirmSaveHistory = async () => {
     if (!historyPeriod.trim()) {
       return alert("Please enter a period");
     }
 
-    // Check if period already exists
-    const existingHistory = fundHistory.find(h => h.period === historyPeriod.trim());
-    if (existingHistory) {
-      if (!confirm("A record for this period already exists. Do you want to overwrite it?")) {
-        return;
+    try {
+      // Check if period already exists
+      const { data: existingData } = await supabase
+        .from('fund_request_history')
+        .select('id')
+        .eq('period', historyPeriod.trim())
+        .single();
+
+      if (existingData) {
+        if (!confirm("A record for this period already exists. Do you want to overwrite it?")) {
+          return;
+        }
       }
+
+      // Parse period to create label
+      const [year, month] = historyPeriod.split('-');
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      const periodLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
+
+      const historyRecord = {
+        period: historyPeriod.trim(),
+        period_label: periodLabel,
+        items: items,
+        total_monthly: totals.monthly,
+        total_half_month: totals.half,
+        total_one_time: totals.oneTime,
+        total_amount: totals.overall,
+        usd_rate: Number(usdRate) || 56,
+        notes: historyNotes.trim() || null,
+      };
+
+      let error;
+      if (existingData) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('fund_request_history')
+          .update(historyRecord)
+          .eq('id', existingData.id);
+        error = updateError;
+      } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from('fund_request_history')
+          .insert(historyRecord);
+        error = insertError;
+      }
+
+      if (error) throw error;
+
+      // Reload history from database
+      await loadFundHistory();
+
+      setShowSaveHistoryModal(false);
+      setHistoryPeriod("");
+      setHistoryNotes("");
+      alert("Successfully saved to history!");
+    } catch (error: any) {
+      console.error('Error saving history:', error);
+      alert(`Error saving history: ${error.message}`);
     }
-
-    // Parse period to create label
-    const [year, month] = historyPeriod.split('-');
-    const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    const periodLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
-
-    const historyRecord: FundRequestHistory = {
-      id: crypto.randomUUID(),
-      period: historyPeriod.trim(),
-      periodLabel,
-      createdAt: new Date().toISOString(),
-      items: [...items],
-      totalMonthly: totals.monthly,
-      totalHalfMonth: totals.half,
-      totalOneTime: totals.oneTime,
-      totalAmount: totals.overall,
-      usdRate: Number(usdRate) || 56,
-      notes: historyNotes.trim() || undefined,
-    };
-
-    if (existingHistory) {
-      // Update existing record
-      setFundHistory(prev => prev.map(h => h.period === historyPeriod.trim() ? historyRecord : h));
-    } else {
-      // Add new record
-      setFundHistory(prev => [...prev, historyRecord]);
-    }
-
-    setShowSaveHistoryModal(false);
-    setHistoryPeriod("");
-    setHistoryNotes("");
-    alert("Successfully saved to history!");
   };
 
-  const deleteHistory = (historyId: string) => {
+  const deleteHistory = async (historyId: string) => {
     if (!confirm("Are you sure you want to delete this history record?")) return;
-    setFundHistory(prev => prev.filter(h => h.id !== historyId));
+    
+    try {
+      const { error } = await supabase
+        .from('fund_request_history')
+        .delete()
+        .eq('id', historyId);
+
+      if (error) throw error;
+
+      // Reload history from database
+      await loadFundHistory();
+      alert("History record deleted successfully!");
+    } catch (error: any) {
+      console.error('Error deleting history:', error);
+      alert(`Error deleting history: ${error.message}`);
+    }
   };
 
   const viewHistory = (history: FundRequestHistory) => {

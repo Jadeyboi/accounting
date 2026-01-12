@@ -175,3 +175,26 @@ export interface MoneyReceived {
   receipt_url?: string | null;
   status: 'pending' | 'confirmed' | 'cleared';
 }
+
+export interface FundRequestHistory {
+  id: string;
+  created_at: string;
+  period: string; // e.g., "2024-01" for January 2024
+  period_label: string; // e.g., "January 2024"
+  items: any[]; // JSON array of request items
+  total_monthly: number;
+  total_half_month: number;
+  total_one_time: number;
+  total_amount: number;
+  usd_rate: number;
+  notes?: string | null;
+  updated_at: string;
+}
+
+export interface FundRequestGroup {
+  id: string;
+  created_at: string;
+  name: string;
+  items: any[]; // JSON array of request items
+  updated_at: string;
+}
