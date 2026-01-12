@@ -4,6 +4,8 @@ import jsPDF from "jspdf";
 import { supabase } from '@/lib/supabase';
 import type { FundRequestHistory, FundRequestGroup } from '@/types';
 
+console.log('🔥 RequestFunds.tsx file loaded - checking if this shows up');
+
 type Status = "N/A" | "Partially Paid" | "Fully Paid";
 type RequestType = "whole_month" | "half_month" | "one_time";
 
