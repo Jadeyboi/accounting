@@ -12,9 +12,9 @@ SELECT
 -- Check 2: What are the current constraints?
 SELECT 
   'Current constraints:' as check_name,
-  constraint_name,
-  constraint_type,
-  check_clause
+  tc.constraint_name,
+  tc.constraint_type,
+  cc.check_clause
 FROM information_schema.table_constraints tc
 LEFT JOIN information_schema.check_constraints cc ON tc.constraint_name = cc.constraint_name
 WHERE tc.table_name = 'leave_requests' AND tc.table_schema = 'public';
