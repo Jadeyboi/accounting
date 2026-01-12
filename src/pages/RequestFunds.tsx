@@ -1404,7 +1404,7 @@ export default function RequestFunds() {
                             </div>
                             <div>
                               <div className="text-slate-500">Total</div>
-                              <div className="font-semibold text-slate-900">{money(history.totalAmount)}</div>
+                              <div className="font-semibold text-slate-900">{money(history.total_amount)}</div>
                             </div>
                           </div>
                         </div>
@@ -1470,23 +1470,23 @@ export default function RequestFunds() {
             <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
               <div className="text-center">
                 <div className="text-sm text-slate-500">Monthly Total</div>
-                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.totalMonthly)}</div>
-                <div className="text-xs text-slate-600">{usd(viewingHistory.totalMonthly / viewingHistory.usdRate)}</div>
+                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.total_monthly)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.total_monthly / viewingHistory.usd_rate)}</div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-slate-500">Half-Month Total</div>
-                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.totalHalfMonth)}</div>
-                <div className="text-xs text-slate-600">{usd(viewingHistory.totalHalfMonth / viewingHistory.usdRate)}</div>
+                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.total_half_month)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.total_half_month / viewingHistory.usd_rate)}</div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-slate-500">One-time Total</div>
-                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.totalOneTime)}</div>
-                <div className="text-xs text-slate-600">{usd(viewingHistory.totalOneTime / viewingHistory.usdRate)}</div>
+                <div className="text-lg font-semibold text-slate-900">{money(viewingHistory.total_one_time)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.total_one_time / viewingHistory.usd_rate)}</div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-slate-500">Grand Total</div>
-                <div className="text-xl font-bold text-slate-900">{money(viewingHistory.totalAmount)}</div>
-                <div className="text-xs text-slate-600">{usd(viewingHistory.totalAmount / viewingHistory.usdRate)}</div>
+                <div className="text-xl font-bold text-slate-900">{money(viewingHistory.total_amount)}</div>
+                <div className="text-xs text-slate-600">{usd(viewingHistory.total_amount / viewingHistory.usd_rate)}</div>
               </div>
             </div>
 
@@ -1533,19 +1533,19 @@ export default function RequestFunds() {
                           {money(Number(item.amount) || 0)}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                          {usd((Number(item.amount) || 0) / viewingHistory.usdRate)}
+                          {usd((Number(item.amount) || 0) / viewingHistory.usd_rate)}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                           {money(Number(item.monthlyAmount) || 0)}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                          {usd((Number(item.monthlyAmount) || 0) / viewingHistory.usdRate)}
+                          {usd((Number(item.monthlyAmount) || 0) / viewingHistory.usd_rate)}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
                           {money(Number(item.halfMonthAmount) || 0)}
                         </td>
                         <td className="p-2 text-right font-mono tabular-nums text-slate-900">
-                          {usd((Number(item.halfMonthAmount) || 0) / viewingHistory.usdRate)}
+                          {usd((Number(item.halfMonthAmount) || 0) / viewingHistory.usd_rate)}
                         </td>
                         <td className="p-2">{item.status}</td>
                         <td className="p-2">{item.remarks || ""}</td>
@@ -1561,19 +1561,19 @@ export default function RequestFunds() {
                       {money(viewingHistory.totalOneTime)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
-                      {usd(viewingHistory.totalOneTime / viewingHistory.usdRate)}
+                      {usd(viewingHistory.total_one_time / viewingHistory.usd_rate)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
                       {money(viewingHistory.totalMonthly)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
-                      {usd(viewingHistory.totalMonthly / viewingHistory.usdRate)}
+                      {usd(viewingHistory.total_monthly / viewingHistory.usd_rate)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
                       {money(viewingHistory.totalHalfMonth)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
-                      {usd(viewingHistory.totalHalfMonth / viewingHistory.usdRate)}
+                      {usd(viewingHistory.total_half_month / viewingHistory.usd_rate)}
                     </td>
                     <td className="p-2" colSpan={2}></td>
                   </tr>
