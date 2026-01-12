@@ -27,7 +27,7 @@ interface SavedGroup {
 }
 
 export default function RequestFunds() {
-  console.log('🚀 RequestFunds component loaded - NEW VERSION with database support');
+  console.log('🚀 RequestFunds component loaded - NEW VERSION with database support - v2');
   
   const [items, setItems] = useState<RequestItem[]>([]);
   const [description, setDescription] = useState("");
