@@ -1447,7 +1447,7 @@ export default function RequestFunds() {
                   {viewingHistory.period_label} - Fund Request Details
                 </h3>
                 <p className="text-sm text-slate-500">
-                  {viewingHistory.items.length} items • Created {new Date(viewingHistory.createdAt).toLocaleDateString()}
+                  {viewingHistory.items.length} items • Created {new Date(viewingHistory.created_at).toLocaleDateString()}
                   {viewingHistory.notes && ` • ${viewingHistory.notes}`}
                 </p>
               </div>
@@ -1558,19 +1558,19 @@ export default function RequestFunds() {
                     <td className="p-2 text-slate-900">Totals</td>
                     <td className="p-2"></td>
                     <td className="p-2 text-right font-mono tabular-nums">
-                      {money(viewingHistory.totalOneTime)}
+                      {money(viewingHistory.total_one_time)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
                       {usd(viewingHistory.total_one_time / viewingHistory.usd_rate)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
-                      {money(viewingHistory.totalMonthly)}
+                      {money(viewingHistory.total_monthly)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
                       {usd(viewingHistory.total_monthly / viewingHistory.usd_rate)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
-                      {money(viewingHistory.totalHalfMonth)}
+                      {money(viewingHistory.total_half_month)}
                     </td>
                     <td className="p-2 text-right font-mono tabular-nums">
                       {usd(viewingHistory.total_half_month / viewingHistory.usd_rate)}
