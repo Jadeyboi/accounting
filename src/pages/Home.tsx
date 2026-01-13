@@ -22,6 +22,7 @@ export default function Home() {
   const [loadingSummary, setLoadingSummary] = useState(true)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [userName, setUserName] = useState<string>('')
 
   useEffect(() => {
     let cancelled = false
@@ -42,6 +43,32 @@ export default function Home() {
     }
   }, [refreshKey])
 
+  // Fetch current user's name
+  useEffect(() => {
+    const fetchUserName = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        // Try to get full name from users table first
+        const { data: userData } = await supabase
+          .from('users')
+          .select('full_name')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (userData?.full_name) {
+          setUserName(userData.full_name)
+        } else {
+          // Fallback to email or user metadata
+          const name = session.user.user_metadata?.full_name || 
+                      session.user.email?.split('@')[0] || 
+                      'User'
+          setUserName(name)
+        }
+      }
+    }
+    fetchUserName()
+  }, [])
+
   const bump = () => setRefreshKey((k) => k + 1)
 
   const recentTransactions = summaryItems
@@ -54,7 +81,9 @@ export default function Home() {
       <div className="rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 p-8 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold">Welcome Back!</h2>
+            <h2 className="text-3xl font-bold">
+              Welcome Back{userName ? `, ${userName}` : ''}!
+            </h2>
             <p className="mt-2 text-blue-100">
               Track your finances and manage your business accounting with ease
             </p>
