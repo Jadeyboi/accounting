@@ -1,103 +1,26 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-interface User {
-  id: string
-  email: string
-  full_name: string | null
-  role: 'super_admin' | 'admin' | 'user'
-  created_at: string
-}
-
 export default function UserManagement() {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showModal, setShowModal] = useState(false)
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-
-  // Form state
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
-  const [role, setRole] = useState<'admin' | 'user'>('user')
-
-  useEffect(() => {
-    loadUsers()
-    checkSuperAdmin()
-  }, [])
-
-  const checkSuperAdmin = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (data?.role !== 'super_admin') {
-      setError('Access denied. Super admin privileges required.')
-    }
-  }
-
-  const loadUsers = async () => {
-    setLoading(true)
-    setError(null)
-
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      setError(error.message)
-    } else {
-      setUsers((data ?? []) as User[])
-    }
-    setLoading(false)
-  }
-
-  const handleCreateUser = async () => {
-    if (!email || !password || !fullName) {
-      alert('Please fill in all fields')
-      return
-    }
-
-    try {
-      // Create user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: email.trim(),
-        password: password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: fullName.trim(),
-          role: role
-        }
-      })
-
-      if (authError) throw authError
-
-      // The trigger will automatically create the user in the users table
-      alert('User created successfully!')
-      setShowModal(false)
-      resetForm()
-      await loadUsers()
-    } catch (err: any) {
-      alert(err.message || 'Failed to create user')
-    }
-  }
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return
-
-    try {
-      const { error } = await supabase.auth.admin.deleteUser(userId)
-      if (error) throw error
-
-      alert('User deleted successfully!')
-      await loadUsers()
+  return (
+    <div className="space-y-6">
+      <div className="text-center py-12">
+        <div className="mx-auto h-12 w-12 text-gray-400">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <h3 className="mt-2 text-sm font-medium text-gray-900">User Management Disabled</h3>
+        <p className="mt-1 text-sm text-gray-500">
+          User management requires additional setup and permissions.
+        </p>
+        <p className="mt-1 text-sm text-gray-500">
+          Contact your system administrator if you need access to user management features.
+        </p>
+      </div>
+    </div>
+  )
+}
     } catch (err: any) {
       alert(err.message || 'Failed to delete user')
     }
