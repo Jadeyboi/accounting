@@ -62,7 +62,7 @@ export default function HRIS() {
     const { data, error } = await supabase
       .from('employees')
       .select('*')
-      .order('created_at', { ascending: false })
+      .order('name', { ascending: true })
     
     if (error) {
       setError(error.message)

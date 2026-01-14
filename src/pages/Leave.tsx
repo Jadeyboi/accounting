@@ -233,6 +233,12 @@ export default function Leave() {
     if (filterStatus !== 'all' && leave.status !== filterStatus) return false
     if (filterEmployee !== 'all' && leave.employee_id !== filterEmployee) return false
     return true
+  }).sort((a, b) => {
+    const empA = employees.find(e => e.id === a.employee_id)
+    const empB = employees.find(e => e.id === b.employee_id)
+    const nameA = empA?.name || ''
+    const nameB = empB?.name || ''
+    return nameA.localeCompare(nameB)
   })
 
   const recalculateAllBalances = async () => {

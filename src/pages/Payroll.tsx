@@ -96,7 +96,7 @@ export default function Payroll() {
     setError(null)
     try {
       const [empRes, payRes, loansRes] = await Promise.all([
-        supabase.from('employees').select('*').order('created_at', { ascending: false }),
+        supabase.from('employees').select('*').order('name', { ascending: true }),
         supabase.from('payslips').select('*').order('created_at', { ascending: false }),
         supabase.from('loans').select('*').eq('status', 'active').order('created_at', { ascending: false }),
       ])
@@ -606,8 +606,17 @@ export default function Payroll() {
       
       doc.setFont('helvetica', 'normal')
       
+      // Sort payslips alphabetically by employee name
+      const sortedPayslips = [...period.payslips].sort((a, b) => {
+        const empA = employees.find(e => e.id === a.employee_id)
+        const empB = employees.find(e => e.id === b.employee_id)
+        const nameA = empA?.name ?? a.employee_id
+        const nameB = empB?.name ?? b.employee_id
+        return nameA.localeCompare(nameB)
+      })
+      
       // Employee rows
-      for (const payslip of period.payslips) {
+      for (const payslip of sortedPayslips) {
         if (yPos > 270) {
           doc.addPage()
           yPos = 20

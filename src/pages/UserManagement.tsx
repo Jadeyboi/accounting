@@ -198,7 +198,13 @@ export default function UserManagement() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {users.map((user) => (
+                  {users
+                    .sort((a, b) => {
+                      const nameA = a.full_name || a.email || ''
+                      const nameB = b.full_name || b.email || ''
+                      return nameA.localeCompare(nameB)
+                    })
+                    .map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{user.full_name || 'No name'}</div>
