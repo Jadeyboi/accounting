@@ -540,6 +540,131 @@ export default function Payroll() {
     return { employee: emp, payslips: empPayslips, totalPaid }
   }, [historyEmployeeId, employees, employeePayslips])
 
+  const downloadPayrollSummary = async (period: {
+    periodStart: string
+    periodEnd: string
+    payslips: Payslip[]
+    employeeCount: number
+    totalGross: number
+    totalAdditions: number
+    totalDeductions: number
+    totalNet: number
+  }) => {
+    try {
+      const jsPDF = (await import('jspdf')).default
+      const doc = new jsPDF()
+      
+      // Header
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Payroll Summary Report', 105, 20, { align: 'center' })
+      
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Period: ${formatDate(period.periodStart)} to ${formatDate(period.periodEnd)}`, 105, 30, { align: 'center' })
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, 105, 37, { align: 'center' })
+      
+      // Summary Section
+      let yPos = 50
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Summary', 20, yPos)
+      
+      yPos += 10
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Total Employees: ${period.employeeCount}`, 20, yPos)
+      yPos += 7
+      doc.text(`Total Gross Salary: ${moneyFmt(period.totalGross)}`, 20, yPos)
+      yPos += 7
+      doc.text(`Total Additions: ${moneyFmt(period.totalAdditions)}`, 20, yPos)
+      yPos += 7
+      doc.text(`Total Deductions: ${moneyFmt(period.totalDeductions)}`, 20, yPos)
+      yPos += 7
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Total Net Pay: ${moneyFmt(period.totalNet)}`, 20, yPos)
+      
+      // Employee Breakdown
+      yPos += 15
+      doc.setFontSize(14)
+      doc.text('Employee Breakdown', 20, yPos)
+      
+      yPos += 10
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      
+      // Table header
+      doc.text('Employee', 20, yPos)
+      doc.text('Gross', 80, yPos, { align: 'right' })
+      doc.text('Additions', 110, yPos, { align: 'right' })
+      doc.text('Deductions', 145, yPos, { align: 'right' })
+      doc.text('Net Pay', 180, yPos, { align: 'right' })
+      
+      yPos += 2
+      doc.line(20, yPos, 190, yPos)
+      yPos += 5
+      
+      doc.setFont('helvetica', 'normal')
+      
+      // Employee rows
+      for (const payslip of period.payslips) {
+        if (yPos > 270) {
+          doc.addPage()
+          yPos = 20
+          
+          // Repeat header on new page
+          doc.setFont('helvetica', 'bold')
+          doc.text('Employee', 20, yPos)
+          doc.text('Gross', 80, yPos, { align: 'right' })
+          doc.text('Additions', 110, yPos, { align: 'right' })
+          doc.text('Deductions', 145, yPos, { align: 'right' })
+          doc.text('Net Pay', 180, yPos, { align: 'right' })
+          yPos += 2
+          doc.line(20, yPos, 190, yPos)
+          yPos += 5
+          doc.setFont('helvetica', 'normal')
+        }
+        
+        const emp = employees.find(e => e.id === payslip.employee_id)
+        const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
+        const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + 
+                          (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + 
+                          (payslip.other_deductions ?? 0)
+        
+        const empName = emp?.name ?? payslip.employee_id
+        const truncatedName = empName.length > 25 ? empName.substring(0, 22) + '...' : empName
+        
+        doc.text(truncatedName, 20, yPos)
+        doc.text(moneyFmt(payslip.gross_salary), 80, yPos, { align: 'right' })
+        doc.text(moneyFmt(additions), 110, yPos, { align: 'right' })
+        doc.text(moneyFmt(deductions), 145, yPos, { align: 'right' })
+        doc.text(moneyFmt(payslip.net_salary), 180, yPos, { align: 'right' })
+        
+        yPos += 6
+      }
+      
+      // Footer line
+      yPos += 2
+      doc.line(20, yPos, 190, yPos)
+      yPos += 7
+      
+      // Totals row
+      doc.setFont('helvetica', 'bold')
+      doc.text('TOTAL', 20, yPos)
+      doc.text(moneyFmt(period.totalGross), 80, yPos, { align: 'right' })
+      doc.text(moneyFmt(period.totalAdditions), 110, yPos, { align: 'right' })
+      doc.text(moneyFmt(period.totalDeductions), 145, yPos, { align: 'right' })
+      doc.text(moneyFmt(period.totalNet), 180, yPos, { align: 'right' })
+      
+      // Save PDF
+      const filename = `Payroll_Summary_${period.periodStart}_to_${period.periodEnd}.pdf`
+      doc.save(filename)
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      alert('Failed to generate PDF. Please try again.')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -627,9 +752,20 @@ export default function Payroll() {
                     </h4>
                     <p className="text-sm text-slate-600">{period.employeeCount} employees</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-slate-900">{moneyFmt(period.totalNet)}</p>
-                    <p className="text-sm text-slate-600">Total Net Pay</p>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => downloadPayrollSummary(period)}
+                      className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 transition-colors"
+                    >
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Download PDF
+                    </button>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-slate-900">{moneyFmt(period.totalNet)}</p>
+                      <p className="text-sm text-slate-600">Total Net Pay</p>
+                    </div>
                   </div>
                 </div>
                 
