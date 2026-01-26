@@ -88,19 +88,49 @@ export default function Savings() {
   };
 
   const onMarkAsPaid = async (id: string) => {
-    if (!confirm("Mark this saving as paid? It will be removed from the active list but kept in records.")) return;
-    const { error } = await supabase
-      .from("savings")
-      .update({ status: "paid" })
-      .eq("id", id);
+    if (!confirm("Mark this saving as paid? This will create an expense transaction and remove it from the active list.")) return;
     
-    if (error) {
-      // If error (likely because status column doesn't exist), show helpful message
-      alert("Please run the database migration first. Go to Supabase SQL Editor and run the script in supabase/add-savings-status.sql");
-      return;
+    try {
+      // Get the saving details first
+      const saving = items.find(item => item.id === id);
+      if (!saving) {
+        alert("Saving not found");
+        return;
+      }
+
+      // Create an expense transaction for the paid saving
+      const { error: transactionError } = await supabase
+        .from("transactions")
+        .insert({
+          date: new Date().toISOString().split('T')[0], // Today's date
+          type: "expense",
+          amount: saving.amount,
+          category: "Savings Payment",
+          note: `Paid: ${saving.description || 'Savings'} ${saving.account ? `(${saving.account})` : ''}`
+        });
+
+      if (transactionError) {
+        alert("Error creating transaction: " + transactionError.message);
+        return;
+      }
+
+      // Mark the saving as paid
+      const { error } = await supabase
+        .from("savings")
+        .update({ status: "paid" })
+        .eq("id", id);
+      
+      if (error) {
+        // If error (likely because status column doesn't exist), show helpful message
+        alert("Please run the database migration first. Go to Supabase SQL Editor and run the script in supabase/add-savings-status.sql");
+        return;
+      }
+      
+      await load();
+      alert("Saving marked as paid and expense transaction created!");
+    } catch (err: any) {
+      alert("Error: " + err.message);
     }
-    
-    await load();
   };
 
   const loadPaidHistory = async () => {
@@ -121,19 +151,25 @@ export default function Savings() {
   };
 
   const restoreSaving = async (id: string) => {
-    if (!confirm("Restore this saving back to active list?")) return;
-    const { error } = await supabase
-      .from("savings")
-      .update({ status: "active" })
-      .eq("id", id);
+    if (!confirm("Restore this saving back to active list? Note: The expense transaction will remain in your records.")) return;
     
-    if (error) {
-      alert("Error restoring saving: " + error.message);
-      return;
+    try {
+      const { error } = await supabase
+        .from("savings")
+        .update({ status: "active" })
+        .eq("id", id);
+      
+      if (error) {
+        alert("Error restoring saving: " + error.message);
+        return;
+      }
+      
+      await loadPaidHistory();
+      await load();
+      alert("Saving restored to active list!");
+    } catch (err: any) {
+      alert("Error: " + err.message);
     }
-    
-    await loadPaidHistory();
-    await load();
   };
 
   // Inline edit state
