@@ -6,6 +6,8 @@ export default function Savings() {
   const [items, setItems] = useState<Saving[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showPaidHistory, setShowPaidHistory] = useState(false);
+  const [paidItems, setPaidItems] = useState<Saving[]>([]);
 
   const [date, setDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
@@ -27,13 +29,22 @@ export default function Savings() {
   const load = async () => {
     setLoading(true);
     setError(null);
+    
+    // Load all records (don't filter by status in query to avoid errors if column doesn't exist)
     const { data, error } = await supabase
       .from("savings")
       .select("*")
       .order("date", { ascending: false })
       .order("created_at", { ascending: false });
-    if (error) setError(error.message);
-    else setItems((data ?? []) as Saving[]);
+    
+    if (error) {
+      setError(error.message);
+    } else {
+      // Filter out paid items on the client side
+      const allItems = (data ?? []) as Saving[];
+      setItems(allItems.filter(item => !item.status || item.status === 'active'));
+    }
+    
     setLoading(false);
   };
 
@@ -46,16 +57,20 @@ export default function Savings() {
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || Number(amount) <= 0) return alert("Enter a positive amount");
+    
+    const payload: any = {
+      date,
+      description: description || null,
+      amount: Number(amount),
+      account: account || null,
+    };
+    
+    // Only add status if we know the column exists (after migration)
+    // This prevents errors before migration is run
+    
     const { data, error } = await supabase
       .from("savings")
-      .insert([
-        {
-          date,
-          description: description || null,
-          amount: Number(amount),
-          account: account || null,
-        },
-      ])
+      .insert([payload])
       .select();
     if (error) return alert(error.message);
     setDescription("");
@@ -70,6 +85,91 @@ export default function Savings() {
     const { error } = await supabase.from("savings").delete().eq("id", id);
     if (error) return alert(error.message);
     await load();
+  };
+
+  const onMarkAsPaid = async (id: string) => {
+    if (!confirm("Mark this saving as paid? This will create an expense transaction and remove it from the active list.")) return;
+    
+    try {
+      // Get the saving details first
+      const saving = items.find(item => item.id === id);
+      if (!saving) {
+        alert("Saving not found");
+        return;
+      }
+
+      // Create an expense transaction for the paid saving
+      const { error: transactionError } = await supabase
+        .from("transactions")
+        .insert({
+          date: new Date().toISOString().split('T')[0], // Today's date
+          type: "expense",
+          amount: saving.amount,
+          category: "Savings Payment",
+          note: `Paid: ${saving.description || 'Savings'} ${saving.account ? `(${saving.account})` : ''}`
+        });
+
+      if (transactionError) {
+        alert("Error creating transaction: " + transactionError.message);
+        return;
+      }
+
+      // Mark the saving as paid
+      const { error } = await supabase
+        .from("savings")
+        .update({ status: "paid" })
+        .eq("id", id);
+      
+      if (error) {
+        // If error (likely because status column doesn't exist), show helpful message
+        alert("Please run the database migration first. Go to Supabase SQL Editor and run the script in supabase/add-savings-status.sql");
+        return;
+      }
+      
+      await load();
+      alert("Saving marked as paid and expense transaction created!");
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
+
+  const loadPaidHistory = async () => {
+    const { data, error } = await supabase
+      .from("savings")
+      .select("*")
+      .eq("status", "paid")
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      alert("Error loading paid history: " + error.message);
+      return;
+    }
+    
+    setPaidItems((data ?? []) as Saving[]);
+    setShowPaidHistory(true);
+  };
+
+  const restoreSaving = async (id: string) => {
+    if (!confirm("Restore this saving back to active list? Note: The expense transaction will remain in your records.")) return;
+    
+    try {
+      const { error } = await supabase
+        .from("savings")
+        .update({ status: "active" })
+        .eq("id", id);
+      
+      if (error) {
+        alert("Error restoring saving: " + error.message);
+        return;
+      }
+      
+      await loadPaidHistory();
+      await load();
+      alert("Saving restored to active list!");
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
   };
 
   // Inline edit state
@@ -136,10 +236,18 @@ export default function Savings() {
             Record amounts saved and track totals.
           </p>
         </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-500">Total saved</div>
-          <div className="mt-1 text-2xl font-semibold">
-            ₱ {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={loadPaidHistory}
+            className="rounded bg-gray-600 px-4 py-2 text-sm text-white hover:bg-gray-700"
+          >
+            View Paid History
+          </button>
+          <div className="text-right">
+            <div className="text-sm text-gray-500">Total saved</div>
+            <div className="mt-1 text-2xl font-semibold">
+              ₱ {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </div>
           </div>
         </div>
       </div>
@@ -426,14 +534,21 @@ export default function Savings() {
                       <td className="px-4 py-2 text-sm flex gap-2">
                         <button
                           type="button"
-                          className="rounded bg-yellow-500 px-2 py-1 text-white"
+                          className="rounded bg-green-600 px-2 py-1 text-white hover:bg-green-700"
+                          onClick={() => onMarkAsPaid(it.id)}
+                        >
+                          Paid
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded bg-yellow-500 px-2 py-1 text-white hover:bg-yellow-600"
                           onClick={() => startEdit(it)}
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => onDelete(it.id)}
-                          className="rounded bg-red-600 px-2 py-1 text-white"
+                          className="rounded bg-red-600 px-2 py-1 text-white hover:bg-red-700"
                         >
                           Delete
                         </button>
@@ -445,6 +560,94 @@ export default function Savings() {
           </tbody>
         </table>
       </div>
+
+      {/* Paid History Modal */}
+      {showPaidHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Paid Savings History</h3>
+              <button
+                onClick={() => setShowPaidHistory(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {paidItems.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                No paid savings records yet.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Date
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Description
+                      </th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Amount
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Account
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {paidItems.map((it) => (
+                      <tr key={it.id} className="bg-gray-50">
+                        <td className="px-4 py-2 text-sm text-gray-800">
+                          {it.date}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-700">
+                          {it.description ?? ""}
+                        </td>
+                        <td className="px-4 py-2 text-right text-sm font-medium text-gray-900">
+                          ₱{" "}
+                          {it.amount.toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-700">
+                          {it.account ?? ""}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <button
+                            type="button"
+                            className="rounded bg-blue-600 px-2 py-1 text-white hover:bg-blue-700"
+                            onClick={() => restoreSaving(it.id)}
+                          >
+                            Restore
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setShowPaidHistory(false)}
+                className="rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

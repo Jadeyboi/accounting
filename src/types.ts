@@ -89,6 +89,7 @@ export interface Saving {
   description?: string | null;
   amount: number;
   account?: string | null;
+  status?: 'active' | 'paid';
 }
 
 export interface InventoryItem {
