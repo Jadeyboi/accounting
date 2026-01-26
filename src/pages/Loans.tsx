@@ -247,6 +247,56 @@ export default function Loans() {
     }
   }
 
+  const deletePayment = async (payment: LoanPayment) => {
+    if (!confirm('Delete this payment? This will restore the loan balance.')) return;
+
+    try {
+      // Get the loan
+      const loan = loans.find(l => l.id === payment.loan_id);
+      if (!loan) {
+        alert('Loan not found');
+        return;
+      }
+
+      // Calculate new balance (add back the payment amount)
+      const newBalance = loan.remaining_balance + payment.amount;
+      const newStatus = newBalance > 0 ? 'active' : 'completed';
+
+      // Delete the payment record
+      const { error: deleteError } = await supabase
+        .from('loan_payments')
+        .delete()
+        .eq('id', payment.id);
+
+      if (deleteError) throw deleteError;
+
+      // Update the loan balance
+      const { error: updateError } = await supabase
+        .from('loans')
+        .update({ 
+          remaining_balance: newBalance,
+          status: newStatus,
+          end_date: newStatus === 'completed' ? null : loan.end_date
+        })
+        .eq('id', payment.loan_id);
+
+      if (updateError) throw updateError;
+
+      // Reload data
+      await loadData();
+      
+      // Update viewing loan if it's open
+      if (viewingLoan && viewingLoan.id === payment.loan_id) {
+        const updatedLoan = { ...viewingLoan, remaining_balance: newBalance, status: newStatus as 'active' | 'completed' | 'cancelled' };
+        setViewingLoan(updatedLoan);
+      }
+
+      alert('Payment deleted successfully');
+    } catch (err: any) {
+      alert('Error deleting payment: ' + err.message);
+    }
+  }
+
   const getEmployee = (employeeId: string) => {
     return employees.find(emp => emp.id === employeeId)
   }
@@ -760,6 +810,7 @@ export default function Loans() {
                           <th className="px-3 py-2 text-right font-medium text-gray-700">Balance After</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-700">Type</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-700">Notes</th>
+                          <th className="px-3 py-2 text-center font-medium text-gray-700">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -779,6 +830,14 @@ export default function Loans() {
                               </span>
                             </td>
                             <td className="px-3 py-2">{payment.notes || '-'}</td>
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                onClick={() => deletePayment(payment)}
+                                className="text-red-600 hover:text-red-800 text-sm"
+                              >
+                                Delete
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
