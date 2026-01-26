@@ -30,7 +30,7 @@ export default function Leave() {
 
   // Form state
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
-  const [leaveType, setLeaveType] = useState<'sick' | 'vacation' | 'birthday' | 'emergency' | 'unpaid'>('sick')
+  const [leaveType, setLeaveType] = useState<'sick' | 'vacation' | 'birthday' | 'emergency' | 'unpaid' | 'paternity' | 'maternity'>('sick')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('')
@@ -755,6 +755,8 @@ ${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate
                   <option value="birthday">Birthday Leave</option>
                   <option value="emergency">Emergency Leave</option>
                   <option value="unpaid">Unpaid Leave</option>
+                  <option value="paternity">Paternity Leave</option>
+                  <option value="maternity">Maternity Leave</option>
                 </select>
               </div>
 

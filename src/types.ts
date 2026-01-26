@@ -49,7 +49,7 @@ export interface LeaveRequest {
   id: string;
   created_at: string;
   employee_id: string;
-  leave_type: 'sick' | 'vacation' | 'birthday' | 'emergency' | 'unpaid';
+  leave_type: 'sick' | 'vacation' | 'birthday' | 'emergency' | 'unpaid' | 'paternity' | 'maternity';
   start_date: string;
   end_date: string;
   days_count: number;
