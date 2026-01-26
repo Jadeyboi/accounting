@@ -133,7 +133,7 @@ export default function Reports() {
       if (error) setError(error.message);
       else setItems((data ?? []) as Transaction[]);
 
-      // Load savings total for the same period (only active savings)
+      // Load savings total for the same period
       const { data: savingsData, error: savingsErr } = await supabase
         .from("savings")
         .select("*")
@@ -148,16 +148,12 @@ export default function Reports() {
           setSavingsTotal(0);
           setSavingsItems([]);
         } else {
-          // Filter out paid savings (only show active ones)
-          const activeSavings = (savingsData ?? []).filter(
-            (row: any) => !row.status || row.status === 'active'
-          );
-          const sTotal = activeSavings.reduce(
+          const sTotal = (savingsData ?? []).reduce(
             (sum: number, row: any) => sum + (row.amount ?? 0),
             0
           );
           setSavingsTotal(sTotal);
-          setSavingsItems(activeSavings);
+          setSavingsItems(savingsData ?? []);
         }
       }
       setLoading(false);
