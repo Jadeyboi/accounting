@@ -22,11 +22,59 @@ export default function Inventory() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
+  const [showBulkQRModal, setShowBulkQRModal] = useState(false)
+  const [bulkQRCodes, setBulkQRCodes] = useState<Array<{item: InventoryItem, qrCode: string}>>([])
+  const [generatingBulkQR, setGeneratingBulkQR] = useState(false)
+
+  // Predefined categories
+  const predefinedCategories = [
+    'Monitor',
+    'PC/Desktop',
+    'Laptop',
+    'Console',
+    'Printer',
+    'Scanner',
+    'Projector',
+    'Router/Switch',
+    'Server',
+    'Tablet',
+    'Phone',
+    'Camera',
+    'Audio Equipment',
+    'Storage Device',
+    'Accessories',
+    'Furniture',
+    'Other'
+  ]
+
+  // Asset tag prefixes
+  const assetTagPrefixes = [
+    'MON', // Monitor
+    'PC',  // PC/Desktop
+    'LAP', // Laptop
+    'CON', // Console
+    'PRT', // Printer
+    'SCN', // Scanner
+    'PRJ', // Projector
+    'NET', // Network Equipment
+    'SRV', // Server
+    'TAB', // Tablet
+    'PHN', // Phone
+    'CAM', // Camera
+    'AUD', // Audio
+    'STG', // Storage
+    'ACC', // Accessories
+    'FUR', // Furniture
+    'OTH'  // Other
+  ]
 
   // Form states
   const [assetTag, setAssetTag] = useState('')
+  const [assetTagPrefix, setAssetTagPrefix] = useState('MON')
+  const [assetTagNumber, setAssetTagNumber] = useState('')
   const [itemDescription, setItemDescription] = useState('')
-  const [category, setCategory] = useState('')
+  const [category, setCategory] = useState('Monitor')
   const [brand, setBrand] = useState('')
   const [model, setModel] = useState('')
   const [serialNumber, setSerialNumber] = useState('')
@@ -52,6 +100,14 @@ export default function Inventory() {
   useEffect(() => {
     fetchItems()
   }, [])
+
+  // Auto-generate asset tag when prefix or number changes
+  useEffect(() => {
+    if (assetTagPrefix && assetTagNumber) {
+      const paddedNumber = assetTagNumber.padStart(3, '0')
+      setAssetTag(`${assetTagPrefix}-${paddedNumber}`)
+    }
+  }, [assetTagPrefix, assetTagNumber])
 
   const fetchItems = async () => {
     setLoading(true)
@@ -119,12 +175,170 @@ export default function Inventory() {
     return matchesSearch && matchesCategory && matchesStatus
   })
 
-  const categories = [...new Set(items.map(item => item.category))]
+  const categories = [...new Set([...predefinedCategories, ...items.map(item => item.category)])]
+
+  // Handle item selection
+  const toggleItemSelection = (itemId: string) => {
+    const newSelected = new Set(selectedItems)
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId)
+    } else {
+      newSelected.add(itemId)
+    }
+    setSelectedItems(newSelected)
+  }
+
+  const selectAllItems = () => {
+    if (selectedItems.size === filteredItems.length) {
+      setSelectedItems(new Set())
+    } else {
+      setSelectedItems(new Set(filteredItems.map(item => item.id)))
+    }
+  }
+
+  // Generate bulk QR codes
+  const generateBulkQRCodes = async () => {
+    if (selectedItems.size === 0) {
+      alert('Please select items to generate QR codes')
+      return
+    }
+
+    setGeneratingBulkQR(true)
+    const selectedItemsData = items.filter(item => selectedItems.has(item.id))
+    const qrCodesData = []
+
+    try {
+      for (const item of selectedItemsData) {
+        const qrData = JSON.stringify({
+          id: item.id,
+          asset_tag: item.asset_tag,
+          description: item.item_description,
+          category: item.category,
+          brand: item.brand,
+          model: item.model
+        })
+        
+        const dataURL = await QRCode.toDataURL(qrData, {
+          width: 200,
+          margin: 1,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        })
+        
+        qrCodesData.push({ item, qrCode: dataURL })
+      }
+
+      setBulkQRCodes(qrCodesData)
+      setShowBulkQRModal(true)
+    } catch (error) {
+      console.error('Error generating bulk QR codes:', error)
+      alert('Failed to generate QR codes')
+    } finally {
+      setGeneratingBulkQR(false)
+    }
+  }
+
+  // Print bulk QR codes
+  const printBulkQRCodes = () => {
+    if (bulkQRCodes.length === 0) return
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      const qrCodesHtml = bulkQRCodes.map(({ item, qrCode }) => `
+        <div class="qr-container">
+          <img src="/avensetech-logo.jpg" alt="Avensetech Logo" class="logo" />
+          <div class="company-text">Property of Avensetech</div>
+          <div class="qr-code">
+            <img src="${qrCode}" alt="QR Code" />
+          </div>
+          <div class="item-info">
+            <div class="asset-tag">${item.asset_tag || 'No Asset Tag'}</div>
+            <div>${item.item_description}</div>
+            <div>${item.brand || ''} ${item.model || ''}</div>
+          </div>
+        </div>
+      `).join('')
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Bulk QR Codes - ${bulkQRCodes.length} Items</title>
+            <style>
+              body { 
+                font-family: Arial, sans-serif; 
+                padding: 10px; 
+                margin: 0;
+              }
+              .qr-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 10px;
+                page-break-inside: avoid;
+              }
+              .qr-container {
+                border: 2px solid #000;
+                padding: 10px;
+                text-align: center;
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              .logo {
+                width: 60px;
+                height: auto;
+                margin-bottom: 5px;
+              }
+              .company-text {
+                font-size: 8px;
+                font-weight: bold;
+                color: #333;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+              }
+              .qr-code {
+                margin: 5px 0;
+              }
+              .qr-code img {
+                width: 120px;
+                height: 120px;
+              }
+              .item-info {
+                margin-top: 5px;
+                font-size: 9px;
+                line-height: 1.2;
+              }
+              .asset-tag {
+                font-weight: bold;
+                font-size: 10px;
+                margin-bottom: 3px;
+              }
+              @media print {
+                .qr-container {
+                  page-break-inside: avoid;
+                  break-inside: avoid;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="qr-grid">
+              ${qrCodesHtml}
+            </div>
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+      printWindow.print()
+    }
+  }
 
   const resetForm = () => {
     setAssetTag('')
+    setAssetTagPrefix('MON')
+    setAssetTagNumber('')
     setItemDescription('')
-    setCategory('')
+    setCategory('Monitor')
     setBrand('')
     setModel('')
     setSerialNumber('')
@@ -265,26 +479,53 @@ export default function Inventory() {
                   font-family: Arial, sans-serif; 
                   text-align: center; 
                   padding: 20px; 
+                  margin: 0;
                 }
                 .qr-container {
                   border: 2px solid #000;
-                  padding: 20px;
+                  padding: 15px;
                   display: inline-block;
                   margin: 20px;
+                  max-width: 300px;
+                }
+                .logo {
+                  width: 80px;
+                  height: auto;
+                  margin-bottom: 10px;
+                }
+                .company-text {
+                  font-size: 10px;
+                  font-weight: bold;
+                  color: #333;
+                  margin-bottom: 15px;
+                  text-transform: uppercase;
+                }
+                .qr-code {
+                  margin: 10px 0;
                 }
                 .item-info {
                   margin-top: 10px;
+                  font-size: 11px;
+                  line-height: 1.3;
+                }
+                .asset-tag {
+                  font-weight: bold;
                   font-size: 12px;
+                  margin-bottom: 5px;
                 }
               </style>
             </head>
             <body>
               <div class="qr-container">
-                <img src="${qrCodeDataURL}" alt="QR Code" />
+                <img src="/avensetech-logo.jpg" alt="Avensetech Logo" class="logo" />
+                <div class="company-text">Property of Avensetech</div>
+                <div class="qr-code">
+                  <img src="${qrCodeDataURL}" alt="QR Code" />
+                </div>
                 <div class="item-info">
-                  <strong>${selectedItem.asset_tag || 'No Tag'}</strong><br/>
-                  ${selectedItem.item_description}<br/>
-                  ${selectedItem.brand || ''} ${selectedItem.model || ''}
+                  <div class="asset-tag">${selectedItem.asset_tag || 'No Asset Tag'}</div>
+                  <div>${selectedItem.item_description}</div>
+                  <div>${selectedItem.brand || ''} ${selectedItem.model || ''}</div>
                 </div>
               </div>
             </body>
@@ -344,6 +585,17 @@ export default function Inventory() {
   const handleEdit = (item: InventoryItem) => {
     setEditingItem(item)
     setAssetTag(item.asset_tag || '')
+    
+    // Parse existing asset tag
+    if (item.asset_tag && item.asset_tag.includes('-')) {
+      const [prefix, number] = item.asset_tag.split('-')
+      setAssetTagPrefix(prefix)
+      setAssetTagNumber(number)
+    } else {
+      setAssetTagPrefix('MON')
+      setAssetTagNumber('')
+    }
+    
     setItemDescription(item.item_description)
     setCategory(item.category)
     setBrand(item.brand || '')
@@ -413,7 +665,33 @@ export default function Inventory() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {selectedItems.size > 0 && (
+            <>
+              <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                {selectedItems.size} selected
+              </span>
+              <button
+                onClick={generateBulkQRCodes}
+                disabled={generatingBulkQR}
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              >
+                {generatingBulkQR ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h2M4 4h5m0 0v5m0 0h5m0 0V4" />
+                    </svg>
+                    Bulk QR ({selectedItems.size})
+                  </>
+                )}
+              </button>
+            </>
+          )}
           <button
             onClick={startScanner}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
@@ -436,7 +714,19 @@ export default function Inventory() {
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="selectAll"
+            checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
+            onChange={selectAllItems}
+            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <label htmlFor="selectAll" className="ml-2 text-sm text-gray-700">
+            Select All ({filteredItems.length})
+          </label>
+        </div>
         <input
           type="text"
           placeholder="Search items..."
@@ -473,8 +763,17 @@ export default function Inventory() {
       {/* Items Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredItems.map((item) => (
-          <div key={item.id} className="glass rounded-xl p-4 space-y-3">
-            <div className="flex justify-between items-start">
+          <div key={item.id} className="glass rounded-xl p-4 space-y-3 relative">
+            <div className="absolute top-3 left-3">
+              <input
+                type="checkbox"
+                checked={selectedItems.has(item.id)}
+                onChange={() => toggleItemSelection(item.id)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+              />
+            </div>
+            
+            <div className="flex justify-between items-start pl-8">
               <div>
                 <h3 className="font-semibold text-gray-900">{item.item_description}</h3>
                 {item.asset_tag && (
@@ -538,16 +837,40 @@ export default function Inventory() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Asset Tag
+                    Asset Tag Generator
                   </label>
-                  <input
-                    type="text"
-                    value={assetTag}
-                    onChange={(e) => setAssetTag(e.target.value)}
-                    className="input-field"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={assetTagPrefix}
+                      onChange={(e) => setAssetTagPrefix(e.target.value)}
+                      className="input-field flex-1"
+                    >
+                      {assetTagPrefixes.map(prefix => (
+                        <option key={prefix} value={prefix}>{prefix}</option>
+                      ))}
+                    </select>
+                    <span className="flex items-center text-gray-500">-</span>
+                    <input
+                      type="number"
+                      placeholder="001"
+                      value={assetTagNumber}
+                      onChange={(e) => setAssetTagNumber(e.target.value)}
+                      className="input-field flex-1"
+                      min="1"
+                      max="999"
+                    />
+                  </div>
+                  <div className="mt-1">
+                    <input
+                      type="text"
+                      value={assetTag}
+                      onChange={(e) => setAssetTag(e.target.value)}
+                      className="input-field"
+                      placeholder="Generated asset tag or enter manually"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -565,13 +888,16 @@ export default function Inventory() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Category *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
                     className="input-field"
                     required
-                  />
+                  >
+                    {predefinedCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -913,7 +1239,13 @@ export default function Inventory() {
       {showQRModal && selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="glass w-full max-w-md rounded-2xl p-6 text-center">
-            <h3 className="mb-4 text-xl font-bold text-gray-900">QR Code</h3>
+            <div className="mb-4">
+              <img 
+                src="/avensetech-logo.jpg" 
+                alt="Avensetech Logo" 
+                className="mx-auto h-12 w-auto mb-2"
+              />
+            </div>
             
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">{selectedItem.item_description}</p>
@@ -989,6 +1321,75 @@ export default function Inventory() {
                 className="btn-secondary flex-1"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk QR Codes Modal */}
+      {showBulkQRModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="glass w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl p-6">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <img 
+                  src="/avensetech-logo.jpg" 
+                  alt="Avensetech Logo" 
+                  className="h-8 w-auto mb-2"
+                />
+                <h3 className="text-xl font-bold text-gray-900">
+                  Bulk QR Codes ({bulkQRCodes.length} items)
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowBulkQRModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+              {bulkQRCodes.map(({ item, qrCode }) => (
+                <div key={item.id} className="border-2 border-gray-200 rounded-lg p-3 text-center bg-white">
+                  <img 
+                    src="/avensetech-logo.jpg" 
+                    alt="Avensetech Logo" 
+                    className="w-12 h-auto mx-auto mb-1"
+                  />
+                  <div className="text-xs text-gray-600 mb-2">Property of Avensetech</div>
+                  <img 
+                    src={qrCode} 
+                    alt="QR Code" 
+                    className="w-24 h-24 mx-auto mb-2"
+                  />
+                  <div className="text-xs">
+                    <div className="font-bold">{item.asset_tag || 'No Tag'}</div>
+                    <div className="truncate">{item.item_description}</div>
+                    <div className="text-gray-500">{item.brand} {item.model}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBulkQRModal(false)}
+                className="btn-secondary flex-1"
+              >
+                Close
+              </button>
+              <button
+                onClick={printBulkQRCodes}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex-1 flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print All QR Codes
               </button>
             </div>
           </div>
