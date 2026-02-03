@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { InventoryItem, InventoryHistory } from '@/types'
+import QRCode from 'qrcode'
+import QrScanner from 'qr-scanner'
 
 export default function Inventory() {
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -9,8 +11,14 @@ export default function Inventory() {
   const [showModal, setShowModal] = useState(false)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [showScannerModal, setShowScannerModal] = useState(false)
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [qrCodeDataURL, setQrCodeDataURL] = useState('')
+  const [scanResult, setScanResult] = useState('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const qrScannerRef = useRef<QrScanner | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -132,6 +140,162 @@ export default function Inventory() {
     setEditingItem(null)
   }
 
+  const generateQRCode = async (item: InventoryItem) => {
+    try {
+      const qrData = JSON.stringify({
+        id: item.id,
+        asset_tag: item.asset_tag,
+        description: item.item_description,
+        category: item.category,
+        brand: item.brand,
+        model: item.model
+      })
+      
+      const dataURL = await QRCode.toDataURL(qrData, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+      
+      setQrCodeDataURL(dataURL)
+      setSelectedItem(item)
+      setShowQRModal(true)
+    } catch (error) {
+      console.error('Error generating QR code:', error)
+      alert('Failed to generate QR code')
+    }
+  }
+
+  const startScanner = async () => {
+    try {
+      setShowScannerModal(true)
+      setScanResult('')
+      
+      // Wait for modal to render
+      setTimeout(async () => {
+        if (videoRef.current) {
+          try {
+            // First, request camera permission explicitly
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+              video: { 
+                facingMode: 'environment' // Prefer back camera
+              } 
+            })
+            
+            // Set the stream to video element
+            videoRef.current.srcObject = stream
+            
+            const qrScanner = new QrScanner(
+              videoRef.current,
+              (result) => {
+                try {
+                  const data = JSON.parse(result.data)
+                  setScanResult(`Found item: ${data.description || 'Unknown'} (${data.asset_tag || 'No tag'})`)
+                  
+                  // Find and highlight the item
+                  const foundItem = items.find(item => item.id === data.id)
+                  if (foundItem) {
+                    setSelectedItem(foundItem)
+                    setShowDetailModal(true)
+                    stopScanner()
+                  }
+                } catch (e) {
+                  setScanResult(`QR Code content: ${result.data}`)
+                }
+              },
+              {
+                highlightScanRegion: true,
+                highlightCodeOutline: true,
+              }
+            )
+            
+            qrScannerRef.current = qrScanner
+            await qrScanner.start()
+          } catch (error) {
+            console.error('QR Scanner error:', error)
+            setScanResult('Camera access denied or not available. Please allow camera access and try again.')
+          }
+        }
+      }, 200)
+    } catch (error) {
+      console.error('Error starting scanner:', error)
+      alert('Failed to start camera. Please check camera permissions.')
+    }
+  }
+
+  const stopScanner = () => {
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop()
+      qrScannerRef.current.destroy()
+      qrScannerRef.current = null
+    }
+    
+    // Stop video stream
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach(track => track.stop())
+      videoRef.current.srcObject = null
+    }
+    
+    setShowScannerModal(false)
+  }
+
+  const downloadQRCode = () => {
+    if (qrCodeDataURL && selectedItem) {
+      const link = document.createElement('a')
+      link.download = `QR_${selectedItem.asset_tag || selectedItem.id}.png`
+      link.href = qrCodeDataURL
+      link.click()
+    }
+  }
+
+  const printQRCode = () => {
+    if (qrCodeDataURL && selectedItem) {
+      const printWindow = window.open('', '_blank')
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>QR Code - ${selectedItem.asset_tag || selectedItem.item_description}</title>
+              <style>
+                body { 
+                  font-family: Arial, sans-serif; 
+                  text-align: center; 
+                  padding: 20px; 
+                }
+                .qr-container {
+                  border: 2px solid #000;
+                  padding: 20px;
+                  display: inline-block;
+                  margin: 20px;
+                }
+                .item-info {
+                  margin-top: 10px;
+                  font-size: 12px;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="qr-container">
+                <img src="${qrCodeDataURL}" alt="QR Code" />
+                <div class="item-info">
+                  <strong>${selectedItem.asset_tag || 'No Tag'}</strong><br/>
+                  ${selectedItem.item_description}<br/>
+                  ${selectedItem.brand || ''} ${selectedItem.model || ''}
+                </div>
+              </div>
+            </body>
+          </html>
+        `)
+        printWindow.document.close()
+        printWindow.print()
+      }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -249,15 +413,26 @@ export default function Inventory() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
-        <button
-          onClick={() => {
-            resetForm()
-            setShowModal(true)
-          }}
-          className="btn-primary"
-        >
-          Add New Item
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={startScanner}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h2M4 4h5m0 0v5m0 0h5m0 0V4" />
+            </svg>
+            Scan QR
+          </button>
+          <button
+            onClick={() => {
+              resetForm()
+              setShowModal(true)
+            }}
+            className="btn-primary"
+          >
+            Add New Item
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -318,6 +493,12 @@ export default function Inventory() {
             </div>
 
             <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => generateQRCode(item)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs flex-1"
+              >
+                QR
+              </button>
               <button
                 onClick={() => handleViewDetails(item)}
                 className="btn-secondary text-xs flex-1"
@@ -724,6 +905,92 @@ export default function Inventory() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Display Modal */}
+      {showQRModal && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="glass w-full max-w-md rounded-2xl p-6 text-center">
+            <h3 className="mb-4 text-xl font-bold text-gray-900">QR Code</h3>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">{selectedItem.item_description}</p>
+              <p className="text-xs text-gray-500">{selectedItem.asset_tag || 'No Asset Tag'}</p>
+            </div>
+
+            {qrCodeDataURL && (
+              <div className="mb-6">
+                <img 
+                  src={qrCodeDataURL} 
+                  alt="QR Code" 
+                  className="mx-auto border-2 border-gray-200 rounded-lg"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowQRModal(false)}
+                className="btn-secondary flex-1"
+              >
+                Close
+              </button>
+              <button
+                onClick={downloadQRCode}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex-1"
+              >
+                Download
+              </button>
+              <button
+                onClick={printQRCode}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex-1"
+              >
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Camera Scanner Modal */}
+      {showScannerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="glass w-full max-w-md rounded-2xl p-6">
+            <h3 className="mb-4 text-xl font-bold text-gray-900">Scan QR Code</h3>
+            
+            <div className="mb-4 text-center">
+              <p className="text-sm text-gray-600 mb-2">
+                Point your camera at a QR code to scan
+              </p>
+              <video
+                ref={videoRef}
+                className="w-full h-64 bg-black rounded-lg border-2 border-gray-300"
+                playsInline
+                muted
+                autoPlay
+              />
+            </div>
+
+            {scanResult && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-800">{scanResult}</p>
+              </div>
+            )}
+
+            <div className="text-xs text-gray-500 mb-4 text-center">
+              Make sure to allow camera access when prompted by your browser
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={stopScanner}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
