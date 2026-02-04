@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Employee } from '@/types'
+import type { Employee, LeaveRequest } from '@/types'
 import Notifications from './Notifications'
 
 interface Notification {
   id: string
-  type: 'birthday' | 'regularization' | 'anniversary'
+  type: 'birthday' | 'regularization' | 'anniversary' | 'leave'
   employee: Employee
   date: string
   daysUntil: number
   message: string
+  leaveType?: string
+  leaveDays?: number
 }
 
 export default function NotificationsBell() {
@@ -35,7 +37,7 @@ export default function NotificationsBell() {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   }
 
-  const generateNotifications = (employees: Employee[]): Notification[] => {
+  const generateNotifications = (employees: Employee[], leaveRequests: LeaveRequest[]): Notification[] => {
     const notifications: Notification[] = []
     const today = new Date()
 
@@ -116,6 +118,46 @@ export default function NotificationsBell() {
       }
     })
 
+    // Leave notifications (approved leaves starting within 7 days)
+    leaveRequests.forEach(leave => {
+      const employee = employees.find(emp => emp.id === leave.employee_id)
+      if (!employee || leave.status !== 'approved') return
+
+      const startDate = new Date(leave.start_date)
+      const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      
+      // Only show leaves starting within the next 7 days
+      if (daysUntil >= 0 && daysUntil <= 7) {
+        const leaveTypeLabels = {
+          'sick': 'Sick Leave',
+          'vacation': 'Vacation Leave',
+          'birthday': 'Birthday Leave',
+          'emergency': 'Emergency Leave',
+          'unpaid': 'Unpaid Leave',
+          'paternity': 'Paternity Leave',
+          'maternity': 'Maternity Leave'
+        }
+
+        const leaveTypeLabel = leaveTypeLabels[leave.leave_type] || leave.leave_type
+        const isMultipleDays = leave.days_count > 1
+
+        notifications.push({
+          id: `leave-${leave.id}`,
+          type: 'leave',
+          employee,
+          date: leave.start_date,
+          daysUntil,
+          leaveType: leave.leave_type,
+          leaveDays: leave.days_count,
+          message: daysUntil === 0
+            ? `🏖️ ${employee.name} is on ${leaveTypeLabel} today${isMultipleDays ? ` (${leave.days_count} days)` : ''}`
+            : daysUntil === 1
+            ? `🏖️ ${employee.name} starts ${leaveTypeLabel} tomorrow${isMultipleDays ? ` (${leave.days_count} days)` : ''}`
+            : `🏖️ ${employee.name} starts ${leaveTypeLabel} in ${daysUntil} days${isMultipleDays ? ` (${leave.days_count} days)` : ''}`
+        })
+      }
+    })
+
     // Sort by days until (most urgent first)
     return notifications.sort((a, b) => a.daysUntil - b.daysUntil)
   }
@@ -123,14 +165,30 @@ export default function NotificationsBell() {
   const fetchNotifications = async () => {
     setLoading(true)
     try {
-      const { data: employees, error } = await supabase
+      // Fetch employees
+      const { data: employees, error: employeesError } = await supabase
         .from('employees')
         .select('*')
         .order('name')
 
-      if (error) throw error
+      if (employeesError) throw employeesError
 
-      const generatedNotifications = generateNotifications(employees || [])
+      // Fetch approved leave requests starting within the next 7 days
+      const today = new Date()
+      const nextWeek = new Date()
+      nextWeek.setDate(today.getDate() + 7)
+
+      const { data: leaveRequests, error: leaveError } = await supabase
+        .from('leave_requests')
+        .select('*')
+        .eq('status', 'approved')
+        .gte('start_date', today.toISOString().split('T')[0])
+        .lte('start_date', nextWeek.toISOString().split('T')[0])
+        .order('start_date')
+
+      if (leaveError) throw leaveError
+
+      const generatedNotifications = generateNotifications(employees || [], leaveRequests || [])
       setNotifications(generatedNotifications)
     } catch (error) {
       console.error('Error fetching notifications:', error)

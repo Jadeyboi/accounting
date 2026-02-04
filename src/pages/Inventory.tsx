@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { InventoryItem, InventoryHistory } from '@/types'
-import QRCode from 'qrcode'
+import * as QRCode from 'qrcode'
 import QrScanner from 'qr-scanner'
 
 export default function Inventory() {
