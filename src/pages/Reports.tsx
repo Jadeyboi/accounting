@@ -29,7 +29,7 @@ ChartJS.register(
   TimeSeriesScale
 );
 
-type Mode = "monthly" | "quarterly" | "yearly";
+type Mode = "monthly" | "quarterly" | "yearly" | "custom";
 
 function formatYYYYMM(d: Date) {
   const y = d.getFullYear();
@@ -58,6 +58,16 @@ export default function Reports() {
     (quarterOf(new Date()) - 1) * 3 + 1
   ); // 1..12
 
+  // Custom mode: select specific months across multiple years
+  const [selectedMonthYears, setSelectedMonthYears] = useState<Set<string>>(
+    new Set([`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`])
+  );
+  const [showCustomSelector, setShowCustomSelector] = useState(false);
+  const [customYearRange, setCustomYearRange] = useState<number[]>([
+    new Date().getFullYear() - 1,
+    new Date().getFullYear() + 1
+  ]);
+
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +78,35 @@ export default function Reports() {
   const [rateError, setRateError] = useState<string>("");
 
   const reportRef = useRef<HTMLDivElement | null>(null);
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const toggleMonthYear = (yearMonth: string) => {
+    const newSelected = new Set(selectedMonthYears);
+    if (newSelected.has(yearMonth)) {
+      newSelected.delete(yearMonth);
+    } else {
+      newSelected.add(yearMonth);
+    }
+    setSelectedMonthYears(newSelected);
+  };
+
+  const selectAllMonthsInRange = () => {
+    const newSelected = new Set<string>();
+    for (let year = customYearRange[0]; year <= customYearRange[1]; year++) {
+      for (let month = 1; month <= 12; month++) {
+        newSelected.add(`${year}-${String(month).padStart(2, '0')}`);
+      }
+    }
+    setSelectedMonthYears(newSelected);
+  };
+
+  const clearAllMonths = () => {
+    setSelectedMonthYears(new Set());
+  };
 
   // Fetch current USD to PHP rate
   const fetchCurrentRate = async () => {
@@ -115,9 +154,26 @@ export default function Reports() {
         const endDate = new Date(year, sMonth + 3, 0);
         start = startDate.toISOString().slice(0, 10);
         end = endDate.toISOString().slice(0, 10);
-      } else {
+      } else if (mode === "yearly") {
         const startDate = new Date(year, 0, 1);
         const endDate = new Date(year, 12, 0);
+        start = startDate.toISOString().slice(0, 10);
+        end = endDate.toISOString().slice(0, 10);
+      } else if (mode === "custom") {
+        if (selectedMonthYears.size === 0) {
+          setItems([]);
+          setSavingsTotal(0);
+          setSavingsItems([]);
+          setLoading(false);
+          return;
+        }
+        // For custom mode, find the earliest and latest selected month
+        const sortedMonthYears = Array.from(selectedMonthYears).sort();
+        const [firstYear, firstMonth] = sortedMonthYears[0].split('-').map(Number);
+        const [lastYear, lastMonth] = sortedMonthYears[sortedMonthYears.length - 1].split('-').map(Number);
+        
+        const startDate = new Date(firstYear, firstMonth - 1, 1);
+        const endDate = new Date(lastYear, lastMonth, 0);
         start = startDate.toISOString().slice(0, 10);
         end = endDate.toISOString().slice(0, 10);
       }
@@ -130,8 +186,19 @@ export default function Reports() {
         .order("date", { ascending: true });
 
       if (cancel) return;
+      
+      // Filter transactions to only include selected months in custom mode
+      let filteredData = data ?? [];
+      if (mode === "custom" && selectedMonthYears.size > 0) {
+        filteredData = filteredData.filter((t: Transaction) => {
+          const d = new Date(t.date + "T00:00:00");
+          const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          return selectedMonthYears.has(yearMonth);
+        });
+      }
+      
       if (error) setError(error.message);
-      else setItems((data ?? []) as Transaction[]);
+      else setItems(filteredData as Transaction[]);
 
       // Load savings total for the same period (only active savings)
       const { data: savingsData, error: savingsErr } = await supabase
@@ -139,7 +206,7 @@ export default function Reports() {
         .select("*")
         .gte("date", start)
         .lte("date", end)
-        .order("date", { ascending: true });
+        .order("date", { ascending: true});
 
       if (!cancel) {
         if (savingsErr) {
@@ -149,9 +216,19 @@ export default function Reports() {
           setSavingsItems([]);
         } else {
           // Filter out paid savings (only show active ones)
-          const activeSavings = (savingsData ?? []).filter(
+          let activeSavings = (savingsData ?? []).filter(
             (row: any) => !row.status || row.status === 'active'
           );
+          
+          // Filter savings to only include selected months in custom mode
+          if (mode === "custom" && selectedMonthYears.size > 0) {
+            activeSavings = activeSavings.filter((s: any) => {
+              const d = new Date(s.date + "T00:00:00");
+              const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+              return selectedMonthYears.has(yearMonth);
+            });
+          }
+          
           const sTotal = activeSavings.reduce(
             (sum: number, row: any) => sum + (row.amount ?? 0),
             0
@@ -166,7 +243,7 @@ export default function Reports() {
     return () => {
       cancel = true;
     };
-  }, [mode, month, year, quarterStartMonth]);
+  }, [mode, month, year, quarterStartMonth, selectedMonthYears]);
 
   const { labels, creditData, debitData, remaining, totals } = useMemo(() => {
     const creditBy: Record<string, number> = {};
@@ -246,9 +323,18 @@ export default function Reports() {
       ];
       return `${months.join(", ")} ${year}`;
     }
+    if (mode === "custom") {
+      if (selectedMonthYears.size === 0) return `No months selected`;
+      const sorted = Array.from(selectedMonthYears).sort();
+      const formatted = sorted.map(ym => {
+        const [y, m] = ym.split('-').map(Number);
+        return `${monthNames[m - 1]} ${y}`;
+      }).join(", ");
+      return formatted;
+    }
     // yearly
     return `Jan–Dec ${year}`;
-  }, [mode, month, quarterStartMonth, year]);
+  }, [mode, month, quarterStartMonth, year, selectedMonthYears]);
 
   const money = (v: number) =>
     `₱ ${v.toLocaleString(undefined, {
@@ -445,6 +531,19 @@ export default function Reports() {
             >
               Yearly
             </button>
+            <button
+              className={`px-3 py-2 text-sm ${
+                mode === "custom"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-700 hover:bg-slate-50"
+              }`}
+              onClick={() => {
+                setMode("custom");
+                setShowCustomSelector(true);
+              }}
+            >
+              Custom
+            </button>
           </div>
           {mode === "monthly" && (
             <input
@@ -454,7 +553,7 @@ export default function Reports() {
               className="rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />
           )}
-          {mode !== "monthly" && (
+          {(mode === "quarterly" || mode === "yearly") && (
             <>
               <select
                 value={year}
@@ -492,6 +591,16 @@ export default function Reports() {
               )}
             </>
           )}
+          {mode === "custom" && (
+            <>
+              <button
+                onClick={() => setShowCustomSelector(!showCustomSelector)}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700"
+              >
+                {showCustomSelector ? 'Hide' : 'Select'} Months ({selectedMonthYears.size})
+              </button>
+            </>
+          )}
           <button
             onClick={exportPDF}
             className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700"
@@ -500,6 +609,103 @@ export default function Reports() {
           </button>
         </div>
       </div>
+
+      {/* Custom Month Selector */}
+      {mode === "custom" && showCustomSelector && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-900">
+              Select Months Across Years
+            </h3>
+            <div className="flex gap-2 items-center">
+              <label className="text-xs text-slate-600">Year Range:</label>
+              <select
+                value={customYearRange[0]}
+                onChange={(e) => setCustomYearRange([Number(e.target.value), customYearRange[1]])}
+                className="text-xs rounded border-slate-300 py-1"
+              >
+                {Array.from({ length: 10 }).map((_, i) => {
+                  const y = new Date().getFullYear() + 2 - i;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <span className="text-slate-600">to</span>
+              <select
+                value={customYearRange[1]}
+                onChange={(e) => setCustomYearRange([customYearRange[0], Number(e.target.value)])}
+                className="text-xs rounded border-slate-300 py-1"
+              >
+                {Array.from({ length: 10 }).map((_, i) => {
+                  const y = new Date().getFullYear() + 2 - i;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <span className="text-slate-400 mx-2">|</span>
+              <button
+                onClick={selectAllMonthsInRange}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Select All
+              </button>
+              <span className="text-slate-400">|</span>
+              <button
+                onClick={clearAllMonths}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+          
+          {/* Display months grouped by year */}
+          <div className="space-y-4">
+            {Array.from({ length: customYearRange[1] - customYearRange[0] + 1 }).map((_, yearIndex) => {
+              const year = customYearRange[1] - yearIndex; // Display newest year first
+              return (
+                <div key={year} className="bg-white rounded-lg p-3 border border-slate-200">
+                  <div className="text-sm font-semibold text-slate-700 mb-2">{year}</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                    {monthNames.map((name, monthIndex) => {
+                      const monthNum = monthIndex + 1;
+                      const yearMonth = `${year}-${String(monthNum).padStart(2, '0')}`;
+                      const isSelected = selectedMonthYears.has(yearMonth);
+                      return (
+                        <label
+                          key={yearMonth}
+                          className={`flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-50 text-slate-700 hover:bg-blue-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleMonthYear(yearMonth)}
+                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <span className="text-xs font-medium">{name.slice(0, 3)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          {selectedMonthYears.size === 0 && (
+            <div className="mt-3 text-sm text-amber-700 bg-amber-100 border border-amber-200 rounded-md p-2">
+              ⚠️ Please select at least one month to generate the report
+            </div>
+          )}
+          {selectedMonthYears.size > 0 && (
+            <div className="mt-3 text-sm text-green-700 bg-green-100 border border-green-200 rounded-md p-2">
+              ✓ {selectedMonthYears.size} month(s) selected: {selectedMonthsText}
+            </div>
+          )}
+        </div>
+      )}
 
       <div ref={reportRef} className="space-y-6 bg-white p-6 rounded-xl">
         {/* Report Header for PDF */}
