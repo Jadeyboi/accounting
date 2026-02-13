@@ -22,7 +22,7 @@ export default function TransactionForm({ onCreated }: Props) {
     e.preventDefault();
     setError(null);
     const amt = Number(amount);
-    if (!amt || amt <= 0) {
+    if (!amount || isNaN(amt) || amt <= 0) {
       setError("Amount must be a positive number");
       return;
     }

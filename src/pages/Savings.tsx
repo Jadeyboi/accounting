@@ -98,13 +98,19 @@ export default function Savings() {
         return;
       }
 
+      // Validate amount before creating transaction
+      if (!saving.amount || saving.amount <= 0) {
+        alert("Invalid saving amount. Cannot create transaction.");
+        return;
+      }
+
       // Create an expense transaction for the paid saving
       const { error: transactionError } = await supabase
         .from("transactions")
         .insert({
           date: new Date().toISOString().split('T')[0], // Today's date
           type: "expense",
-          amount: saving.amount,
+          amount: Number(saving.amount), // Ensure it's a number
           category: "Savings Payment",
           note: `Paid: ${saving.description || 'Savings'} ${saving.account ? `(${saving.account})` : ''}`
         });
