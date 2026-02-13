@@ -297,18 +297,24 @@ export default function Payroll() {
       await processLoanPayments(p.id, p.employee_id, p.date_issued, p.loan_deductions)
     }
 
+    // Validate gross salary before creating/updating transaction
+    if (!p.gross_salary || p.gross_salary <= 0) {
+      alert('Cannot create expense transaction: Gross salary must be greater than 0')
+      return
+    }
+
     // Create or update linked expense transaction
     const note = `Payroll: ${currentEmployee?.name ?? p.employee_id} (${p.period_start} to ${p.period_end})`
     if (p.transaction_id) {
       const { error: txErr } = await supabase
         .from('transactions')
-        .update({ amount: p.gross_salary, type: 'expense', category: 'Payroll', note })
+        .update({ amount: Number(p.gross_salary), type: 'expense', category: 'Payroll', note })
         .eq('id', p.transaction_id)
       if (txErr) return alert(txErr.message)
     } else {
       const { data: txData, error: insErr } = await supabase
         .from('transactions')
-        .insert({ date: p.date_issued, type: 'expense', amount: p.gross_salary, category: 'Payroll', note })
+        .insert({ date: p.date_issued, type: 'expense', amount: Number(p.gross_salary), category: 'Payroll', note })
         .select('id')
         .single()
       if (insErr) return alert(insErr.message)
@@ -438,18 +444,35 @@ export default function Payroll() {
       })
 
       // Create expense transactions first
-      const expenseTransactions = newPayslips.map(payslip => {
-        const emp = employees.find(e => e.id === payslip.employee_id)
-        const note = `Payroll: ${emp?.name ?? payslip.employee_id} (${payslip.period_start} to ${payslip.period_end})`
-        
-        return {
-          date: payslip.date_issued,
-          type: 'expense' as const,
-          amount: payslip.gross_salary, // Use gross salary instead of net
-          category: 'Payroll',
-          note
-        }
-      })
+      const expenseTransactions = newPayslips
+        .filter(payslip => payslip.gross_salary > 0) // Only create transactions for positive amounts
+        .map(payslip => {
+          const emp = employees.find(e => e.id === payslip.employee_id)
+          const note = `Payroll: ${emp?.name ?? payslip.employee_id} (${payslip.period_start} to ${payslip.period_end})`
+          
+          return {
+            date: payslip.date_issued,
+            type: 'expense' as const,
+            amount: Number(payslip.gross_salary), // Ensure it's a number
+            category: 'Payroll',
+            note
+          }
+        })
+
+      // Check if any payslips have invalid amounts
+      const invalidPayslips = newPayslips.filter(p => !p.gross_salary || p.gross_salary <= 0)
+      if (invalidPayslips.length > 0) {
+        const empNames = invalidPayslips.map(p => {
+          const emp = employees.find(e => e.id === p.employee_id)
+          return emp?.name || p.employee_id
+        }).join(', ')
+        alert(`Warning: ${invalidPayslips.length} payslip(s) have invalid amounts and will not create expense transactions: ${empNames}`)
+      }
+
+      if (expenseTransactions.length === 0) {
+        alert('No valid payslips to create expense transactions')
+        return
+      }
 
       console.log('Creating expense transactions:', expenseTransactions)
       const { data: transactionData, error: transactionError } = await supabase
@@ -465,14 +488,15 @@ export default function Payroll() {
 
       console.log('Created transactions:', transactionData)
 
-      // Update payslips with transaction IDs
-      if (transactionData && transactionData.length === newPayslips.length) {
-        newPayslips.forEach((payslip, index) => {
+      // Update payslips with transaction IDs (only for those with valid amounts)
+      if (transactionData && transactionData.length === expenseTransactions.length) {
+        const validPayslips = newPayslips.filter(p => p.gross_salary > 0)
+        validPayslips.forEach((payslip, index) => {
           payslip.transaction_id = transactionData[index].id
           console.log(`Setting payslip ${payslip.id} transaction_id to:`, transactionData[index].id)
         })
       } else {
-        console.error('Transaction data length mismatch:', transactionData?.length, 'vs', newPayslips.length)
+        console.error('Transaction data length mismatch:', transactionData?.length, 'vs', expenseTransactions.length)
         alert('Error: Transaction creation count mismatch')
         return
       }
