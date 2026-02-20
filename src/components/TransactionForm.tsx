@@ -57,8 +57,14 @@ export default function TransactionForm({ onCreated }: Props) {
             .from("receipts")
             .list("", { limit: 1 });
           if (listErr) {
+            console.error('Storage bucket error:', listErr);
             setError(
-              "Storage bucket 'receipts' not found. Create it in Supabase Storage (Storage → Create bucket → name: receipts)."
+              `Storage bucket 'receipts' not found or not accessible. Please create it in Supabase Dashboard:\n\n` +
+              `1. Go to Storage → New bucket\n` +
+              `2. Name: receipts\n` +
+              `3. Check "Public bucket"\n` +
+              `4. Click Create\n\n` +
+              `Error details: ${listErr.message || String(listErr)}`
             );
             setLoading(false);
             return;
@@ -76,10 +82,16 @@ export default function TransactionForm({ onCreated }: Props) {
             });
 
           if (uploadError) {
+            console.error('Upload error details:', uploadError);
+            const errorMsg = (uploadError as any)?.message || String(uploadError);
             setError(
-              (uploadError as any)?.message
-                ? `Upload failed: ${(uploadError as any).message}`
-                : `Upload failed: ${String(uploadError)}`
+              `Upload failed: ${errorMsg}\n\n` +
+              `Common causes:\n` +
+              `- Bucket 'receipts' doesn't exist (create it in Supabase Dashboard)\n` +
+              `- Bucket is not public or lacks proper policies\n` +
+              `- File size exceeds bucket limit\n` +
+              `- Invalid file type\n\n` +
+              `See STORAGE_SETUP_GUIDE.md for detailed setup instructions.`
             );
             setLoading(false);
             return;

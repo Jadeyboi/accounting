@@ -4,6 +4,7 @@ import SummaryCards from '@/components/SummaryCards'
 import TransactionForm from '@/components/TransactionForm'
 import TransactionList from '@/components/TransactionList'
 import Notifications from '@/components/Notifications'
+import StorageStatus from '@/components/StorageStatus'
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/types'
 
@@ -200,7 +201,8 @@ export default function Home() {
 
       {/* Transaction Form - Collapsible */}
       {showForm && (
-        <div className="animate-fadeIn">
+        <div className="animate-fadeIn space-y-4">
+          <StorageStatus />
           <TransactionForm onCreated={() => { bump(); setShowForm(false); }} />
         </div>
       )}
