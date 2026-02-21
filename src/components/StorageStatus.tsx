@@ -11,38 +11,53 @@ export default function StorageStatus() {
 
   const checkStorage = async () => {
     try {
+      console.log('🔍 Checking storage configuration...')
+      
       // Try to list buckets
       const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
       
+      console.log('📦 Buckets response:', { buckets, error: bucketsError })
+      
       if (bucketsError) {
+        console.error('❌ Cannot access storage:', bucketsError)
         setStatus('error')
         setMessage(`Cannot access storage: ${bucketsError.message}`)
         return
       }
 
+      console.log('✅ Found buckets:', buckets?.map(b => b.name))
+
       // Check if receipts bucket exists
       const receiptsBucket = buckets?.find(b => b.name === 'receipts')
       
       if (!receiptsBucket) {
+        console.error('❌ Receipts bucket not found in:', buckets?.map(b => b.name))
         setStatus('error')
         setMessage('Receipts bucket not found. Please create it in Supabase Dashboard.')
         return
       }
+
+      console.log('✅ Receipts bucket found:', receiptsBucket)
 
       // Try to list files in receipts bucket
       const { error: listError } = await supabase.storage
         .from('receipts')
         .list('', { limit: 1 })
 
+      console.log('📁 List files result:', { error: listError })
+
       if (listError) {
+        console.error('❌ Cannot access receipts bucket:', listError)
         setStatus('error')
         setMessage(`Receipts bucket exists but not accessible: ${listError.message}`)
         return
       }
 
+      console.log('✅ Storage is configured correctly!')
       setStatus('ok')
       setMessage('Storage is configured correctly')
     } catch (error) {
+      console.error('❌ Storage check failed:', error)
       setStatus('error')
       setMessage(`Storage check failed: ${error}`)
     }
