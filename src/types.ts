@@ -43,6 +43,25 @@ export interface Employee {
   bank_account_number?: string | null;
   bank_account_name?: string | null;
   bank_branch?: string | null;
+  // Termination fields
+  termination_date?: string | null;
+  termination_reason?: string | null;
+  termination_notes?: string | null;
+  last_working_day?: string | null;
+  terminated_by?: string | null;
+}
+
+export interface SalaryHistory {
+  id: string;
+  created_at: string;
+  employee_id: string;
+  previous_salary?: number | null;
+  new_salary: number;
+  increase_amount?: number | null;
+  effective_date: string;
+  reason?: string | null;
+  approved_by?: string | null;
+  notes?: string | null;
 }
 
 export interface LeaveRequest {

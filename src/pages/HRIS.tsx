@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Employee } from '@/types'
+import type { Employee, SalaryHistory } from '@/types'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -21,6 +21,21 @@ export default function HRIS() {
   const [activeTab, setActiveTab] = useState<'basic' | 'contact' | 'government' | 'banking'>('basic')
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null)
   const [showViewModal, setShowViewModal] = useState(false)
+  const [salaryHistory, setSalaryHistory] = useState<SalaryHistory[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [showTerminateModal, setShowTerminateModal] = useState(false)
+  const [terminatingEmployee, setTerminatingEmployee] = useState<Employee | null>(null)
+  const [terminationDate, setTerminationDate] = useState('')
+  const [terminationReason, setTerminationReason] = useState('')
+  const [terminationNotes, setTerminationNotes] = useState('')
+  const [lastWorkingDay, setLastWorkingDay] = useState('')
+  const [terminatedBy, setTerminatedBy] = useState('')
+  // Salary change tracking
+  const [salaryChangeReason, setSalaryChangeReason] = useState('')
+  const [salaryChangeApprovedBy, setSalaryChangeApprovedBy] = useState('')
+  const [salaryChangeNotes, setSalaryChangeNotes] = useState('')
+  const [salaryChangeEffectiveDate, setSalaryChangeEffectiveDate] = useState('')
+  const [showSalaryChangeFields, setShowSalaryChangeFields] = useState(false)
 
   // Form fields
   const [firstName, setFirstName] = useState('')
@@ -72,9 +87,53 @@ export default function HRIS() {
     setLoading(false)
   }
 
+  const loadSalaryHistory = async (employeeId: string) => {
+    setLoadingHistory(true)
+    const { data } = await supabase
+      .from('salary_history')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('effective_date', { ascending: false })
+    setSalaryHistory((data ?? []) as SalaryHistory[])
+    setLoadingHistory(false)
+  }
+
+  const handleTerminate = async () => {
+    if (!terminatingEmployee) return
+    if (!terminationDate || !terminationReason) {
+      alert('Termination date and reason are required')
+      return
+    }
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        status: 'terminated',
+        termination_date: terminationDate,
+        termination_reason: terminationReason,
+        termination_notes: terminationNotes || null,
+        last_working_day: lastWorkingDay || null,
+        terminated_by: terminatedBy || null,
+      })
+      .eq('id', terminatingEmployee.id)
+    if (error) { alert(error.message); return }
+    setShowTerminateModal(false)
+    setTerminatingEmployee(null)
+    setTerminationDate('')
+    setTerminationReason('')
+    setTerminationNotes('')
+    setLastWorkingDay('')
+    setTerminatedBy('')
+    await loadEmployees()
+  }
+
   const openModal = (employee?: Employee) => {
     if (employee) {
       setEditingEmployee(employee)
+      setShowSalaryChangeFields(false)
+      setSalaryChangeReason('')
+      setSalaryChangeApprovedBy('')
+      setSalaryChangeNotes('')
+      setSalaryChangeEffectiveDate(new Date().toISOString().split('T')[0])
       // Split the name into parts
       const nameParts = employee.name.split(' ')
       if (nameParts.length >= 3) {
@@ -151,6 +210,11 @@ export default function HRIS() {
     setBankAccountNumber('')
     setBankAccountName('')
     setBankBranch('')
+    setShowSalaryChangeFields(false)
+    setSalaryChangeReason('')
+    setSalaryChangeApprovedBy('')
+    setSalaryChangeNotes('')
+    setSalaryChangeEffectiveDate('')
   }
 
   const handleSave = async () => {
@@ -252,6 +316,21 @@ export default function HRIS() {
       if (error) {
         alert(error.message)
         return
+      }
+
+      // Record salary history if salary changed
+      const newSalaryNum = baseSalary ? Number(baseSalary) : null
+      const oldSalaryNum = editingEmployee.base_salary ?? null
+      if (newSalaryNum && newSalaryNum !== oldSalaryNum) {
+        await supabase.from('salary_history').insert({
+          employee_id: editingEmployee.id,
+          previous_salary: oldSalaryNum,
+          new_salary: newSalaryNum,
+          effective_date: salaryChangeEffectiveDate || new Date().toISOString().split('T')[0],
+          reason: salaryChangeReason || null,
+          approved_by: salaryChangeApprovedBy || null,
+          notes: salaryChangeNotes || null,
+        })
       }
     } else {
       const { error } = await supabase
@@ -411,7 +490,7 @@ export default function HRIS() {
                       </div>
                       <div className="ml-4">
                         <button
-                          onClick={() => { setViewingEmployee(employee); setShowViewModal(true); }}
+                          onClick={() => { setViewingEmployee(employee); setShowViewModal(true); loadSalaryHistory(employee.id); }}
                           className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {employee.name}
@@ -424,7 +503,12 @@ export default function HRIS() {
                     {employee.base_salary ? `₱${employee.base_salary.toLocaleString()}` : '-'}
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className="badge-success">Active</span>
+                    <span className={
+                      employee.status === 'terminated' ? 'badge-error' :
+                      employee.status === 'inactive' ? 'badge-warning' : 'badge-success'
+                    }>
+                      {employee.status === 'terminated' ? 'Terminated' : employee.status === 'inactive' ? 'Inactive' : 'Active'}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-right text-sm">
                     <button
@@ -433,6 +517,14 @@ export default function HRIS() {
                     >
                       Edit
                     </button>
+                    {employee.status !== 'terminated' && (
+                      <button
+                        onClick={() => { setTerminatingEmployee(employee); setShowTerminateModal(true) }}
+                        className="mr-3 text-orange-600 hover:text-orange-800"
+                      >
+                        Terminate
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(employee.id)}
                       className="text-red-600 hover:text-red-800"
@@ -636,12 +728,76 @@ export default function HRIS() {
                       <input
                         type="number"
                         value={baseSalary}
-                        onChange={(e) => setBaseSalary(e.target.value)}
+                        onChange={(e) => {
+                          setBaseSalary(e.target.value)
+                          if (editingEmployee && e.target.value && Number(e.target.value) !== editingEmployee.base_salary) {
+                            setShowSalaryChangeFields(true)
+                          } else {
+                            setShowSalaryChangeFields(false)
+                          }
+                        }}
                         placeholder="25000"
                         className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                   </div>
+
+                  {/* Salary change tracking fields - shown when salary is modified */}
+                  {editingEmployee && showSalaryChangeFields && (
+                    <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 space-y-3">
+                      <p className="text-sm font-semibold text-yellow-800">
+                        Salary Change Detected — Previous: ₱{editingEmployee.base_salary?.toLocaleString() ?? '0'}
+                      </p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Effective Date *</label>
+                          <input
+                            type="date"
+                            value={salaryChangeEffectiveDate}
+                            onChange={(e) => setSalaryChangeEffectiveDate(e.target.value)}
+                            className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Reason</label>
+                          <select
+                            value={salaryChangeReason}
+                            onChange={(e) => setSalaryChangeReason(e.target.value)}
+                            className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Select reason...</option>
+                            <option value="Annual Review">Annual Review</option>
+                            <option value="Promotion">Promotion</option>
+                            <option value="Merit Increase">Merit Increase</option>
+                            <option value="Cost of Living Adjustment">Cost of Living Adjustment</option>
+                            <option value="Regularization">Regularization</option>
+                            <option value="Market Adjustment">Market Adjustment</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Approved By</label>
+                          <input
+                            type="text"
+                            value={salaryChangeApprovedBy}
+                            onChange={(e) => setSalaryChangeApprovedBy(e.target.value)}
+                            placeholder="Manager name"
+                            className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+                          <input
+                            type="text"
+                            value={salaryChangeNotes}
+                            onChange={(e) => setSalaryChangeNotes(e.target.value)}
+                            placeholder="Optional notes"
+                            className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
@@ -1100,6 +1256,92 @@ export default function HRIS() {
                   </div>
                 </div>
               </div>
+
+              {/* Salary History Section */}
+              <div className="mt-6 rounded-xl border border-gray-200 bg-gradient-to-br from-yellow-50 to-white p-6">
+                <h4 className="mb-4 flex items-center text-lg font-bold text-gray-900">
+                  <svg className="mr-2 h-5 w-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Salary History
+                </h4>
+                {loadingHistory ? (
+                  <p className="text-sm text-gray-500">Loading...</p>
+                ) : salaryHistory.length === 0 ? (
+                  <p className="text-sm text-gray-500">No salary changes recorded yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-500">Effective Date</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-500">Previous</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-500">New Salary</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-500">Increase</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-500">Reason</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-500">Approved By</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {salaryHistory.map((h) => (
+                          <tr key={h.id}>
+                            <td className="px-3 py-2 text-gray-700">{formatDate(h.effective_date)}</td>
+                            <td className="px-3 py-2 text-right text-gray-500">
+                              {h.previous_salary ? `₱${h.previous_salary.toLocaleString()}` : '-'}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-gray-900">₱{h.new_salary.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right">
+                              {h.increase_amount != null && h.increase_amount > 0 ? (
+                                <span className="text-green-600 font-medium">+₱{h.increase_amount.toLocaleString()}</span>
+                              ) : h.increase_amount != null && h.increase_amount < 0 ? (
+                                <span className="text-red-600 font-medium">₱{h.increase_amount.toLocaleString()}</span>
+                              ) : '-'}
+                            </td>
+                            <td className="px-3 py-2 text-gray-700">{h.reason || '-'}</td>
+                            <td className="px-3 py-2 text-gray-700">{h.approved_by || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Termination Details Section - only shown if terminated */}
+              {viewingEmployee.status === 'terminated' && (
+                <div className="mt-6 rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-white p-6">
+                  <h4 className="mb-4 flex items-center text-lg font-bold text-gray-900">
+                    <svg className="mr-2 h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    Termination Details
+                  </h4>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Termination Date</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">{formatDate(viewingEmployee.termination_date)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Last Working Day</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">{formatDate(viewingEmployee.last_working_day)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Reason</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.termination_reason || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Processed By</p>
+                      <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.terminated_by || '-'}</p>
+                    </div>
+                    {viewingEmployee.termination_notes && (
+                      <div className="md:col-span-2">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Notes</p>
+                        <p className="mt-1 text-sm font-medium text-gray-900">{viewingEmployee.termination_notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
@@ -1121,6 +1363,93 @@ export default function HRIS() {
                   Edit Employee
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Termination Modal */}
+      {showTerminateModal && terminatingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-gray-200 px-6 py-5">
+              <h3 className="text-xl font-bold text-gray-900">Terminate Employee</h3>
+              <p className="mt-1 text-sm text-gray-500">{terminatingEmployee.name}</p>
+            </div>
+            <div className="space-y-4 p-6">
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+                <p className="text-sm text-red-700">This will mark the employee as terminated. This action can be reviewed in their profile.</p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Termination Date *</label>
+                  <input
+                    type="date"
+                    value={terminationDate}
+                    onChange={(e) => setTerminationDate(e.target.value)}
+                    className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Last Working Day</label>
+                  <input
+                    type="date"
+                    value={lastWorkingDay}
+                    onChange={(e) => setLastWorkingDay(e.target.value)}
+                    className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Reason *</label>
+                <select
+                  value={terminationReason}
+                  onChange={(e) => setTerminationReason(e.target.value)}
+                  className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">Select reason...</option>
+                  <option value="Resignation">Resignation</option>
+                  <option value="End of Contract">End of Contract</option>
+                  <option value="Dismissal">Dismissal</option>
+                  <option value="Retirement">Retirement</option>
+                  <option value="Redundancy">Redundancy</option>
+                  <option value="Mutual Agreement">Mutual Agreement</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Processed By</label>
+                <input
+                  type="text"
+                  value={terminatedBy}
+                  onChange={(e) => setTerminatedBy(e.target.value)}
+                  placeholder="HR Manager name"
+                  className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+                <textarea
+                  value={terminationNotes}
+                  onChange={(e) => setTerminationNotes(e.target.value)}
+                  placeholder="Additional details..."
+                  rows={3}
+                  className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-red-500 focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <button
+                onClick={() => { setShowTerminateModal(false); setTerminatingEmployee(null) }}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTerminate}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Confirm Termination
+              </button>
             </div>
           </div>
         </div>
