@@ -53,7 +53,7 @@ export default function Loans() {
     try {
       const [loansRes, employeesRes, paymentsRes] = await Promise.all([
         supabase.from('loans').select('*').order('created_at', { ascending: false }),
-        supabase.from('employees').select('*').order('name', { ascending: true }),
+        supabase.from('employees').select('*').neq('status', 'terminated').order('name', { ascending: true }),
         supabase.from('loan_payments').select('*').order('payment_date', { ascending: false })
       ])
 

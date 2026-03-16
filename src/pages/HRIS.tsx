@@ -77,6 +77,7 @@ export default function HRIS() {
     const { data, error } = await supabase
       .from('employees')
       .select('*')
+      .neq('status', 'terminated')
       .order('name', { ascending: true })
     
     if (error) {
@@ -96,6 +97,21 @@ export default function HRIS() {
       .order('effective_date', { ascending: false })
     setSalaryHistory((data ?? []) as SalaryHistory[])
     setLoadingHistory(false)
+  }
+
+  const [formerEmployees, setFormerEmployees] = useState<Employee[]>([])
+  const [showFormerEmployees, setShowFormerEmployees] = useState(false)
+  const [loadingFormer, setLoadingFormer] = useState(false)
+
+  const loadFormerEmployees = async () => {
+    setLoadingFormer(true)
+    const { data } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('status', 'terminated')
+      .order('termination_date', { ascending: false })
+    setFormerEmployees((data ?? []) as Employee[])
+    setLoadingFormer(false)
   }
 
   const handleTerminate = async () => {
@@ -1367,6 +1383,85 @@ export default function HRIS() {
           </div>
         </div>
       )}
+      {/* Former Employees Section */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+        <button
+          onClick={() => { setShowFormerEmployees(!showFormerEmployees); if (!showFormerEmployees) loadFormerEmployees() }}
+          className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-gray-50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-red-100 p-2">
+              <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-700">Former Employees</p>
+              <p className="text-xs text-gray-500">Terminated / Resigned — records preserved for reference</p>
+            </div>
+          </div>
+          <svg className={`h-5 w-5 text-gray-400 transition-transform ${showFormerEmployees ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {showFormerEmployees && (
+          <div className="border-t border-gray-200">
+            {loadingFormer ? (
+              <p className="px-6 py-4 text-sm text-gray-500">Loading...</p>
+            ) : formerEmployees.length === 0 ? (
+              <p className="px-6 py-4 text-sm text-gray-500">No former employees on record.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Position</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Reason</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Termination Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Last Working Day</th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {formerEmployees.map((emp) => (
+                      <tr key={emp.id} className="opacity-75 hover:opacity-100">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-gray-500 font-semibold text-sm">
+                              {emp.name.charAt(0).toUpperCase()}
+                            </div>
+                            <button
+                              onClick={() => { setViewingEmployee(emp); setShowViewModal(true); loadSalaryHistory(emp.id) }}
+                              className="text-sm font-medium text-gray-600 hover:text-blue-600 hover:underline"
+                            >
+                              {emp.name}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{emp.position || '-'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{emp.termination_reason || '-'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{formatDate(emp.termination_date)}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{formatDate(emp.last_working_day)}</td>
+                        <td className="px-6 py-4 text-right text-sm">
+                          <button
+                            onClick={() => { setViewingEmployee(emp); setShowViewModal(true); loadSalaryHistory(emp.id) }}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Termination Modal */}
       {showTerminateModal && terminatingEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">

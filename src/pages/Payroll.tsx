@@ -96,7 +96,7 @@ export default function Payroll() {
     setError(null)
     try {
       const [empRes, payRes, loansRes] = await Promise.all([
-        supabase.from('employees').select('*').order('name', { ascending: true }),
+        supabase.from('employees').select('*').neq('status', 'terminated').order('name', { ascending: true }),
         supabase.from('payslips').select('*').order('created_at', { ascending: false }),
         supabase.from('loans').select('*').eq('status', 'active').order('created_at', { ascending: false }),
       ])

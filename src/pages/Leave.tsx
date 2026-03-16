@@ -44,7 +44,7 @@ export default function Leave() {
     setError(null)
     
     const [empRes, leaveRes] = await Promise.all([
-      supabase.from('employees').select('*').order('name', { ascending: true }),
+      supabase.from('employees').select('*').neq('status', 'terminated').order('name', { ascending: true }),
       supabase.from('leave_requests').select('*').order('created_at', { ascending: false })
     ])
 
