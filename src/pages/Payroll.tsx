@@ -20,7 +20,8 @@ const moneyFmt = (v: number | null | undefined) => `₱ ${(v ?? 0).toLocaleStrin
 
 export default function Payroll() {
   const [mode, setMode] = useState<Mode>('list')
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([]) // active only (for new payslips/bulk)
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]) // all including terminated (for display)
   const [payslips, setPayslips] = useState<Payslip[]>([])
   const [loans, setLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
@@ -95,8 +96,9 @@ export default function Payroll() {
     setLoading(true)
     setError(null)
     try {
-      const [empRes, payRes, loansRes] = await Promise.all([
+      const [empRes, allEmpRes, payRes, loansRes] = await Promise.all([
         supabase.from('employees').select('*').neq('status', 'terminated').order('name', { ascending: true }),
+        supabase.from('employees').select('*').order('name', { ascending: true }),
         supabase.from('payslips').select('*').order('created_at', { ascending: false }),
         supabase.from('loans').select('*').eq('status', 'active').order('created_at', { ascending: false }),
       ])
@@ -104,6 +106,7 @@ export default function Payroll() {
       if (payRes.error) setError((prev) => prev ?? payRes.error!.message)
       if (loansRes.error) setError((prev) => prev ?? loansRes.error!.message)
       setEmployees((empRes.data ?? []) as Employee[])
+      setAllEmployees((allEmpRes.data ?? []) as Employee[])
       setPayslips((payRes.data ?? []) as Payslip[])
       setLoans((loansRes.data ?? []) as Loan[])
       console.log('Refreshed payslips with transaction_ids:', payRes.data?.map(p => ({ id: p.id, transaction_id: p.transaction_id, employee_id: p.employee_id })))
@@ -121,8 +124,8 @@ export default function Payroll() {
 
   const currentEmployee = useMemo(() => {
     if (!editingPayslip) return null
-    return employees.find((e) => e.id === editingPayslip.employee_id) || null
-  }, [editingPayslip, employees])
+    return allEmployees.find((e) => e.id === editingPayslip.employee_id) || null
+  }, [editingPayslip, allEmployees])
 
   // Derived totals for editingPayslip
   const totals = useMemo(() => {
@@ -351,7 +354,7 @@ export default function Payroll() {
   const onDownloadViewedPayslip = async () => {
     if (!viewingPayslip || !viewPayslipRef.current) return
     const el = viewPayslipRef.current
-    const emp = employees.find(e => e.id === viewingPayslip.employee_id)
+    const emp = allEmployees.find(e => e.id === viewingPayslip.employee_id)
     const [jsPDFMod, html2canvasMod] = await Promise.all([
       import('jspdf'),
       import('html2canvas'),
@@ -557,12 +560,12 @@ export default function Payroll() {
   }, [historyEmployeeId, payslips])
 
   const employeeHistory = useMemo(() => {
-    const emp = employees.find(e => e.id === historyEmployeeId)
+    const emp = allEmployees.find(e => e.id === historyEmployeeId)
     if (!emp) return null
     const empPayslips = employeePayslips
     const totalPaid = empPayslips.reduce((sum, p) => sum + p.net_salary, 0)
     return { employee: emp, payslips: empPayslips, totalPaid }
-  }, [historyEmployeeId, employees, employeePayslips])
+  }, [historyEmployeeId, allEmployees, employeePayslips])
 
   const downloadPayrollSummary = async (period: {
     periodStart: string
@@ -632,8 +635,8 @@ export default function Payroll() {
       
       // Sort payslips alphabetically by employee name
       const sortedPayslips = [...period.payslips].sort((a, b) => {
-        const empA = employees.find(e => e.id === a.employee_id)
-        const empB = employees.find(e => e.id === b.employee_id)
+        const empA = allEmployees.find(e => e.id === a.employee_id)
+        const empB = allEmployees.find(e => e.id === b.employee_id)
         const nameA = empA?.name ?? a.employee_id
         const nameB = empB?.name ?? b.employee_id
         return nameA.localeCompare(nameB)
@@ -658,7 +661,7 @@ export default function Payroll() {
           doc.setFont('helvetica', 'normal')
         }
         
-        const emp = employees.find(e => e.id === payslip.employee_id)
+        const emp = allEmployees.find(e => e.id === payslip.employee_id)
         const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
         const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + 
                           (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + 
@@ -840,7 +843,7 @@ export default function Payroll() {
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
                         {period.payslips.map((payslip) => {
-                          const emp = employees.find((e) => e.id === payslip.employee_id)
+                          const emp = allEmployees.find((e) => e.id === payslip.employee_id)
                           const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
                           const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
                           
@@ -898,7 +901,7 @@ export default function Payroll() {
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {payslips.map((p) => {
-                  const emp = employees.find((e) => e.id === p.employee_id)
+                  const emp = allEmployees.find((e) => e.id === p.employee_id)
                   return (
                     <tr key={p.id}>
                       <td className="px-3 py-2 text-sm text-slate-800">{emp?.name ?? p.employee_id}</td>
@@ -1244,7 +1247,7 @@ export default function Payroll() {
 
             <div ref={viewPayslipRef} className="rounded-lg border border-gray-200 bg-white p-4">
               <PayslipView 
-                employee={employees.find(e => e.id === viewingPayslip.employee_id)!} 
+                employee={allEmployees.find(e => e.id === viewingPayslip.employee_id)!} 
                 payslip={viewingPayslip} 
               />
             </div>
