@@ -40,6 +40,7 @@ export default function JobOpenings() {
   const [showApplicantView, setShowApplicantView] = useState(false)
   const [uploadingCV, setUploadingCV] = useState(false)
   const [cvFile, setCvFile] = useState<File | null>(null)
+  const [signedCvUrl, setSignedCvUrl] = useState<string | null>(null)
   // Applicant form
   const [appFirstName, setAppFirstName] = useState('')
   const [appLastName, setAppLastName] = useState('')
@@ -153,8 +154,8 @@ export default function JobOpenings() {
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('cvs').upload(fileName, cvFile, { cacheControl: '3600', upsert: false })
         if (uploadError) throw uploadError
-        const { data: publicData } = supabase.storage.from('cvs').getPublicUrl(uploadData.path)
-        cv_url = publicData.publicUrl
+        // Store the storage path, not a public URL
+        cv_url = uploadData.path
       } catch (err: any) {
         alert(err.message || 'CV upload failed'); setUploadingCV(false); return
       }
@@ -466,7 +467,15 @@ export default function JobOpenings() {
                         {applicants.map((app) => (
                           <tr key={app.id} className="hover:bg-gray-50">
                             <td className="px-3 py-2">
-                              <button onClick={() => { setViewingApplicant(app); setShowApplicantView(true) }}
+                              <button onClick={async () => {
+                                setViewingApplicant(app)
+                                setShowApplicantView(true)
+                                setSignedCvUrl(null)
+                                if (app.cv_url) {
+                                  const { data } = await supabase.storage.from('cvs').createSignedUrl(app.cv_url, 3600)
+                                  setSignedCvUrl(data?.signedUrl ?? null)
+                                }
+                              }}
                                 className="font-medium text-blue-600 hover:underline text-left">
                                 {app.first_name} {app.last_name}
                               </button>
@@ -482,7 +491,10 @@ export default function JobOpenings() {
                             </td>
                             <td className="px-3 py-2 text-center">
                               {app.cv_url ? (
-                                <a href={app.cv_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs">View CV</a>
+                                <button onClick={async () => {
+                                  const { data } = await supabase.storage.from('cvs').createSignedUrl(app.cv_url!, 3600)
+                                  if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+                                }} className="text-blue-600 hover:underline text-xs">View CV</button>
                               ) : <span className="text-gray-400 text-xs">None</span>}
                             </td>
                             <td className="px-3 py-2 text-right">
@@ -626,7 +638,7 @@ export default function JobOpenings() {
                     {viewingApplicant.status.charAt(0).toUpperCase() + viewingApplicant.status.slice(1)}
                   </span>
                 </div>
-                <button onClick={() => { setShowApplicantView(false); setViewingApplicant(null) }} className="text-white hover:text-blue-100">
+                <button onClick={() => { setShowApplicantView(false); setViewingApplicant(null); setSignedCvUrl(null) }} className="text-white hover:text-blue-100">
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -648,11 +660,15 @@ export default function JobOpenings() {
               {viewingApplicant.cv_url && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">CV / Resume</p>
-                  <a href={viewingApplicant.cv_url} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Download / View CV
-                  </a>
+                  {signedCvUrl ? (
+                    <a href={signedCvUrl} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      Download / View CV
+                    </a>
+                  ) : (
+                    <p className="text-sm text-gray-500">Generating secure link...</p>
+                  )}
                 </div>
               )}
               {viewingApplicant.notes && (
@@ -660,8 +676,8 @@ export default function JobOpenings() {
               )}
             </div>
             <div className="sticky bottom-0 flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
-              <button onClick={() => { setShowApplicantView(false); setViewingApplicant(null) }} className="btn-secondary">Close</button>
-              <button onClick={() => { setShowApplicantView(false); openApplicantModal(viewingApplicant); setViewingApplicant(null) }} className="btn-primary">Edit</button>
+              <button onClick={() => { setShowApplicantView(false); setViewingApplicant(null); setSignedCvUrl(null) }} className="btn-secondary">Close</button>
+              <button onClick={() => { setShowApplicantView(false); openApplicantModal(viewingApplicant); setViewingApplicant(null); setSignedCvUrl(null) }} className="btn-primary">Edit</button>
             </div>
           </div>
         </div>
