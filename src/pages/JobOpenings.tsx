@@ -22,6 +22,16 @@ const applicantStatusColors: Record<string, string> = {
   hired: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700',
 }
 
+// Extract just the storage path from cv_url (handles both old full URLs and new paths)
+const getCvPath = (cv_url: string): string => {
+  if (cv_url.startsWith('http')) {
+    // Old format: extract filename after /cvs/
+    const match = cv_url.match(/\/cvs\/(.+)$/)
+    return match ? match[1] : cv_url
+  }
+  return cv_url
+}
+
 export default function JobOpenings() {
   const [jobs, setJobs] = useState<JobOpening[]>([])
   const [loading, setLoading] = useState(true)
@@ -472,7 +482,7 @@ export default function JobOpenings() {
                                 setShowApplicantView(true)
                                 setSignedCvUrl(null)
                                 if (app.cv_url) {
-                                  const { data } = await supabase.storage.from('cvs').createSignedUrl(app.cv_url, 3600)
+                                  const { data } = await supabase.storage.from('cvs').createSignedUrl(getCvPath(app.cv_url), 3600)
                                   setSignedCvUrl(data?.signedUrl ?? null)
                                 }
                               }}
@@ -492,7 +502,7 @@ export default function JobOpenings() {
                             <td className="px-3 py-2 text-center">
                               {app.cv_url ? (
                                 <button onClick={async () => {
-                                  const { data } = await supabase.storage.from('cvs').createSignedUrl(app.cv_url!, 3600)
+                                  const { data } = await supabase.storage.from('cvs').createSignedUrl(getCvPath(app.cv_url!), 3600)
                                   if (data?.signedUrl) window.open(data.signedUrl, '_blank')
                                 }} className="text-blue-600 hover:underline text-xs">View CV</button>
                               ) : <span className="text-gray-400 text-xs">None</span>}
