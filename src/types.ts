@@ -211,6 +211,25 @@ export interface FundRequestHistory {
   updated_at: string;
 }
 
+export interface Applicant {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  job_opening_id?: string | null;
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  expected_salary?: number | null;
+  available_start?: string | null;
+  hybrid_comfortable?: boolean | null;
+  cv_url?: string | null;
+  status: 'new' | 'reviewing' | 'interview' | 'offer' | 'hired' | 'rejected';
+  notes?: string | null;
+  applied_date?: string | null;
+}
+
 export interface JobOpening {
   id: string;
   created_at: string;
