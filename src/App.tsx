@@ -17,6 +17,7 @@ import Loans from "@/pages/Loans";
 import MoneyReceived from "@/pages/MoneyReceived";
 import Login from "@/pages/Login";
 import UserManagement from "@/pages/UserManagement";
+import JobOpenings from "@/pages/JobOpenings";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -267,6 +268,18 @@ export default function App() {
                 >
                   History
                 </NavLink>
+                <NavLink
+                  to="/job-openings"
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                    }`
+                  }
+                >
+                  Job Openings
+                </NavLink>
                 {userRole === 'super_admin' && (
                   <NavLink
                     to="/users"
@@ -469,6 +482,19 @@ export default function App() {
                 >
                   History
                 </NavLink>
+                <NavLink
+                  to="/job-openings"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-3 font-medium transition-all ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                    }`
+                  }
+                >
+                  Job Openings
+                </NavLink>
                 {userRole === 'super_admin' && (
                   <NavLink
                     to="/users"
@@ -512,6 +538,7 @@ export default function App() {
               <Route path="/request-funds" element={<RequestFunds />} />
               <Route path="/invoice" element={<Invoice />} />
               <Route path="/invoice-history" element={<InvoiceHistory />} />
+              <Route path="/job-openings" element={<JobOpenings />} />
               {userRole === 'super_admin' && (
                 <Route path="/users" element={<UserManagement />} />
               )}

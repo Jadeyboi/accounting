@@ -211,6 +211,25 @@ export interface FundRequestHistory {
   updated_at: string;
 }
 
+export interface JobOpening {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  title: string;
+  department?: string | null;
+  employment_type?: 'full_time' | 'part_time' | 'contract' | 'internship' | null;
+  location?: string | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  description?: string | null;
+  requirements?: string | null;
+  responsibilities?: string | null;
+  status: 'open' | 'closed' | 'on_hold';
+  posted_by?: string | null;
+  deadline?: string | null;
+  slots?: number | null;
+}
+
 export interface FundRequestGroup {
   id: string;
   created_at: string;
