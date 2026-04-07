@@ -45,7 +45,7 @@ export default function Leave() {
     
     const [empRes, leaveRes] = await Promise.all([
       supabase.from('employees').select('*').neq('status', 'terminated').order('name', { ascending: true }),
-      supabase.from('leave_requests').select('*').order('created_at', { ascending: true })
+      supabase.from('leave_requests').select('*').order('created_at', { ascending: false })
     ])
 
     if (empRes.error) setError(empRes.error.message)
@@ -234,7 +234,7 @@ export default function Leave() {
     if (filterEmployee !== 'all' && leave.employee_id !== filterEmployee) return false
     return true
   }).sort((a, b) => {
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
 
   const recalculateAllBalances = async () => {
