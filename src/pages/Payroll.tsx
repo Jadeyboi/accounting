@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Employee, Payslip, Loan } from '@/types'
 import PayslipView from '@/components/PayslipView'
@@ -554,6 +554,87 @@ export default function Payroll() {
     }
   }
 
+  // Bulk payslip download
+  const [selectedPayslipIds, setSelectedPayslipIds] = useState<Set<string>>(new Set())
+  const [bulkDownloading, setBulkDownloading] = useState(false)
+
+  const togglePayslipSelection = (id: string) => {
+    setSelectedPayslipIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllPayslipsForPeriod = (periodPayslips: Payslip[]) => {
+    const ids = periodPayslips.map(p => p.id)
+    const allSelected = ids.every(id => selectedPayslipIds.has(id))
+    setSelectedPayslipIds(prev => {
+      const next = new Set(prev)
+      if (allSelected) {
+        ids.forEach(id => next.delete(id))
+      } else {
+        ids.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
+  const downloadBulkPayslips = async (periodPayslips: Payslip[], periodLabel: string) => {
+    const toDownload = periodPayslips.filter(p => selectedPayslipIds.has(p.id))
+    if (toDownload.length === 0) { alert('Select at least one payslip'); return }
+    setBulkDownloading(true)
+    try {
+      const [jsPDFMod, html2canvasMod, ReactDOMMod] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas'),
+        import('react-dom/client'),
+      ])
+      const jsPDF = (jsPDFMod as any).default
+      const html2canvas = (html2canvasMod as any).default
+      const { createRoot } = ReactDOMMod
+      const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+
+      for (let i = 0; i < toDownload.length; i++) {
+        const payslip = toDownload[i]
+        const emp = allEmployees.find(e => e.id === payslip.employee_id)
+        if (!emp) continue
+
+        const container = document.createElement('div')
+        container.style.position = 'fixed'
+        container.style.left = '-9999px'
+        container.style.top = '0'
+        container.style.width = '794px'
+        document.body.appendChild(container)
+
+        // Render PayslipView into the container
+        await new Promise<void>(resolve => {
+          const root = createRoot(container)
+          root.render(<PayslipView employee={emp} payslip={payslip} />)
+          setTimeout(resolve, 150) // allow render to complete
+        })
+
+        const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff' })
+        document.body.removeChild(container)
+
+        if (i > 0) doc.addPage()
+        const imgData = canvas.toDataURL('image/png')
+        const imgWidth = pageWidth - 40
+        const imgHeight = (canvas.height * imgWidth) / canvas.width
+        doc.addImage(imgData, 'PNG', 20, 20, imgWidth, Math.min(imgHeight, pageHeight - 40))
+      }
+
+      doc.save(`Payslips_${periodLabel}.pdf`)
+      setSelectedPayslipIds(new Set())
+    } catch (err) {
+      console.error(err)
+      alert('Failed to generate bulk PDF')
+    }
+    setBulkDownloading(false)
+  }
+
   const employeePayslips = useMemo(() => {
     if (!historyEmployeeId) return []
     return payslips.filter(p => p.employee_id === historyEmployeeId)
@@ -829,50 +910,81 @@ export default function Payroll() {
                   <summary className="cursor-pointer text-sm font-medium text-slate-700 hover:text-slate-900">
                     View Employee Breakdown ({period.employeeCount} employees)
                   </summary>
-                  <div className="mt-2 overflow-hidden rounded border border-slate-200">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead className="bg-slate-100">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Employee</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Gross</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Additions</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Deductions</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Net</th>
-                          <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-600">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 bg-white">
-                        {period.payslips.map((payslip) => {
-                          const emp = allEmployees.find((e) => e.id === payslip.employee_id)
-                          const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
-                          const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
-                          
-                          return (
-                            <tr key={payslip.id} className="hover:bg-slate-50">
-                              <td className="px-3 py-2 text-slate-800">{emp?.name ?? payslip.employee_id}</td>
-                              <td className="px-3 py-2 text-right text-slate-900">{moneyFmt(payslip.gross_salary)}</td>
-                              <td className="px-3 py-2 text-right text-green-700">{moneyFmt(additions)}</td>
-                              <td className="px-3 py-2 text-right text-red-700">{moneyFmt(deductions)}</td>
-                              <td className="px-3 py-2 text-right font-medium text-slate-900">{moneyFmt(payslip.net_salary)}</td>
-                              <td className="px-3 py-2 text-center">
-                                <button 
-                                  className="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-1" 
-                                  onClick={() => { setViewingPayslip(payslip); setShowViewModal(true); }}
-                                >
-                                  View
-                                </button>
-                                <button 
-                                  className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200" 
-                                  onClick={() => onEditPayslip(payslip)}
-                                >
-                                  Edit
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="mt-2">
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={period.payslips.every(p => selectedPayslipIds.has(p.id))}
+                          onChange={() => toggleAllPayslipsForPeriod(period.payslips)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                        />
+                        Select All
+                      </label>
+                      <button
+                        onClick={() => downloadBulkPayslips(period.payslips, `${period.periodStart}_to_${period.periodEnd}`)}
+                        disabled={bulkDownloading || !period.payslips.some(p => selectedPayslipIds.has(p.id))}
+                        className="flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        {bulkDownloading ? 'Generating...' : `Download Selected (${period.payslips.filter(p => selectedPayslipIds.has(p.id)).length})`}
+                      </button>
+                    </div>
+                    <div className="overflow-hidden rounded border border-slate-200">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead className="bg-slate-100">
+                          <tr>
+                            <th className="px-3 py-2 w-8"></th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Employee</th>
+                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Gross</th>
+                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Additions</th>
+                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Deductions</th>
+                            <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-600">Net</th>
+                            <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-600">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 bg-white">
+                          {period.payslips.map((payslip) => {
+                            const emp = allEmployees.find((e) => e.id === payslip.employee_id)
+                            const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
+                            const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
+                            return (
+                              <tr key={payslip.id} className={`hover:bg-slate-50 ${selectedPayslipIds.has(payslip.id) ? 'bg-blue-50' : ''}`}>
+                                <td className="px-3 py-2 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPayslipIds.has(payslip.id)}
+                                    onChange={() => togglePayslipSelection(payslip.id)}
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-slate-800">{emp?.name ?? payslip.employee_id}</td>
+                                <td className="px-3 py-2 text-right text-slate-900">{moneyFmt(payslip.gross_salary)}</td>
+                                <td className="px-3 py-2 text-right text-green-700">{moneyFmt(additions)}</td>
+                                <td className="px-3 py-2 text-right text-red-700">{moneyFmt(deductions)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-900">{moneyFmt(payslip.net_salary)}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <button
+                                    className="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-1"
+                                    onClick={() => { setViewingPayslip(payslip); setShowViewModal(true); }}
+                                  >
+                                    View
+                                  </button>
+                                  <button
+                                    className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                                    onClick={() => onEditPayslip(payslip)}
+                                  >
+                                    Edit
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </details>
               </div>
