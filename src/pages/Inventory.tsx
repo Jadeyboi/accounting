@@ -564,21 +564,33 @@ export default function Inventory() {
         .update(itemData)
         .eq('id', editingItem.id)
       
-      if (!error) {
-        fetchItems()
-        setShowModal(false)
-        resetForm()
+      if (error) {
+        if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+          alert('Asset tag already exists on another item. Please use a different asset tag.')
+        } else {
+          alert(error.message)
+        }
+        return
       }
+      fetchItems()
+      setShowModal(false)
+      resetForm()
     } else {
       const { error } = await supabase
         .from('inventory')
         .insert([itemData])
       
-      if (!error) {
-        fetchItems()
-        setShowModal(false)
-        resetForm()
+      if (error) {
+        if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+          alert('Asset tag already exists. Please use a different asset tag.')
+        } else {
+          alert(error.message)
+        }
+        return
       }
+      fetchItems()
+      setShowModal(false)
+      resetForm()
     }
   }
 
