@@ -593,12 +593,8 @@ export default function Payroll() {
       const jsPDF = (jsPDFMod as any).default
       const html2canvas = (html2canvasMod as any).default
       const { createRoot } = ReactDOMMod
-      const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' })
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const pageHeight = doc.internal.pageSize.getHeight()
 
-      for (let i = 0; i < toDownload.length; i++) {
-        const payslip = toDownload[i]
+      for (const payslip of toDownload) {
         const emp = allEmployees.find(e => e.id === payslip.employee_id)
         if (!emp) continue
 
@@ -609,28 +605,29 @@ export default function Payroll() {
         container.style.width = '794px'
         document.body.appendChild(container)
 
-        // Render PayslipView into the container
         await new Promise<void>(resolve => {
           const root = createRoot(container)
           root.render(<PayslipView employee={emp} payslip={payslip} />)
-          setTimeout(resolve, 150) // allow render to complete
+          setTimeout(resolve, 150)
         })
 
         const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff' })
         document.body.removeChild(container)
 
-        if (i > 0) doc.addPage()
+        const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' })
+        const pageWidth = doc.internal.pageSize.getWidth()
+        const pageHeight = doc.internal.pageSize.getHeight()
         const imgData = canvas.toDataURL('image/png')
         const imgWidth = pageWidth - 40
         const imgHeight = (canvas.height * imgWidth) / canvas.width
         doc.addImage(imgData, 'PNG', 20, 20, imgWidth, Math.min(imgHeight, pageHeight - 40))
+        doc.save(`Payslip_${emp.name.replace(/\s+/g, '_')}_${payslip.period_start}.pdf`)
       }
 
-      doc.save(`Payslips_${periodLabel}.pdf`)
       setSelectedPayslipIds(new Set())
     } catch (err) {
       console.error(err)
-      alert('Failed to generate bulk PDF')
+      alert('Failed to generate PDFs')
     }
     setBulkDownloading(false)
   }
