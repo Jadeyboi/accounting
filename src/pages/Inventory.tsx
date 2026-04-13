@@ -101,13 +101,24 @@ export default function Inventory() {
     fetchItems()
   }, [])
 
-  // Auto-generate asset tag when prefix or number changes
-  useEffect(() => {
-    if (assetTagPrefix && assetTagNumber) {
-      const paddedNumber = assetTagNumber.padStart(3, '0')
-      setAssetTag(`${assetTagPrefix}-${paddedNumber}`)
-    }
-  }, [assetTagPrefix, assetTagNumber])
+  // Auto-generate next available asset tag for a given prefix
+  const generateNextAssetTag = async (prefix: string): Promise<string> => {
+    const { data } = await supabase
+      .from('inventory')
+      .select('asset_tag')
+      .ilike('asset_tag', `${prefix}-%`)
+    
+    const usedNumbers = (data ?? [])
+      .map(item => {
+        const match = item.asset_tag?.match(new RegExp(`^${prefix}-(\\d+)$`))
+        return match ? parseInt(match[1]) : 0
+      })
+      .filter(n => n > 0)
+    
+    let next = 1
+    while (usedNumbers.includes(next)) next++
+    return `${prefix}-${String(next).padStart(3, '0')}`
+  }
 
   const fetchItems = async () => {
     setLoading(true)
@@ -333,9 +344,10 @@ export default function Inventory() {
     }
   }
 
-  const resetForm = () => {
-    setAssetTag('')
-    setAssetTagPrefix('MON')
+  const resetForm = async (prefix = 'MON') => {
+    const tag = await generateNextAssetTag(prefix)
+    setAssetTag(tag)
+    setAssetTagPrefix(prefix)
     setAssetTagNumber('')
     setItemDescription('')
     setCategory('Monitor')
@@ -574,7 +586,7 @@ export default function Inventory() {
       }
       fetchItems()
       setShowModal(false)
-      resetForm()
+      await resetForm('MON')
     } else {
       const { error } = await supabase
         .from('inventory')
@@ -590,7 +602,7 @@ export default function Inventory() {
       }
       fetchItems()
       setShowModal(false)
-      resetForm()
+      await resetForm('MON')
     }
   }
 
@@ -714,8 +726,8 @@ export default function Inventory() {
             Scan QR
           </button>
           <button
-            onClick={() => {
-              resetForm()
+            onClick={async () => {
+              await resetForm('MON')
               setShowModal(true)
             }}
             className="btn-primary"
@@ -851,38 +863,16 @@ export default function Inventory() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Asset Tag Generator
+                    Asset Tag {!editingItem && <span className="text-xs text-gray-400">(auto-generated)</span>}
                   </label>
-                  <div className="flex gap-2">
-                    <select
-                      value={assetTagPrefix}
-                      onChange={(e) => setAssetTagPrefix(e.target.value)}
-                      className="input-field flex-1"
-                    >
-                      {assetTagPrefixes.map(prefix => (
-                        <option key={prefix} value={prefix}>{prefix}</option>
-                      ))}
-                    </select>
-                    <span className="flex items-center text-gray-500">-</span>
-                    <input
-                      type="number"
-                      placeholder="001"
-                      value={assetTagNumber}
-                      onChange={(e) => setAssetTagNumber(e.target.value)}
-                      className="input-field flex-1"
-                      min="1"
-                      max="999"
-                    />
-                  </div>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      value={assetTag}
-                      onChange={(e) => setAssetTag(e.target.value)}
-                      className="input-field"
-                      placeholder="Generated asset tag or enter manually"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={assetTag}
+                    onChange={(e) => setAssetTag(e.target.value)}
+                    className="input-field bg-gray-50"
+                    placeholder="Auto-generated"
+                    readOnly={!editingItem}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -902,7 +892,25 @@ export default function Inventory() {
                   </label>
                   <select
                     value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                    onChange={async (e) => {
+                      const cat = e.target.value
+                      setCategory(cat)
+                      // Only auto-generate for new items
+                      if (!editingItem) {
+                        const prefixMap: Record<string, string> = {
+                          'Monitor': 'MON', 'PC/Desktop': 'PC', 'Laptop': 'LAP',
+                          'Console': 'CON', 'Printer': 'PRT', 'Scanner': 'SCN',
+                          'Projector': 'PRJ', 'Router/Switch': 'NET', 'Server': 'SRV',
+                          'Tablet': 'TAB', 'Phone': 'PHN', 'Camera': 'CAM',
+                          'Audio Equipment': 'AUD', 'Storage Device': 'STG',
+                          'Accessories': 'ACC', 'Furniture': 'FUR', 'Other': 'OTH'
+                        }
+                        const prefix = prefixMap[cat] ?? 'OTH'
+                        setAssetTagPrefix(prefix)
+                        const tag = await generateNextAssetTag(prefix)
+                        setAssetTag(tag)
+                      }
+                    }}
                     className="input-field"
                     required
                   >
@@ -1058,9 +1066,9 @@ export default function Inventory() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setShowModal(false)
-                    resetForm()
+                    await resetForm('MON')
                   }}
                   className="btn-secondary flex-1"
                 >
