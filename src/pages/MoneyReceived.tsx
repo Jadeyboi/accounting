@@ -169,6 +169,18 @@ export default function MoneyReceived() {
           .from('money_received')
           .insert(payload)
         if (error) throw error
+
+        // Auto-create cash-in transaction
+        const { error: txError } = await supabase
+          .from('transactions')
+          .insert({
+            date: dateReceived,
+            type: 'in',
+            amount: amountPHP,
+            category: category.trim() || 'Money Received',
+            note: `${purpose.trim()} — from ${senderName.trim()} (${moneyFmtUSD(amountUSDNum)} @ ₱${rate}/USD)`,
+          })
+        if (txError) console.error('Failed to create transaction:', txError.message)
       }
 
       setShowModal(false)
