@@ -157,6 +157,7 @@ export default function Payroll() {
     if (loanDeductionAmount <= 0) return
 
     const activeLoans = getActiveLoansForEmployee(employeeId, payrollDate)
+    const emp = allEmployees.find(e => e.id === employeeId)
     
     for (const loan of activeLoans) {
       const paymentAmount = Math.min(loan.bimonthly_deduction, loan.remaining_balance)
@@ -198,6 +199,21 @@ export default function Payroll() {
 
         if (loanError) {
           console.error('Error updating loan balance:', loanError)
+        }
+
+        // Record loan repayment as cash-in transaction
+        const { error: txError } = await supabase
+          .from('transactions')
+          .insert({
+            date: payrollDate,
+            type: 'in',
+            amount: paymentAmount,
+            category: 'Loan Repayment',
+            note: `Loan repayment: ${emp?.name ?? employeeId} — ${loan.loan_type.replace(/_/g, ' ')} (payslip deduction)`,
+          })
+
+        if (txError) {
+          console.error('Error creating loan repayment transaction:', txError)
         }
       } catch (error) {
         console.error('Error processing loan payment:', error)
