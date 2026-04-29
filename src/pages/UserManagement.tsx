@@ -72,6 +72,7 @@ export default function UserManagement() {
         return
       }
 
+      console.log('Creating user with email:', email.trim())
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
@@ -82,6 +83,8 @@ export default function UserManagement() {
           }
         }
       })
+
+      console.log('Auth signup response:', { authData, authError })
 
       if (authError) {
         if (authError.message.includes('429') || authError.status === 429) {
@@ -95,6 +98,7 @@ export default function UserManagement() {
       }
 
       if (authData.user) {
+        console.log('User created in auth, inserting into users table:', authData.user.id)
         const { error: insertError } = await supabase
           .from('users')
           .insert({
@@ -104,16 +108,25 @@ export default function UserManagement() {
             role: role
           })
 
-        if (insertError && !insertError.message.includes('duplicate key')) {
-          console.warn('Could not insert user into users table:', insertError)
+        if (insertError) {
+          console.error('Error inserting into users table:', insertError)
+          if (!insertError.message.includes('duplicate key')) {
+            alert(`User created in auth but failed to add to users table: ${insertError.message}`)
+            return
+          }
         }
+      } else {
+        console.warn('No user object returned from signup')
+        alert('Signup succeeded but no user data returned. Check Supabase email confirmation settings.')
+        return
       }
 
-      alert('User created successfully! They will need to verify their email.')
+      alert('User created successfully! They will receive a confirmation email.')
       setShowModal(false)
       resetForm()
       await loadUsers()
     } catch (err: any) {
+      console.error('User creation error:', err)
       alert(err.message || 'Failed to create user')
     }
   }
