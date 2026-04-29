@@ -54,13 +54,13 @@ export default function UserManagement() {
   }
 
   const handleCreateUser = async () => {
-    if (!email || !password || !fullName) {
-      alert('Please fill in all fields')
+    if (!email || !fullName) {
+      alert('Please fill in email and full name')
       return
     }
 
     try {
-      // Check if email already exists in users table first
+      // Check if email already exists
       const { data: existing } = await supabase
         .from('users')
         .select('id')
@@ -72,56 +72,36 @@ export default function UserManagement() {
         return
       }
 
-      console.log('Creating user with email:', email.trim())
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password,
-        options: {
-          data: {
-            full_name: fullName.trim(),
-            role: role
-          }
-        }
-      })
+      // Send a password reset / magic link so the user sets their own password
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email.trim(),
+        { redirectTo: window.location.origin }
+      )
 
-      console.log('Auth signup response:', { authData, authError })
+      if (resetError) {
+        // If user doesn't exist in auth yet, we can't send reset — insert manually
+        console.warn('Reset email failed (user may not exist in auth yet):', resetError.message)
+      }
 
-      if (authError) {
-        if (authError.message.includes('429') || authError.status === 429) {
-          alert('Too many signup attempts. Supabase limits new signups to a few per hour. Please wait and try again later.')
-        } else if (authError.message.toLowerCase().includes('already registered') || authError.message.toLowerCase().includes('already exists')) {
-          alert(`Email "${email.trim()}" is already registered. Use a different email.`)
+      // Insert into users table directly (they'll appear immediately)
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          email: email.trim(),
+          full_name: fullName.trim(),
+          role: role
+        })
+
+      if (insertError) {
+        if (insertError.message.includes('duplicate key') || insertError.code === '23505') {
+          alert('This email is already in the users table.')
         } else {
-          alert(authError.message)
+          alert(`Failed to add user: ${insertError.message}`)
         }
         return
       }
 
-      if (authData.user) {
-        console.log('User created in auth, inserting into users table:', authData.user.id)
-        const { error: insertError } = await supabase
-          .from('users')
-          .insert({
-            id: authData.user.id,
-            email: authData.user.email,
-            full_name: fullName.trim(),
-            role: role
-          })
-
-        if (insertError) {
-          console.error('Error inserting into users table:', insertError)
-          if (!insertError.message.includes('duplicate key')) {
-            alert(`User created in auth but failed to add to users table: ${insertError.message}`)
-            return
-          }
-        }
-      } else {
-        console.warn('No user object returned from signup')
-        alert('Signup succeeded but no user data returned. Check Supabase email confirmation settings.')
-        return
-      }
-
-      alert('User created successfully! They will receive a confirmation email.')
+      alert(`User "${fullName.trim()}" added successfully!\n\nTo set their password, go to Supabase Dashboard → Authentication → Users → Invite user, or have them use the "Forgot Password" flow on the login page.`)
       setShowModal(false)
       resetForm()
       await loadUsers()
@@ -314,16 +294,8 @@ export default function UserManagement() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Enter password"
-                  required
-                />
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                <p className="text-xs text-blue-700">The user will be added to the system. To give them login access, use <strong>Supabase Dashboard → Authentication → Invite user</strong> with their email.</p>
               </div>
 
               <div>
