@@ -18,6 +18,7 @@ import MoneyReceived from "@/pages/MoneyReceived";
 import Login from "@/pages/Login";
 import UserManagement from "@/pages/UserManagement";
 import JobOpenings from "@/pages/JobOpenings";
+import ChangePassword from "@/pages/ChangePassword";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -37,10 +39,11 @@ export default function App() {
     if (session) {
       const { data } = await supabase
         .from('users')
-        .select('role')
+        .select('role, must_change_password')
         .eq('id', session.user.id)
         .single();
       setUserRole(data?.role || null);
+      setMustChangePassword(data?.must_change_password === true);
     }
     
     setLoading(false);
@@ -62,6 +65,10 @@ export default function App() {
 
   if (!isAuthenticated) {
     return <Login onLogin={checkAuth} />;
+  }
+
+  if (mustChangePassword) {
+    return <ChangePassword onDone={() => { setMustChangePassword(false); }} />;
   }
 
   function hideLogo(e: SyntheticEvent<HTMLImageElement>) {

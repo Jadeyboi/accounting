@@ -98,7 +98,8 @@ export default function UserManagement() {
             id: authData.user.id,
             email: authData.user.email,
             full_name: fullName.trim(),
-            role: role
+            role: role,
+            must_change_password: true
           })
 
         if (insertError && !insertError.message.includes('duplicate key')) {
