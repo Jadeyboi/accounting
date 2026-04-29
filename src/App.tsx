@@ -37,13 +37,28 @@ export default function App() {
     setIsAuthenticated(!!session);
     
     if (session) {
-      const { data } = await supabase
+      // First get role only (always works)
+      const { data: roleData } = await supabase
         .from('users')
-        .select('role, must_change_password')
+        .select('role')
         .eq('id', session.user.id)
         .single();
-      setUserRole(data?.role || null);
-      setMustChangePassword(data?.must_change_password === true);
+      setUserRole(roleData?.role || null);
+
+      // Then try to get must_change_password (requires migration to be run)
+      try {
+        const { data: flagData, error } = await supabase
+          .from('users')
+          .select('must_change_password')
+          .eq('id', session.user.id)
+          .single();
+        if (!error) {
+          setMustChangePassword(flagData?.must_change_password === true);
+        }
+      } catch {
+        // Column doesn't exist yet — ignore, treat as false
+        setMustChangePassword(false);
+      }
     }
     
     setLoading(false);
