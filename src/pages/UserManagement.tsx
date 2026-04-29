@@ -54,8 +54,8 @@ export default function UserManagement() {
   }
 
   const handleCreateUser = async () => {
-    if (!email || !fullName) {
-      alert('Please fill in email and full name')
+    if (!email || !password || !fullName) {
+      alert('Please fill in all fields')
       return
     }
 
@@ -72,41 +72,45 @@ export default function UserManagement() {
         return
       }
 
-      // Send a password reset / magic link so the user sets their own password
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email.trim(),
-        { redirectTo: window.location.origin }
-      )
-
-      if (resetError) {
-        // If user doesn't exist in auth yet, we can't send reset — insert manually
-        console.warn('Reset email failed (user may not exist in auth yet):', resetError.message)
-      }
-
-      // Insert into users table directly (they'll appear immediately)
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert({
-          email: email.trim(),
-          full_name: fullName.trim(),
-          role: role
-        })
-
-      if (insertError) {
-        if (insertError.message.includes('duplicate key') || insertError.code === '23505') {
-          alert('This email is already in the users table.')
-        } else {
-          alert(`Failed to add user: ${insertError.message}`)
+      // Use signUp with emailRedirectTo pointing to the app
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: {
+            full_name: fullName.trim(),
+            role: role
+          }
         }
+      })
+
+      if (authError) {
+        alert(`Error: ${authError.message}`)
         return
       }
 
-      alert(`User "${fullName.trim()}" added successfully!\n\nTo set their password, go to Supabase Dashboard → Authentication → Users → Invite user, or have them use the "Forgot Password" flow on the login page.`)
+      // Insert into users table
+      if (authData.user) {
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: authData.user.id,
+            email: authData.user.email,
+            full_name: fullName.trim(),
+            role: role
+          })
+
+        if (insertError && !insertError.message.includes('duplicate key')) {
+          console.warn('Could not insert into users table:', insertError.message)
+        }
+      }
+
+      alert(`User "${fullName.trim()}" created! They will receive a confirmation email at ${email.trim()}.`)
       setShowModal(false)
       resetForm()
       await loadUsers()
     } catch (err: any) {
-      console.error('User creation error:', err)
       alert(err.message || 'Failed to create user')
     }
   }
@@ -296,6 +300,18 @@ export default function UserManagement() {
 
               <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
                 <p className="text-xs text-blue-700">The user will be added to the system. To give them login access, use <strong>Supabase Dashboard → Authentication → Invite user</strong> with their email.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Enter password (min 6 characters)"
+                  required
+                />
               </div>
 
               <div>
