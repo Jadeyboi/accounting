@@ -60,7 +60,18 @@ export default function UserManagement() {
     }
 
     try {
-      // Use regular signup instead of admin.createUser
+      // Check if email already exists in users table first
+      const { data: existing } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email.trim().toLowerCase())
+        .maybeSingle()
+
+      if (existing) {
+        alert(`A user with email "${email.trim()}" already exists.`)
+        return
+      }
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
@@ -72,9 +83,17 @@ export default function UserManagement() {
         }
       })
 
-      if (authError) throw authError
+      if (authError) {
+        if (authError.message.includes('429') || authError.status === 429) {
+          alert('Too many signup attempts. Supabase limits new signups to a few per hour. Please wait and try again later.')
+        } else if (authError.message.toLowerCase().includes('already registered') || authError.message.toLowerCase().includes('already exists')) {
+          alert(`Email "${email.trim()}" is already registered. Use a different email.`)
+        } else {
+          alert(authError.message)
+        }
+        return
+      }
 
-      // Manually insert into users table if needed
       if (authData.user) {
         const { error: insertError } = await supabase
           .from('users')
