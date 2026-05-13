@@ -68,15 +68,14 @@ export default function Payroll() {
       .map(([key, payslips]) => {
         const [periodStart, periodEnd] = key.split('_')
         const totalGross = payslips.reduce((sum, p) => sum + p.gross_salary, 0)
-        const totalNet = payslips.reduce((sum, p) => sum + p.net_salary, 0)
         const totalDeductions = payslips.reduce((sum, p) => {
-          const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
-          return sum + deductions
+          return sum + (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
         }, 0)
         const totalAdditions = payslips.reduce((sum, p) => {
-          const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
-          return sum + additions
+          return sum + (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
         }, 0)
+        // Recalculate net from raw fields — don't trust stored net_salary
+        const totalNet = totalGross + totalAdditions - totalDeductions
         
         return {
           periodStart,
@@ -794,7 +793,8 @@ export default function Payroll() {
         doc.text(moneyFmt(payslip.gross_salary), 80, yPos, { align: 'right' })
         doc.text(moneyFmt(additions), 110, yPos, { align: 'right' })
         doc.text(moneyFmt(deductions), 145, yPos, { align: 'right' })
-        doc.text(moneyFmt(payslip.net_salary), 180, yPos, { align: 'right' })
+        const netPay = payslip.gross_salary + additions - deductions
+        doc.text(moneyFmt(netPay), 180, yPos, { align: 'right' })
         
         yPos += 6
       }
@@ -1011,6 +1011,7 @@ export default function Payroll() {
                             const emp = allEmployees.find((e) => e.id === payslip.employee_id)
                             const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
                             const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
+                            const netPay = payslip.gross_salary + additions - deductions
                             return (
                               <tr key={payslip.id} className={`hover:bg-slate-50 ${selectedPayslipIds.has(payslip.id) ? 'bg-blue-50' : ''}`}>
                                 <td className="px-3 py-2 text-center">
@@ -1025,7 +1026,7 @@ export default function Payroll() {
                                 <td className="px-3 py-2 text-right text-slate-900">{moneyFmt(payslip.gross_salary)}</td>
                                 <td className="px-3 py-2 text-right text-green-700">{moneyFmt(additions)}</td>
                                 <td className="px-3 py-2 text-right text-red-700">{moneyFmt(deductions)}</td>
-                                <td className="px-3 py-2 text-right font-medium text-slate-900">{moneyFmt(payslip.net_salary)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-900">{moneyFmt(netPay)}</td>
                                 <td className="px-3 py-2 text-center">
                                   <button
                                     className="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100 mr-1"

@@ -20,6 +20,8 @@ const formatDate = (dateString: string): string => {
 const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, ref) => {
   const totalDeductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
   const totalAdditions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
+  // Always recalculate net from raw fields for accuracy
+  const calculatedNet = payslip.gross_salary + totalAdditions - totalDeductions
 
   return (
     <div ref={ref} className="mx-auto w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-8 text-slate-800">
@@ -85,7 +87,7 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
       <div className="mt-6 rounded-lg border-2 border-emerald-600 bg-emerald-50 p-6">
         <div className="flex items-center justify-between">
           <span className="text-lg font-bold text-emerald-900">NET SALARY</span>
-          <span className="text-3xl font-bold text-emerald-700">{money(payslip.net_salary)}</span>
+          <span className="text-3xl font-bold text-emerald-700">{money(calculatedNet)}</span>
         </div>
       </div>
 
