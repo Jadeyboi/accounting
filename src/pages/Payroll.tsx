@@ -649,6 +649,31 @@ export default function Payroll() {
     setBulkDownloading(false)
   }
 
+  // Period selection for bulk delete
+  const [selectedPeriodKeys, setSelectedPeriodKeys] = useState<Set<string>>(new Set())
+  const [deletingPeriods, setDeletingPeriods] = useState(false)
+
+  const togglePeriodSelection = (key: string) => {
+    setSelectedPeriodKeys(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  const deleteSelectedPeriods = async () => {
+    const toDelete = payrollPeriods.filter(p => selectedPeriodKeys.has(`${p.periodStart}_${p.periodEnd}`))
+    const totalPayslips = toDelete.reduce((sum, p) => sum + p.payslips.length, 0)
+    if (!confirm(`Delete ${toDelete.length} payroll period(s) and their ${totalPayslips} payslip(s)? This cannot be undone.`)) return
+    setDeletingPeriods(true)
+    const allIds = toDelete.flatMap(p => p.payslips.map(ps => ps.id))
+    const { error } = await supabase.from('payslips').delete().in('id', allIds)
+    setDeletingPeriods(false)
+    if (error) { alert(error.message); return }
+    setSelectedPeriodKeys(new Set())
+    await refresh()
+  }
+
   const employeePayslips = useMemo(() => {
     if (!historyEmployeeId) return []
     return payslips.filter(p => p.employee_id === historyEmployeeId)
@@ -871,17 +896,39 @@ export default function Payroll() {
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-base font-semibold text-slate-900">Payroll Period Summaries</h3>
-            <span className="text-sm text-slate-600">{payrollPeriods.length} periods</span>
+            <div className="flex items-center gap-3">
+              {selectedPeriodKeys.size > 0 && (
+                <button
+                  onClick={deleteSelectedPeriods}
+                  disabled={deletingPeriods}
+                  className="flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deletingPeriods ? 'Deleting...' : `Delete Selected (${selectedPeriodKeys.size})`}
+                </button>
+              )}
+              <span className="text-sm text-slate-600">{payrollPeriods.length} periods</span>
+            </div>
           </div>
           <div className="space-y-4">
-            {payrollPeriods.map((period, index) => (
-              <div key={`${period.periodStart}_${period.periodEnd}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            {payrollPeriods.map((period, index) => {
+              const periodKey = `${period.periodStart}_${period.periodEnd}`
+              const isSelected = selectedPeriodKeys.has(periodKey)
+              return (
+              <div key={periodKey} className={`rounded-lg border p-4 ${isSelected ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
                 <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium text-slate-900">
-                      Period: {formatDate(period.periodStart)} to {formatDate(period.periodEnd)}
-                    </h4>
-                    <p className="text-sm text-slate-600">{period.employeeCount} employees</p>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => togglePeriodSelection(periodKey)}
+                      className="h-4 w-4 rounded border-gray-300 text-red-600"
+                    />
+                    <div>
+                      <h4 className="font-medium text-slate-900">
+                        Period: {formatDate(period.periodStart)} to {formatDate(period.periodEnd)}
+                      </h4>
+                      <p className="text-sm text-slate-600">{period.employeeCount} employees</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <button
@@ -1002,7 +1049,8 @@ export default function Payroll() {
                   </div>
                 </details>
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
