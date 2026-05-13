@@ -74,7 +74,7 @@ export default function Payroll() {
           return sum + deductions
         }, 0)
         const totalAdditions = payslips.reduce((sum, p) => {
-          const additions = (p.bonuses ?? 0) + (p.allowances ?? 0)
+          const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
           return sum + additions
         }, 0)
         
@@ -304,7 +304,7 @@ export default function Payroll() {
     if (!editingPayslip) return
     const p = { ...editingPayslip }
     // Recompute net on save
-    const additions = (p.bonuses ?? 0) + (p.allowances ?? 0)
+    const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
     const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
     p.net_salary = p.gross_salary + additions - deductions
 
@@ -782,7 +782,7 @@ export default function Payroll() {
         }
         
         const emp = allEmployees.find(e => e.id === payslip.employee_id)
-        const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
+        const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
         const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + 
                           (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + 
                           (payslip.other_deductions ?? 0)
@@ -1009,7 +1009,7 @@ export default function Payroll() {
                         <tbody className="divide-y divide-slate-200 bg-white">
                           {period.payslips.map((payslip) => {
                             const emp = allEmployees.find((e) => e.id === payslip.employee_id)
-                            const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
+                            const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
                             const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
                             return (
                               <tr key={payslip.id} className={`hover:bg-slate-50 ${selectedPayslipIds.has(payslip.id) ? 'bg-blue-50' : ''}`}>
