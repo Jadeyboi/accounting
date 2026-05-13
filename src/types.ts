@@ -96,6 +96,7 @@ export interface Payslip {
   bonuses?: number | null;
   allowances?: number | null;
   other_deductions?: number | null;
+  holiday_pay?: number | null;
   notes?: string | null;
   net_salary: number;
   transaction_id?: string | null;

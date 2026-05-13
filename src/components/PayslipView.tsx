@@ -19,7 +19,7 @@ const formatDate = (dateString: string): string => {
 
 const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, ref) => {
   const totalDeductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
-  const totalAdditions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0)
+  const totalAdditions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
 
   return (
     <div ref={ref} className="mx-auto w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-8 text-slate-800">
@@ -64,6 +64,9 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
           <div className="mb-2 text-sm font-medium text-emerald-700">Additions</div>
           <div className="text-sm"><span className="text-slate-500">Bonuses:</span> <span className="float-right">{money(payslip.bonuses)}</span></div>
           <div className="text-sm"><span className="text-slate-500">Allowances:</span> <span className="float-right">{money(payslip.allowances)}</span></div>
+          {(payslip.holiday_pay ?? 0) > 0 && (
+            <div className="text-sm"><span className="text-slate-500">Holiday Pay (30%):</span> <span className="float-right">{money(payslip.holiday_pay)}</span></div>
+          )}
           <div className="mt-2 border-t pt-2 text-sm"><span className="text-slate-600">Total Additions</span> <span className="float-right font-medium">{money(totalAdditions)}</span></div>
         </div>
         <div className="rounded-lg border border-rose-100 p-4">

@@ -131,7 +131,7 @@ export default function Payroll() {
   const totals = useMemo(() => {
     if (!editingPayslip) return { additions: 0, deductions: 0, net: 0 }
     const p = editingPayslip
-    const additions = (p.bonuses ?? 0) + (p.allowances ?? 0)
+    const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
     const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
     const net = p.gross_salary + additions - deductions
     return { additions, deductions, net }
@@ -243,6 +243,7 @@ export default function Payroll() {
       bonuses: 0,
       allowances: 0,
       other_deductions: 0,
+      holiday_pay: 0,
       notes: '',
       net_salary: 0,
       transaction_id: null,
@@ -1151,6 +1152,47 @@ export default function Payroll() {
                 <label className="text-sm text-slate-600">Allowances
                   <input type="number" step="0.01" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm" value={editingPayslip.allowances ?? 0} onChange={(e) => setEditingPayslip({ ...editingPayslip, allowances: Number(e.target.value) })} />
                 </label>
+              </div>
+
+              {/* Special Non-Working Holiday Pay (30%) */}
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-amber-800">Special Non-Working Holiday Pay (30%)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-sm text-slate-600">Days Worked on Holiday
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      className="mt-1 w-full rounded-md border-gray-300 text-sm shadow-sm"
+                      placeholder="0"
+                      value={(() => {
+                        const emp = employees.find(e => e.id === editingPayslip.employee_id)
+                        const dailyRate = (emp?.base_salary ?? 0) / 22
+                        const holidayPay = editingPayslip.holiday_pay ?? 0
+                        return dailyRate > 0 ? (holidayPay / (dailyRate * 0.30)).toFixed(1) : 0
+                      })()}
+                      onChange={(e) => {
+                        const days = Number(e.target.value)
+                        const emp = employees.find(emp => emp.id === editingPayslip.employee_id)
+                        const dailyRate = (emp?.base_salary ?? 0) / 22
+                        const computed = days * dailyRate * 0.30
+                        setEditingPayslip({ ...editingPayslip, holiday_pay: Math.round(computed * 100) / 100 })
+                      }}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-600">Holiday Pay (₱)
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="mt-1 w-full rounded-md border-gray-300 text-sm shadow-sm bg-amber-50"
+                      value={editingPayslip.holiday_pay ?? 0}
+                      onChange={(e) => setEditingPayslip({ ...editingPayslip, holiday_pay: Number(e.target.value) })}
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-amber-600">
+                  Daily rate: ₱{((employees.find(e => e.id === editingPayslip.employee_id)?.base_salary ?? 0) / 22).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (monthly ÷ 22) × 30% per day
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
