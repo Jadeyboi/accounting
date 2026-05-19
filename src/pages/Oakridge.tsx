@@ -91,6 +91,7 @@ export default function Oakridge() {
   }, [billings])
 
   const filtered = useMemo(() => {
+    if (selectedMonth === 'all') return billings
     return billings.filter(b => (b.billing_month || '').slice(0, 7) === selectedMonth)
   }, [billings, selectedMonth])
 
@@ -250,6 +251,7 @@ export default function Oakridge() {
           onChange={e => setSelectedMonth(e.target.value)}
           className="input-field w-auto"
         >
+          <option value="all">All Months</option>
           {monthOptions.map(m => (
             <option key={m} value={m}>{m}</option>
           ))}
