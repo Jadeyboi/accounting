@@ -17,7 +17,8 @@ const categoryLabel: Record<string, string> = {
   electricity: 'Electricity',
   water: 'Water',
   internet: 'Internet',
-  garbage: 'Garbage',
+  garbage: 'Garbage Collection',
+  ftm: 'FTM',
   other: 'Other',
 }
 
@@ -544,6 +545,8 @@ setBillings(data ?? [])
                     <option value="electricity">Electricity</option>
                     <option value="water">Water</option>
                     <option value="internet">Internet</option>
+                    <option value="garbage">Garbage Collection</option>
+                    <option value="ftm">FTM</option>
                     <option value="other">Other</option>
                   </select>
                 </div>
