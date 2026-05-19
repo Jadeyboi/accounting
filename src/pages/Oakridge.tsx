@@ -19,6 +19,7 @@ const categoryLabel: Record<string, string> = {
   internet: 'Internet',
   garbage: 'Garbage Collection',
   ftm: 'FTM',
+  utilities: 'Utilities',
   other: 'Other',
 }
 
@@ -494,6 +495,7 @@ useEffect(() => {
                     <option value="internet">Internet</option>
                     <option value="garbage">Garbage Collection</option>
                     <option value="ftm">FTM</option>
+                    <option value="utilities">Utilities</option>
                     <option value="other">Other</option>
                   </select>
                 </div>

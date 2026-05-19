@@ -263,7 +263,7 @@ export interface OakridgeBilling {
   created_at: string;
   updated_at: string;
   billing_month: string; // "YYYY-MM"
-  category: 'rent' | 'cusa' | 'electricity' | 'water' | 'internet' | 'garbage' | 'ftm' | 'other';
+  category: 'rent' | 'cusa' | 'electricity' | 'water' | 'internet' | 'garbage' | 'ftm' | 'utilities' | 'other';
   description?: string | null;
   amount_due: number;
   amount_paid: number;
