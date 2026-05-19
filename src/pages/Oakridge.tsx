@@ -77,11 +77,15 @@ useEffect(() => {
         schema: 'public',
         table: 'oakridge_billings',
       },
-      () => {
+      payload => {
+        console.log('Realtime update:', payload)
+
         loadData()
       }
     )
-    .subscribe()
+    .subscribe(status => {
+      console.log('Realtime status:', status)
+    })
 
   return () => {
     supabase.removeChannel(channel)
@@ -116,13 +120,15 @@ const loadData = async () => {
     return Array.from(months).sort((a, b) => b.localeCompare(a))
   }, [billings])
 
- const filtered = useMemo(
-  () =>
-    billings.filter(
-      b => (b.billing_month || '').slice(0, 7) === selectedMonth
-    ),
-  [billings, selectedMonth]
-)
+const filtered = useMemo(() => {
+  console.log('SELECTED MONTH:', selectedMonth)
+  console.log('ALL BILLINGS:', billings)
+
+  return billings.filter(b => {
+    const month = (b.billing_month || '').slice(0, 7)
+    return month === selectedMonth
+  })
+}, [billings, selectedMonth])
   const totalDue = useMemo(() => filtered.reduce((s, b) => s + b.amount_due, 0), [filtered])
   const totalPaid = useMemo(() => filtered.reduce((s, b) => s + b.amount_paid, 0), [filtered])
   const remaining = totalDue - totalPaid
