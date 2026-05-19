@@ -48,7 +48,7 @@ export default function Oakridge() {
   const [billings, setBillings] = useState<OakridgeBilling[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth())
+  const [selectedMonth, setSelectedMonth] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editingRecord, setEditingRecord] = useState<OakridgeBilling | null>(null)
   const [saving, setSaving] = useState(false)
