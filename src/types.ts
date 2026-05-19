@@ -257,3 +257,20 @@ export interface FundRequestGroup {
   items: any[]; // JSON array of request items
   updated_at: string;
 }
+
+export interface OakridgeBilling {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  billing_month: string; // "YYYY-MM"
+  category: 'rent' | 'cusa' | 'electricity' | 'water' | 'internet' | 'other';
+  description?: string | null;
+  amount_due: number;
+  amount_paid: number;
+  due_date?: string | null;
+  payment_date?: string | null;
+  status: 'paid' | 'partial' | 'unpaid' | 'overdue';
+  billing_statement_url?: string | null;
+  receipt_url?: string | null;
+  notes?: string | null;
+}
