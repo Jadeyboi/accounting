@@ -67,32 +67,9 @@ export default function Oakridge() {
   const [uploadingBilling, setUploadingBilling] = useState(false)
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
 
-useEffect(() => {
-  loadData()
-
-  const channel = supabase
-    .channel('oakridge-realtime')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'oakridge_billings',
-      },
-      payload => {
-        console.log('Realtime update:', payload)
-
-        loadData()
-      }
-    )
-    .subscribe(status => {
-      console.log('Realtime status:', status)
-    })
-
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}, [])
+  useEffect(() => {
+    loadData()
+  }, [])
 
   const loadData = async () => {
     setLoading(true)
