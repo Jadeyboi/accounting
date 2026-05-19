@@ -93,27 +93,18 @@ useEffect(() => {
   }
 }, [])
 
-const loadData = async () => {
-  setLoading(true)
-  setError(null)
-
-  const { data, error } = await supabase
-    .from('oakridge_billings')
-    .select('*')
-    .order('billing_month', { ascending: false })
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    setError(error.message)
+  const loadData = async () => {
+    setLoading(true)
+    setError(null)
+    const { data, error } = await supabase
+      .from('oakridge_billings')
+      .select('*')
+      .order('billing_month', { ascending: false })
+      .order('created_at', { ascending: false })
+    if (error) { setError(error.message); setLoading(false); return }
+    setBillings((data ?? []) as OakridgeBilling[])
     setLoading(false)
-    return
   }
-
-  console.log('LOADED BILLINGS:', data)
-
-  setBillings((data ?? []) as OakridgeBilling[])
-  setLoading(false)
-}
 
   const monthOptions = useMemo(() => {
     const months = new Set(billings.map(b => b.billing_month))
@@ -121,30 +112,17 @@ const loadData = async () => {
     return Array.from(months).sort((a, b) => b.localeCompare(a))
   }, [billings])
 
-const filtered = useMemo(() => {
-  console.log('SELECTED MONTH:', selectedMonth)
-  console.log('ALL BILLINGS:', billings)
+  const filtered = useMemo(() => {
+    return billings.filter(b => (b.billing_month || '').slice(0, 7) === selectedMonth)
+  }, [billings, selectedMonth])
 
-  return billings.filter(b => {
-    const month = (b.billing_month || '').slice(0, 7)
-    return month === selectedMonth
-  })
-}, [billings, selectedMonth])
   const totalDue = useMemo(() => filtered.reduce((s, b) => s + b.amount_due, 0), [filtered])
   const totalPaid = useMemo(() => filtered.reduce((s, b) => s + b.amount_paid, 0), [filtered])
   const remaining = totalDue - totalPaid
-  const overdueCount = useMemo(
-  () =>
-    filtered.filter(
-      b =>
-        computeStatus(
-          b.amount_due,
-          b.amount_paid,
-          b.due_date || ''
-        ) === 'overdue'
-    ).length,
-  [filtered]
-)
+  const overdueCount = useMemo(() =>
+    filtered.filter(b => computeStatus(b.amount_due, b.amount_paid, b.due_date || '') === 'overdue').length,
+    [filtered]
+  )
 
   const resetForm = () => {
     setEditingRecord(null)
@@ -231,61 +209,30 @@ const filtered = useMemo(() => {
       updated_at: new Date().toISOString(),
     }
 
-try {
-  if (editingRecord) {
-    const { data, error } = await supabase
-      .from('oakridge_billings')
-      .update(payload)
-      .eq('id', editingRecord.id)
-      .select()
-      .single()
-
-    if (error) throw error
-
-    setBillings(prev =>
-      prev.map(item =>
-        item.id === editingRecord.id
-          ? (data as OakridgeBilling)
-          : item
-      )
-    )
-  } else {
-    const { data, error } = await supabase
-      .from('oakridge_billings')
-      .insert(payload)
-      .select()
-      .single()
-
-    if (error) throw error
-
-    setBillings(prev => [
-      data as OakridgeBilling,
-      ...prev,
-    ])
-
-    setSelectedMonth(fMonth)
-  }
-
-  setShowModal(false)
-  resetForm()
-} catch (err: any) {
-  console.error(err)
-  alert(err.message)
-} finally {
-  setSaving(false)
-}
+    try {
+      if (editingRecord) {
+        const { error } = await supabase.from('oakridge_billings').update(payload).eq('id', editingRecord.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('oakridge_billings').insert(payload)
+        if (error) throw error
+      }
+      setShowModal(false)
+      resetForm()
+      setSelectedMonth(fMonth)
+      await loadData()
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this billing record? This cannot be undone.')) return
     const { error } = await supabase.from('oakridge_billings').delete().eq('id', id)
     if (error) { alert(error.message); return }
-    const { data } = await supabase
-  .from('oakridge_billings')
-  .select('*')
-  .order('billing_month', { ascending: false })
-
-setBillings(data ?? [])
+    await loadData()
   }
 
   const viewDoc = async (url: string) => {
