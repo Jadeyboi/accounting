@@ -274,3 +274,14 @@ export interface OakridgeBilling {
   receipt_url?: string | null;
   notes?: string | null;
 }
+
+export interface ActivityLog {
+  id: string;
+  created_at: string;
+  user_id?: string | null;
+  user_email?: string | null;
+  action: string;
+  module: string;
+  description: string;
+  metadata?: any;
+}

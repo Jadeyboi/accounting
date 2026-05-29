@@ -20,6 +20,7 @@ import UserManagement from "@/pages/UserManagement";
 import JobOpenings from "@/pages/JobOpenings";
 import Oakridge from "@/pages/Oakridge";
 import ChangePassword from "@/pages/ChangePassword";
+import ActivityLogs from "@/pages/ActivityLogs";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -315,6 +316,20 @@ export default function App() {
                 >
                   Job Openings
                 </NavLink>
+                {(userRole === 'super_admin' || userRole === 'admin') && (
+                  <NavLink
+                    to="/activity-logs"
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-2 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    Logs
+                  </NavLink>
+                )}
                 {userRole === 'super_admin' && (
                   <NavLink
                     to="/users"
@@ -543,6 +558,21 @@ export default function App() {
                 >
                   Job Openings
                 </NavLink>
+                {(userRole === 'super_admin' || userRole === 'admin') && (
+                  <NavLink
+                    to="/activity-logs"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-3 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    Logs
+                  </NavLink>
+                )}
                 {userRole === 'super_admin' && (
                   <NavLink
                     to="/users"
@@ -588,6 +618,9 @@ export default function App() {
               <Route path="/invoice" element={<Invoice />} />
               <Route path="/invoice-history" element={<InvoiceHistory />} />
               <Route path="/job-openings" element={<JobOpenings />} />
+              {(userRole === 'super_admin' || userRole === 'admin') && (
+                <Route path="/activity-logs" element={<ActivityLogs />} />
+              )}
               {userRole === 'super_admin' && (
                 <Route path="/users" element={<UserManagement />} />
               )}
