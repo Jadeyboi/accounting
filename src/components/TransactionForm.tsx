@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activityLogger";
 import type { TransactionType } from "@/types";
 
 interface Props {
@@ -129,6 +130,8 @@ export default function TransactionForm({ onCreated }: Props) {
       setError(insertError.message);
       return;
     }
+
+    await logActivity('created', 'Transactions', `Created ${type} transaction: ₱${amt.toLocaleString()} — ${category || 'No category'} ${note || ''}`)
 
     setAmount("");
     setCategory("");

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activityLogger";
 import type { Transaction } from "@/types";
 
 interface Props {
@@ -68,8 +69,12 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
 
   const onDelete = async (id: string) => {
     if (!confirm("Delete this transaction?")) return;
+    const t = items.find(x => x.id === id);
     const { error } = await supabase.from("transactions").delete().eq("id", id);
-    if (error) { alert(error.message); } else { onChanged(); }
+    if (error) { alert(error.message); } else {
+      await logActivity('deleted', 'Transactions', `Deleted ${t?.type ?? ''} transaction: ₱${t?.amount?.toLocaleString() ?? '?'} — ${t?.category ?? ''} ${t?.note ?? ''}`)
+      onChanged();
+    }
   };
 
   const onBulkDelete = async () => {
@@ -82,6 +87,7 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
       .in("id", Array.from(selectedIds));
     setBulkDeleting(false);
     if (error) { alert(error.message); return; }
+    await logActivity('deleted', 'Transactions', `Bulk deleted ${selectedIds.size} transaction(s)`)
     setSelectedIds(new Set());
     onChanged();
   };
@@ -144,6 +150,7 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
     if (receipt_url !== undefined) payload.receipt_url = receipt_url;
     const { error } = await supabase.from("transactions").update(payload).eq("id", editId!);
     if (error) return alert(error.message);
+    await logActivity('updated', 'Transactions', `Updated transaction: ${editFields.type} ₱${Number(editFields.amount).toLocaleString()} — ${editFields.category || ''} ${editFields.note || ''}`)
     cancelEdit();
     onChanged();
   };
