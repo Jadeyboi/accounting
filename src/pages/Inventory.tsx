@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { InventoryItem, InventoryHistory } from '@/types'
 import * as QRCode from 'qrcode'
 import QrScanner from 'qr-scanner'
@@ -584,6 +585,7 @@ export default function Inventory() {
         }
         return
       }
+      await logActivity('updated', 'Inventory', `Updated item: ${itemDescription}`)
       fetchItems()
       setShowModal(false)
       await resetForm('MON')
@@ -600,6 +602,7 @@ export default function Inventory() {
         }
         return
       }
+      await logActivity('created', 'Inventory', `Added item: ${itemDescription} (${assetTag})`)
       fetchItems()
       setShowModal(false)
       await resetForm('MON')
@@ -639,12 +642,14 @@ export default function Inventory() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this item?')) {
+      const item = items.find(i => i.id === id)
       const { error } = await supabase
         .from('inventory')
         .delete()
         .eq('id', id)
       
       if (!error) {
+        await logActivity('deleted', 'Inventory', `Deleted item: ${item?.item_description ?? 'Unknown'}`)
         fetchItems()
       }
     }

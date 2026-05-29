@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { Employee, LeaveRequest } from '@/types'
 
 const formatDate = (dateString: string | null | undefined): string => {
@@ -107,6 +108,7 @@ export default function Leave() {
       return
     }
 
+    await logActivity('created', 'Leave', `Leave request: ${employee?.name ?? 'Unknown'} — ${leaveType} (${daysCount} days)`)
     setShowModal(false)
     resetForm()
     await loadData()
@@ -157,6 +159,8 @@ export default function Leave() {
       return
     }
 
+    const approvedEmployee = employees.find(e => e.id === leave.employee_id)
+    await logActivity('updated', 'Leave', `Approved leave for ${approvedEmployee?.name ?? 'Unknown'}`)
     await loadData()
   }
 
@@ -171,6 +175,9 @@ export default function Leave() {
       return
     }
 
+    const rejectedLeave = leaveRequests.find(l => l.id === leaveId)
+    const rejectedEmployee = employees.find(e => e.id === rejectedLeave?.employee_id)
+    await logActivity('updated', 'Leave', `Rejected leave for ${rejectedEmployee?.name ?? 'Unknown'}`)
     await loadData()
   }
 
@@ -226,6 +233,8 @@ export default function Leave() {
       return
     }
 
+    const deletedEmployee = employees.find(e => e.id === leaveToDelete.employee_id)
+    await logActivity('deleted', 'Leave', `Deleted leave request for ${deletedEmployee?.name ?? 'Unknown'}`)
     await loadData()
   }
 

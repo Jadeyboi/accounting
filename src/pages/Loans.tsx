@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { Employee, Loan, LoanPayment } from '@/types'
 
 const formatDate = (dateString: string | null | undefined): string => {
@@ -156,11 +157,15 @@ export default function Loans() {
           .update(payload)
           .eq('id', editingLoan.id)
         if (error) throw error
+        const emp = employees.find(e => e.id === employeeId)
+        await logActivity('updated', 'Loans', `Updated loan for ${emp?.name ?? 'Unknown'}`)
       } else {
         const { error } = await supabase
           .from('loans')
           .insert(payload)
         if (error) throw error
+        const emp = employees.find(e => e.id === employeeId)
+        await logActivity('created', 'Loans', `Created ${getLoanTypeLabel(loanType)} loan for ${emp?.name ?? 'Unknown'}: ₱${principal.toLocaleString()}`)
       }
 
       setShowModal(false)
@@ -235,12 +240,15 @@ export default function Loans() {
     }
 
     try {
+      const loan = loans.find(l => l.id === loanId)
+      const emp = employees.find(e => e.id === loan?.employee_id)
       const { error } = await supabase
         .from('loans')
         .delete()
         .eq('id', loanId)
       
       if (error) throw error
+      await logActivity('deleted', 'Loans', `Deleted loan for ${emp?.name ?? 'Unknown'}`)
       await loadData()
     } catch (err: any) {
       alert(err.message)

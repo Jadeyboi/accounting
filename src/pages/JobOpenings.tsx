@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { JobOpening, Applicant } from '@/types'
 
 const formatDate = (d: string | null | undefined) => {
@@ -145,9 +146,11 @@ export default function JobOpenings() {
     if (editingJob) {
       const { error } = await supabase.from('job_openings').update(payload).eq('id', editingJob.id)
       if (error) { alert(error.message); return }
+      await logActivity('updated', 'Job Openings', `Updated job: ${title.trim()}`)
     } else {
       const { error } = await supabase.from('job_openings').insert(payload)
       if (error) { alert(error.message); return }
+      await logActivity('created', 'Job Openings', `Posted job: ${title.trim()}`)
     }
     setShowModal(false); resetJobForm(); await loadJobs()
   }
@@ -187,19 +190,24 @@ export default function JobOpenings() {
     } else {
       const { error } = await supabase.from('applicants').insert(payload)
       if (error) { alert(error.message); return }
+      await logActivity('created', 'Job Openings', `Added applicant: ${appFirstName.trim()} ${appLastName.trim()} for ${viewingJob.title}`)
     }
     setShowApplicantModal(false); resetApplicantForm(); await loadApplicants(viewingJob.id)
   }
 
   const handleDeleteJob = async (id: string) => {
     if (!confirm('Delete this job opening?')) return
+    const job = jobs.find(j => j.id === id)
     await supabase.from('job_openings').delete().eq('id', id)
+    await logActivity('deleted', 'Job Openings', `Deleted job: ${job?.title ?? 'Unknown'}`)
     await loadJobs()
   }
 
   const handleDeleteApplicant = async (id: string) => {
     if (!confirm('Delete this applicant?')) return
+    const applicant = applicants.find(a => a.id === id)
     await supabase.from('applicants').delete().eq('id', id)
+    await logActivity('deleted', 'Job Openings', `Deleted applicant: ${applicant?.first_name ?? ''} ${applicant?.last_name ?? ''}`)
     if (viewingJob) await loadApplicants(viewingJob.id)
   }
 

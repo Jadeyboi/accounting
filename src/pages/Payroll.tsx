@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { Employee, Payslip, Loan } from '@/types'
 import PayslipView from '@/components/PayslipView'
 
@@ -296,6 +297,8 @@ export default function Payroll() {
     // If linked transaction exists, you may also delete or keep it. We'll keep for audit.
     const { error } = await supabase.from('payslips').delete().eq('id', id)
     if (error) return alert(error.message)
+    const emp = allEmployees.find(e => e.id === pay?.employee_id)
+    await logActivity('deleted', 'Payroll', `Deleted payslip for ${emp?.name ?? 'Unknown'}`)
     await refresh()
   }
 
@@ -344,6 +347,7 @@ export default function Payroll() {
 
     setEditingPayslip(null)
     setMode('list')
+    await logActivity('created', 'Payroll', `Processed payslip for ${currentEmployee?.name ?? 'Unknown'}`)
     await refresh()
   }
 
@@ -547,6 +551,7 @@ export default function Payroll() {
         await refresh()
       }, 500)
       
+      await logActivity('created', 'Payroll', `Bulk generated ${newPayslips.length} payslips`)
       alert(`${newPayslips.length} payslips generated successfully with linked expense transactions and loan deductions!`)
     } catch (error) {
       console.error('Bulk generation error:', error)
@@ -669,6 +674,7 @@ export default function Payroll() {
     const { error } = await supabase.from('payslips').delete().in('id', allIds)
     setDeletingPeriods(false)
     if (error) { alert(error.message); return }
+    await logActivity('deleted', 'Payroll', `Deleted ${toDelete.length} payroll period(s)`)
     setSelectedPeriodKeys(new Set())
     await refresh()
   }

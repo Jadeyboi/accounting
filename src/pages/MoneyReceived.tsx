@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { MoneyReceived } from '@/types'
 
 const formatDate = (dateString: string | null | undefined): string => {
@@ -164,11 +165,14 @@ export default function MoneyReceived() {
           .update(payload)
           .eq('id', editingRecord.id)
         if (error) throw error
+        await logActivity('updated', 'Money Received', `Updated record from ${senderName.trim()}`)
       } else {
         const { error } = await supabase
           .from('money_received')
           .insert(payload)
         if (error) throw error
+
+        await logActivity('created', 'Money Received', `Received $${amountUSDNum.toLocaleString(undefined, { minimumFractionDigits: 2 })} from ${senderName.trim()} — ${purpose.trim()}`)
 
         // Auto-create cash-in transaction
         const { error: txError } = await supabase
@@ -197,12 +201,14 @@ export default function MoneyReceived() {
     }
 
     try {
+      const record = moneyReceived.find(r => r.id === id)
       const { error } = await supabase
         .from('money_received')
         .delete()
         .eq('id', id)
       
       if (error) throw error
+      await logActivity('deleted', 'Money Received', `Deleted record from ${record?.sender_name ?? 'Unknown'}`)
       await loadData()
     } catch (err: any) {
       alert(err.message)

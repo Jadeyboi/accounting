@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activityLogger";
 import type { Saving } from "@/types";
 
 export default function Savings() {
@@ -73,6 +74,7 @@ export default function Savings() {
       .insert([payload])
       .select();
     if (error) return alert(error.message);
+    await logActivity('created', 'Savings', `Added saving: ${description || 'No description'} — ₱${Number(amount).toLocaleString()}`)
     setDescription("");
     setAmount("");
     setAccount("");
@@ -82,8 +84,10 @@ export default function Savings() {
 
   const onDelete = async (id: string) => {
     if (!confirm("Delete this saving entry?")) return;
+    const item = items.find(i => i.id === id);
     const { error } = await supabase.from("savings").delete().eq("id", id);
     if (error) return alert(error.message);
+    await logActivity('deleted', 'Savings', `Deleted saving: ${item?.description || 'No description'} — ₱${item?.amount?.toLocaleString() ?? '0'}`)
     await load();
   };
 
@@ -229,6 +233,7 @@ export default function Savings() {
       })
       .eq("id", editId!);
     if (error) return alert(error.message);
+    await logActivity('updated', 'Savings', `Updated saving: ${editFields.description || 'No description'} — ₱${Number(editFields.amount).toLocaleString()}`)
     cancelEdit();
     await load();
   };

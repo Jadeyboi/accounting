@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { OakridgeBilling } from '@/types'
 
 const formatDate = (d: string | null | undefined): string => {
@@ -192,9 +193,11 @@ export default function Oakridge() {
       if (editingRecord) {
         const { error } = await supabase.from('oakridge_billings').update(payload).eq('id', editingRecord.id)
         if (error) throw error
+        await logActivity('updated', 'Oakridge', `Updated ${categoryLabel[fCategory] ?? fCategory} billing for ${fMonth}`)
       } else {
         const { error } = await supabase.from('oakridge_billings').insert(payload)
         if (error) throw error
+        await logActivity('created', 'Oakridge', `Added ${categoryLabel[fCategory] ?? fCategory} billing: ₱${amountDue.toLocaleString()} for ${fMonth}`)
       }
       setShowModal(false)
       resetForm()
@@ -209,8 +212,10 @@ export default function Oakridge() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this billing record? This cannot be undone.')) return
+    const record = billings.find(b => b.id === id)
     const { error } = await supabase.from('oakridge_billings').delete().eq('id', id)
     if (error) { alert(error.message); return }
+    await logActivity('deleted', 'Oakridge', `Deleted ${categoryLabel[record?.category ?? ''] ?? record?.category ?? 'Unknown'} billing for ${record?.billing_month ?? 'Unknown'}`)
     await loadData()
   }
 

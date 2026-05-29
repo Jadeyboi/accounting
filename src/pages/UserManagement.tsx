@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 
 interface User {
   id: string
@@ -108,6 +109,7 @@ export default function UserManagement() {
       }
 
       alert(`User "${fullName.trim()}" created! They will receive a confirmation email at ${email.trim()}.`)
+      await logActivity('created', 'Users', `Created user: ${email.trim()} (${role})`)
       setShowModal(false)
       resetForm()
       await loadUsers()
@@ -120,6 +122,7 @@ export default function UserManagement() {
     if (!confirm('Are you sure you want to delete this user?')) return
 
     try {
+      const user = users.find(u => u.id === userId)
       // Delete from users table
       const { error } = await supabase
         .from('users')
@@ -128,6 +131,7 @@ export default function UserManagement() {
 
       if (error) throw error
 
+      await logActivity('deleted', 'Users', `Deleted user: ${user?.email ?? 'Unknown'}`)
       alert('User removed from system!')
       await loadUsers()
     } catch (err: any) {
@@ -137,6 +141,7 @@ export default function UserManagement() {
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     try {
+      const user = users.find(u => u.id === userId)
       const { error } = await supabase
         .from('users')
         .update({ role: newRole })
@@ -144,6 +149,7 @@ export default function UserManagement() {
 
       if (error) throw error
 
+      await logActivity('updated', 'Users', `Updated role for ${user?.email ?? 'Unknown'} to ${newRole}`)
       alert('User role updated successfully!')
       await loadUsers()
     } catch (err: any) {

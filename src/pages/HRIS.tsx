@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logActivity } from '@/lib/activityLogger'
 import type { Employee, SalaryHistory } from '@/types'
 
 const formatDate = (dateString: string | null | undefined): string => {
@@ -132,6 +133,7 @@ export default function HRIS() {
       })
       .eq('id', terminatingEmployee.id)
     if (error) { alert(error.message); return }
+    await logActivity('updated', 'HRIS', `Terminated employee: ${terminatingEmployee.name} — Reason: ${terminationReason}`)
     setShowTerminateModal(false)
     setTerminatingEmployee(null)
     setTerminationDate('')
@@ -334,6 +336,8 @@ export default function HRIS() {
         return
       }
 
+      await logActivity('updated', 'HRIS', `Updated employee: ${fullName}`)
+
       // Record salary history if salary changed
       const newSalaryNum = baseSalary ? Number(baseSalary) : null
       const oldSalaryNum = editingEmployee.base_salary ?? null
@@ -357,6 +361,8 @@ export default function HRIS() {
         alert(error.message)
         return
       }
+
+      await logActivity('created', 'HRIS', `Added employee: ${fullName}`)
     }
 
     setShowModal(false)
@@ -369,6 +375,7 @@ export default function HRIS() {
       return
     }
 
+    const employee = employees.find(e => e.id === id)
     const { error } = await supabase
       .from('employees')
       .delete()
@@ -379,6 +386,7 @@ export default function HRIS() {
       return
     }
 
+    await logActivity('deleted', 'HRIS', `Deleted employee: ${employee?.name ?? 'Unknown'}`)
     await loadEmployees()
   }
 
