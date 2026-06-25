@@ -85,7 +85,7 @@ export default function Profitability() {
           supabase.from('pm_expenses').select('amount').eq('month', mo),
         ])
         const rev = (r.data ?? []).reduce((s: number, x: { amount: number }) => s + x.amount, 0)
-        const payroll = (ec2.data ?? []).reduce((s: number, x: PmEmployeeCost) => s + totalEmpCost(x), 0)
+        const payroll = (ec2.data ?? []).reduce((s: number, x: any) => s + totalEmpCost(x as PmEmployeeCost), 0)
         const opex = (ex2.data ?? []).reduce((s: number, x: { amount: number }) => s + x.amount, 0)
         const exp = payroll + opex
         return { month: mo, revenue: rev, expenses: exp, profit: rev - exp }
