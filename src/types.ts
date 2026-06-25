@@ -285,3 +285,71 @@ export interface ActivityLog {
   description: string;
   metadata?: any;
 }
+
+// ─── Profitability Module ─────────────────────────────────────────────────────
+
+export interface PmClient {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  name: string;
+  contract_start_date?: string | null;
+  monthly_revenue: number;
+  contract_value: number;
+  status: 'active' | 'inactive';
+  notes?: string | null;
+}
+
+export interface PmProject {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  client_id: string;
+  name: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  status: 'active' | 'inactive' | 'completed';
+  monthly_revenue_target: number;
+  notes?: string | null;
+}
+
+export interface PmRevenue {
+  id: string;
+  created_at: string;
+  project_id: string;
+  client_id: string;
+  month: string;
+  amount: number;
+  notes?: string | null;
+}
+
+export interface PmEmployeeCost {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  project_id: string;
+  month: string;
+  employee_name: string;
+  position?: string | null;
+  basic_salary: number;
+  sss: number;
+  philhealth: number;
+  pagibig: number;
+  ot_pay: number;
+  night_differential: number;
+  incentives: number;
+  other_costs: number;
+}
+
+export interface PmExpense {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  month: string;
+  category: 'recruitment' | 'software' | 'equipment' | 'internet' | 'office' | 'training' | 'miscellaneous';
+  amount: number;
+  description?: string | null;
+  scope: 'project' | 'client' | 'company';
+  project_id?: string | null;
+  client_id?: string | null;
+}

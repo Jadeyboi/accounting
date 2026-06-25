@@ -19,6 +19,11 @@ import Login from "@/pages/Login";
 import UserManagement from "@/pages/UserManagement";
 import JobOpenings from "@/pages/JobOpenings";
 import Oakridge from "@/pages/Oakridge";
+import Profitability from "@/pages/Profitability";
+import ProfitabilityClients from "@/pages/ProfitabilityClients";
+import ProfitabilityEmployees from "@/pages/ProfitabilityEmployees";
+import ProfitabilityExpenses from "@/pages/ProfitabilityExpenses";
+import ProfitabilityRevenues from "@/pages/ProfitabilityRevenues";
 import ChangePassword from "@/pages/ChangePassword";
 import ActivityLogs from "@/pages/ActivityLogs";
 import type { SyntheticEvent } from "react";
@@ -219,6 +224,18 @@ export default function App() {
                   }
                 >
                   Oakridge
+                </NavLink>
+                <NavLink
+                  to="/profitability"
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                    }`
+                  }
+                >
+                  P&amp;L
                 </NavLink>
                 <NavLink
                   to="/leave"
@@ -455,6 +472,19 @@ export default function App() {
                   Oakridge
                 </NavLink>
                 <NavLink
+                  to="/profitability"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-3 font-medium transition-all ${
+                      isActive
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                    }`
+                  }
+                >
+                  P&amp;L
+                </NavLink>
+                <NavLink
                   to="/leave"
                   onClick={() => setMobileMenuOpen(false)}
                   className={({ isActive }) =>
@@ -610,6 +640,11 @@ export default function App() {
               <Route path="/payroll" element={<Payroll />} />
               <Route path="/hris" element={<HRIS />} />
               <Route path="/oakridge" element={<Oakridge />} />
+              <Route path="/profitability" element={<Profitability />} />
+              <Route path="/profitability/clients" element={<ProfitabilityClients />} />
+              <Route path="/profitability/employees" element={<ProfitabilityEmployees />} />
+              <Route path="/profitability/expenses" element={<ProfitabilityExpenses />} />
+              <Route path="/profitability/revenues" element={<ProfitabilityRevenues />} />
               <Route path="/leave" element={<Leave />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/loans" element={<Loans />} />
