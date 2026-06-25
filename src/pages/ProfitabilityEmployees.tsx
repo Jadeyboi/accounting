@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { PmEmployeeCost, PmProject, PmClient } from '@/types'
+import type { PmEmployeeCost, PmProject, PmClient, Employee } from '@/types'
 
 const fmt = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const currentMonth = () => new Date().toISOString().slice(0, 7)
@@ -16,6 +16,16 @@ export default function ProfitabilityEmployees() {
   const [filterProject, setFilterProject] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<PmEmployeeCost | null>(null)
+
+  // HRIS Import state
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [hrisEmployees, setHrisEmployees] = useState<Employee[]>([])
+  const [importProject, setImportProject] = useState('')
+  const [importMonth, setImportMonth] = useState(currentMonth())
+  const [selectedHrisIds, setSelectedHrisIds] = useState<Set<string>>(new Set())
+  const [importing, setImporting] = useState(false)
+  // Per-employee overrides during import
+  const [importOverrides, setImportOverrides] = useState<Record<string, { sss: string; philhealth: string; pagibig: string; ot: string; nd: string; incentives: string; other: string }>>({})
 
   // Form
   const [fProject, setFProject] = useState('')
@@ -44,6 +54,75 @@ export default function ProfitabilityEmployees() {
     setProjects((p.data ?? []) as PmProject[])
     setClients((c.data ?? []) as PmClient[])
     setLoading(false)
+  }
+
+  const openImportModal = async () => {
+    setImportProject('')
+    setImportMonth(selectedMonth)
+    setSelectedHrisIds(new Set())
+    setImportOverrides({})
+    setShowImportModal(true)
+    // Load HRIS active employees
+    const { data } = await supabase
+      .from('employees')
+      .select('*')
+      .neq('status', 'terminated')
+      .order('name')
+    setHrisEmployees((data ?? []) as Employee[])
+  }
+
+  const toggleHrisEmployee = (id: string, emp: Employee) => {
+    setSelectedHrisIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+        // Pre-fill overrides with 0 for new selections
+        if (!importOverrides[id]) {
+          setImportOverrides(o => ({
+            ...o,
+            [id]: { sss: '0', philhealth: '0', pagibig: '0', ot: '0', nd: '0', incentives: '0', other: '0' }
+          }))
+        }
+      }
+      return next
+    })
+  }
+
+  const updateOverride = (id: string, field: string, value: string) => {
+    setImportOverrides(o => ({ ...o, [id]: { ...o[id], [field]: value } }))
+  }
+
+  const handleImport = async () => {
+    if (!importProject) { alert('Please select a project'); return }
+    if (selectedHrisIds.size === 0) { alert('Select at least one employee'); return }
+    setImporting(true)
+    const records = Array.from(selectedHrisIds).map(id => {
+      const emp = hrisEmployees.find(e => e.id === id)!
+      const ov = importOverrides[id] ?? {}
+      return {
+        project_id: importProject,
+        month: importMonth,
+        employee_name: emp.name,
+        position: emp.position ?? null,
+        basic_salary: emp.base_salary ?? 0,
+        sss: Number(ov.sss ?? 0),
+        philhealth: Number(ov.philhealth ?? 0),
+        pagibig: Number(ov.pagibig ?? 0),
+        ot_pay: Number(ov.ot ?? 0),
+        night_differential: Number(ov.nd ?? 0),
+        incentives: Number(ov.incentives ?? 0),
+        other_costs: Number(ov.other ?? 0),
+        updated_at: new Date().toISOString(),
+      }
+    })
+    const { error } = await supabase.from('pm_employee_costs').insert(records)
+    setImporting(false)
+    if (error) { alert(error.message); return }
+    setShowImportModal(false)
+    setSelectedMonth(importMonth)
+    await loadAll()
   }
 
   const filtered = useMemo(() => employees.filter(e => {
@@ -105,7 +184,12 @@ export default function ProfitabilityEmployees() {
           <h2 className="text-2xl font-bold text-gray-900">Employee Costs</h2>
           <p className="text-sm text-gray-600">Monthly payroll costs per project</p>
         </div>
-        <button onClick={() => openModal()} className="btn-primary">+ Add Employee Cost</button>
+        <div className="flex gap-2">
+          <button onClick={openImportModal} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+            ↓ Import from HRIS
+          </button>
+          <button onClick={() => openModal()} className="btn-primary">+ Add Manually</button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -202,6 +286,116 @@ export default function ProfitabilityEmployees() {
             <div className="flex justify-end gap-3 border-t p-6">
               <button onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
               <button onClick={save} className="btn-primary">{editing ? 'Update' : 'Add'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HRIS Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-6 py-5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Import Employees from HRIS</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Select employees and assign them to a project. Base salary is auto-filled.</p>
+              </div>
+              <button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Project *</label>
+                  <select value={importProject} onChange={e => setImportProject(e.target.value)} className="input-field w-full">
+                    <option value="">Select project...</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Month *</label>
+                  <input type="month" value={importMonth} onChange={e => setImportMonth(e.target.value)} className="input-field w-full" />
+                </div>
+              </div>
+
+              {hrisEmployees.length === 0 ? (
+                <p className="text-sm text-gray-500 py-4 text-center">No active employees found in HRIS.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-700">{hrisEmployees.length} active employees — select to import:</p>
+                    <button
+                      onClick={() => {
+                        if (selectedHrisIds.size === hrisEmployees.length) {
+                          setSelectedHrisIds(new Set())
+                        } else {
+                          const all = new Set(hrisEmployees.map(e => e.id))
+                          setSelectedHrisIds(all)
+                          const overrides: typeof importOverrides = {}
+                          hrisEmployees.forEach(e => {
+                            if (!importOverrides[e.id]) overrides[e.id] = { sss: '0', philhealth: '0', pagibig: '0', ot: '0', nd: '0', incentives: '0', other: '0' }
+                          })
+                          setImportOverrides(o => ({ ...o, ...overrides }))
+                        }
+                      }}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      {selectedHrisIds.size === hrisEmployees.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+
+                  {hrisEmployees.map(emp => {
+                    const selected = selectedHrisIds.has(emp.id)
+                    const ov = importOverrides[emp.id]
+                    return (
+                      <div key={emp.id} className={`rounded-lg border p-3 transition-colors ${selected ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'}`}>
+                        <div className="flex items-center gap-3 mb-2">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => toggleHrisEmployee(emp.id, emp)}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900">{emp.name}</span>
+                            <span className="ml-2 text-xs text-gray-500">{emp.position ?? ''}</span>
+                          </div>
+                          <span className="text-sm font-medium text-gray-700">{emp.base_salary ? fmt(emp.base_salary) : 'No salary'}</span>
+                        </div>
+                        {selected && ov && (
+                          <div className="grid grid-cols-4 gap-2 ml-7 mt-2">
+                            {[['SSS','sss'],['PhilHealth','philhealth'],['Pag-IBIG','pagibig'],['OT Pay','ot'],['Night Diff','nd'],['Incentives','incentives'],['Other','other']].map(([label, field]) => (
+                              <div key={field}>
+                                <label className="text-xs text-gray-500">{label}</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={ov[field as keyof typeof ov]}
+                                  onChange={e => updateOverride(emp.id, field, e.target.value)}
+                                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="sticky bottom-0 flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-4">
+              <span className="text-sm text-gray-600">{selectedHrisIds.size} employee(s) selected</span>
+              <div className="flex gap-3">
+                <button onClick={() => setShowImportModal(false)} className="btn-secondary">Cancel</button>
+                <button
+                  onClick={handleImport}
+                  disabled={importing || selectedHrisIds.size === 0 || !importProject}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {importing ? 'Importing...' : `Import ${selectedHrisIds.size} Employee(s)`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
