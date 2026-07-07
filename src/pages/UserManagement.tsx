@@ -6,7 +6,7 @@ interface User {
   id: string
   email: string
   full_name: string | null
-  role: 'super_admin' | 'admin' | 'user'
+  role: 'super_admin' | 'admin' | 'hr' | 'user'
   created_at: string
 }
 
@@ -21,7 +21,7 @@ export default function UserManagement() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
-  const [role, setRole] = useState<'admin' | 'user'>('user')
+  const [role, setRole] = useState<'admin' | 'hr' | 'user'>('user')
 
   useEffect(() => {
     loadUsers()
@@ -240,6 +240,7 @@ export default function UserManagement() {
                           className="text-sm rounded border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                         >
                           <option value="user">User</option>
+                          <option value="hr">HR</option>
                           <option value="admin">Admin</option>
                           <option value="super_admin">Super Admin</option>
                         </select>
@@ -325,10 +326,11 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value as 'admin' | 'user')}
+                  onChange={(e) => setRole(e.target.value as 'admin' | 'hr' | 'user')}
                   className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 >
                   <option value="user">User</option>
+                  <option value="hr">HR</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

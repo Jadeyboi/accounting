@@ -26,6 +26,8 @@ import ProfitabilityExpenses from "@/pages/ProfitabilityExpenses";
 import ProfitabilityRevenues from "@/pages/ProfitabilityRevenues";
 import ChangePassword from "@/pages/ChangePassword";
 import ActivityLogs from "@/pages/ActivityLogs";
+import AccessDenied from "@/pages/AccessDenied";
+import HRDashboard from "@/pages/HRDashboard";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -77,6 +79,16 @@ export default function App() {
     setUserRole(null);
   };
 
+  // HR role — redirect / to HRDashboard, restrict all other routes
+  const canAccess = (path: string): boolean => {
+    if (userRole === 'super_admin' || userRole === 'admin') return true;
+    if (userRole === 'hr') {
+      const hrRoutes = ['/payroll', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users'];
+      return hrRoutes.some(r => path === r || path.startsWith(r));
+    }
+    return true; // user role sees everything except admin-only pages
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -99,7 +111,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="min-h-screen p-2 sm:p-4">
         <div className="mx-auto max-w-6xl">
           <header className="glass animate-fadeIn mb-4 sm:mb-6 rounded-2xl p-4 sm:p-6 shadow-xl">
@@ -140,6 +152,21 @@ export default function App() {
               <div className="hidden lg:flex items-center gap-4">
                 <NotificationsBell />
                 <nav className="flex flex-wrap gap-2 text-sm">
+                {userRole === 'hr' && (
+                  <NavLink
+                    to="/hr-dashboard"
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-2 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    HR Dashboard
+                  </NavLink>
+                )}
+                {canAccess('/') && (
                 <NavLink
                   to="/"
                   end
@@ -153,6 +180,8 @@ export default function App() {
                 >
                   Home
                 </NavLink>
+                )}
+                {canAccess('/monthly') && (
                 <NavLink
                   to="/monthly"
                   className={({ isActive }) =>
@@ -165,6 +194,8 @@ export default function App() {
                 >
                   Monthly
                 </NavLink>
+                )}
+                {canAccess('/reports') && (
                 <NavLink
                   to="/reports"
                   className={({ isActive }) =>
@@ -177,6 +208,8 @@ export default function App() {
                 >
                   Reports
                 </NavLink>
+                )}
+                {canAccess('/savings') && (
                 <NavLink
                   to="/savings"
                   className={({ isActive }) =>
@@ -189,6 +222,8 @@ export default function App() {
                 >
                   Savings
                 </NavLink>
+                )}
+                {canAccess('/payroll') && (
                 <NavLink
                   to="/payroll"
                   className={({ isActive }) =>
@@ -201,6 +236,8 @@ export default function App() {
                 >
                   Payroll
                 </NavLink>
+                )}
+                {canAccess('/hris') && (
                 <NavLink
                   to="/hris"
                   className={({ isActive }) =>
@@ -213,6 +250,8 @@ export default function App() {
                 >
                   HRIS
                 </NavLink>
+                )}
+                {canAccess('/oakridge') && (
                 <NavLink
                   to="/oakridge"
                   className={({ isActive }) =>
@@ -225,6 +264,8 @@ export default function App() {
                 >
                   Oakridge
                 </NavLink>
+                )}
+                {canAccess('/profitability') && (
                 <NavLink
                   to="/profitability"
                   className={({ isActive }) =>
@@ -237,6 +278,8 @@ export default function App() {
                 >
                   P&amp;L
                 </NavLink>
+                )}
+                {canAccess('/leave') && (
                 <NavLink
                   to="/leave"
                   className={({ isActive }) =>
@@ -249,6 +292,8 @@ export default function App() {
                 >
                   Leave
                 </NavLink>
+                )}
+                {canAccess('/inventory') && (
                 <NavLink
                   to="/inventory"
                   className={({ isActive }) =>
@@ -261,6 +306,8 @@ export default function App() {
                 >
                   Inventory
                 </NavLink>
+                )}
+                {canAccess('/loans') && (
                 <NavLink
                   to="/loans"
                   className={({ isActive }) =>
@@ -273,6 +320,8 @@ export default function App() {
                 >
                   Loans
                 </NavLink>
+                )}
+                {canAccess('/money-received') && (
                 <NavLink
                   to="/money-received"
                   className={({ isActive }) =>
@@ -285,6 +334,8 @@ export default function App() {
                 >
                   Money Received
                 </NavLink>
+                )}
+                {canAccess('/request-funds') && (
                 <NavLink
                   to="/request-funds"
                   className={({ isActive }) =>
@@ -297,6 +348,8 @@ export default function App() {
                 >
                   Request Funds
                 </NavLink>
+                )}
+                {canAccess('/invoice') && (
                 <NavLink
                   to="/invoice"
                   className={({ isActive }) =>
@@ -309,6 +362,8 @@ export default function App() {
                 >
                   Invoice
                 </NavLink>
+                )}
+                {canAccess('/invoice-history') && (
                 <NavLink
                   to="/invoice-history"
                   className={({ isActive }) =>
@@ -321,6 +376,8 @@ export default function App() {
                 >
                   History
                 </NavLink>
+                )}
+                {canAccess('/job-openings') && (
                 <NavLink
                   to="/job-openings"
                   className={({ isActive }) =>
@@ -333,7 +390,8 @@ export default function App() {
                 >
                   Job Openings
                 </NavLink>
-                {(userRole === 'super_admin' || userRole === 'admin') && (
+                )}
+                {(userRole === 'super_admin' || userRole === 'admin' || userRole === 'hr') && (
                   <NavLink
                     to="/activity-logs"
                     className={({ isActive }) =>
@@ -347,7 +405,7 @@ export default function App() {
                     Logs
                   </NavLink>
                 )}
-                {userRole === 'super_admin' && (
+                {(userRole === 'super_admin' || userRole === 'hr') && (
                   <NavLink
                     to="/users"
                     className={({ isActive }) =>
@@ -379,6 +437,22 @@ export default function App() {
                   <span className="font-medium text-blue-700">Notifications</span>
                   <NotificationsBell />
                 </div>
+                {userRole === 'hr' && (
+                  <NavLink
+                    to="/hr-dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-3 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    HR Dashboard
+                  </NavLink>
+                )}
+                {canAccess('/') && (
                 <NavLink
                   to="/"
                   end
@@ -393,6 +467,8 @@ export default function App() {
                 >
                   Home
                 </NavLink>
+                )}
+                {canAccess('/monthly') && (
                 <NavLink
                   to="/monthly"
                   onClick={() => setMobileMenuOpen(false)}
@@ -406,6 +482,8 @@ export default function App() {
                 >
                   Monthly
                 </NavLink>
+                )}
+                {canAccess('/reports') && (
                 <NavLink
                   to="/reports"
                   onClick={() => setMobileMenuOpen(false)}
@@ -419,6 +497,8 @@ export default function App() {
                 >
                   Reports
                 </NavLink>
+                )}
+                {canAccess('/savings') && (
                 <NavLink
                   to="/savings"
                   onClick={() => setMobileMenuOpen(false)}
@@ -432,6 +512,8 @@ export default function App() {
                 >
                   Savings
                 </NavLink>
+                )}
+                {canAccess('/payroll') && (
                 <NavLink
                   to="/payroll"
                   onClick={() => setMobileMenuOpen(false)}
@@ -445,6 +527,8 @@ export default function App() {
                 >
                   Payroll
                 </NavLink>
+                )}
+                {canAccess('/hris') && (
                 <NavLink
                   to="/hris"
                   onClick={() => setMobileMenuOpen(false)}
@@ -458,6 +542,8 @@ export default function App() {
                 >
                   HRIS
                 </NavLink>
+                )}
+                {canAccess('/oakridge') && (
                 <NavLink
                   to="/oakridge"
                   onClick={() => setMobileMenuOpen(false)}
@@ -471,6 +557,8 @@ export default function App() {
                 >
                   Oakridge
                 </NavLink>
+                )}
+                {canAccess('/profitability') && (
                 <NavLink
                   to="/profitability"
                   onClick={() => setMobileMenuOpen(false)}
@@ -484,6 +572,8 @@ export default function App() {
                 >
                   P&amp;L
                 </NavLink>
+                )}
+                {canAccess('/leave') && (
                 <NavLink
                   to="/leave"
                   onClick={() => setMobileMenuOpen(false)}
@@ -497,6 +587,8 @@ export default function App() {
                 >
                   Leave
                 </NavLink>
+                )}
+                {canAccess('/inventory') && (
                 <NavLink
                   to="/inventory"
                   onClick={() => setMobileMenuOpen(false)}
@@ -510,6 +602,8 @@ export default function App() {
                 >
                   Inventory
                 </NavLink>
+                )}
+                {canAccess('/loans') && (
                 <NavLink
                   to="/loans"
                   onClick={() => setMobileMenuOpen(false)}
@@ -523,6 +617,8 @@ export default function App() {
                 >
                   Loans
                 </NavLink>
+                )}
+                {canAccess('/money-received') && (
                 <NavLink
                   to="/money-received"
                   onClick={() => setMobileMenuOpen(false)}
@@ -536,6 +632,8 @@ export default function App() {
                 >
                   Money Received
                 </NavLink>
+                )}
+                {canAccess('/request-funds') && (
                 <NavLink
                   to="/request-funds"
                   onClick={() => setMobileMenuOpen(false)}
@@ -549,6 +647,8 @@ export default function App() {
                 >
                   Request Funds
                 </NavLink>
+                )}
+                {canAccess('/invoice') && (
                 <NavLink
                   to="/invoice"
                   onClick={() => setMobileMenuOpen(false)}
@@ -562,6 +662,8 @@ export default function App() {
                 >
                   Invoice
                 </NavLink>
+                )}
+                {canAccess('/invoice-history') && (
                 <NavLink
                   to="/invoice-history"
                   onClick={() => setMobileMenuOpen(false)}
@@ -575,6 +677,8 @@ export default function App() {
                 >
                   History
                 </NavLink>
+                )}
+                {canAccess('/job-openings') && (
                 <NavLink
                   to="/job-openings"
                   onClick={() => setMobileMenuOpen(false)}
@@ -588,7 +692,8 @@ export default function App() {
                 >
                   Job Openings
                 </NavLink>
-                {(userRole === 'super_admin' || userRole === 'admin') && (
+                )}
+                {(userRole === 'super_admin' || userRole === 'admin' || userRole === 'hr') && (
                   <NavLink
                     to="/activity-logs"
                     onClick={() => setMobileMenuOpen(false)}
@@ -603,7 +708,7 @@ export default function App() {
                     Logs
                   </NavLink>
                 )}
-                {userRole === 'super_admin' && (
+                {(userRole === 'super_admin' || userRole === 'hr') && (
                   <NavLink
                     to="/users"
                     onClick={() => setMobileMenuOpen(false)}
@@ -633,7 +738,16 @@ export default function App() {
 
           <main className="glass animate-scaleIn rounded-2xl p-4 sm:p-6 shadow-xl">
             <Routes>
-              <Route path="/" element={<Home />} />
+              {userRole === 'hr' && (
+                <>
+                  <Route path="/hr-dashboard" element={<HRDashboard />} />
+                  <Route path="/" element={<HRDashboard />} />
+                </>
+              )}
+              {userRole !== 'hr' && (
+                <Route path="/" element={<Home />} />
+              )}
+              <Route path="/access-denied" element={<AccessDenied />} />
               <Route path="/monthly" element={<Monthly />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/savings" element={<Savings />} />
@@ -653,13 +767,13 @@ export default function App() {
               <Route path="/invoice" element={<Invoice />} />
               <Route path="/invoice-history" element={<InvoiceHistory />} />
               <Route path="/job-openings" element={<JobOpenings />} />
-              {(userRole === 'super_admin' || userRole === 'admin') && (
+              {(userRole === 'super_admin' || userRole === 'admin' || userRole === 'hr') && (
                 <Route path="/activity-logs" element={<ActivityLogs />} />
               )}
-              {userRole === 'super_admin' && (
+              {(userRole === 'super_admin' || userRole === 'hr') && (
                 <Route path="/users" element={<UserManagement />} />
               )}
-              <Route path="*" element={<Home />} />
+              <Route path="*" element={userRole === 'hr' ? <HRDashboard /> : <Home />} />
             </Routes>
           </main>
 

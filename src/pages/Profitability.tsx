@@ -6,6 +6,15 @@ import type { PmClient, PmProject, PmRevenue, PmEmployeeCost, PmExpense } from '
 const fmt = (n: number) =>
   `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+const fmtUSD = (n: number, rate: number) =>
+  rate > 0 ? `$${(n / rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''
+
+const fmtBoth = (n: number, rate: number) => {
+  const php = fmt(n)
+  const usd = fmtUSD(n, rate)
+  return usd ? `${php} (${usd})` : php
+}
+
 const fmtPct = (n: number) => `${n.toFixed(1)}%`
 
 const currentMonth = () => {
@@ -54,6 +63,7 @@ interface ClientStats {
 
 export default function Profitability() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth())
+  const [exchangeRate, setExchangeRate] = useState<number>(56)
   const [clients, setClients] = useState<PmClient[]>([])
   const [projects, setProjects] = useState<PmProject[]>([])
   const [revenues, setRevenues] = useState<PmRevenue[]>([])
@@ -237,6 +247,19 @@ export default function Profitability() {
             onChange={e => setSelectedMonth(e.target.value)}
             className="input-field"
           />
+          <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5">
+            <span className="text-xs font-medium text-gray-600">USD Rate:</span>
+            <span className="text-xs text-gray-500">₱</span>
+            <input
+              type="number"
+              min="1"
+              step="0.01"
+              value={exchangeRate}
+              onChange={e => setExchangeRate(Number(e.target.value) || 56)}
+              className="w-16 border-0 p-0 text-sm font-medium text-gray-900 focus:ring-0"
+            />
+            <span className="text-xs text-gray-500">= $1</span>
+          </div>
           <button onClick={loadData} className="btn-secondary text-xs">↻ Refresh</button>
         </div>
       </div>
@@ -257,19 +280,23 @@ export default function Profitability() {
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="rounded-xl p-4 bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
               <p className="text-xs font-medium opacity-80">Total Revenue</p>
-              <p className="text-xl font-bold mt-1 break-all">{fmt(kpis.totalRevenue)}</p>
+              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalRevenue)}</p>
+              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalRevenue, exchangeRate)}</p>
             </div>
             <div className="rounded-xl p-4 bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg">
               <p className="text-xs font-medium opacity-80">Total Payroll</p>
-              <p className="text-xl font-bold mt-1 break-all">{fmt(kpis.totalPayroll)}</p>
+              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalPayroll)}</p>
+              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalPayroll, exchangeRate)}</p>
             </div>
             <div className="rounded-xl p-4 bg-gradient-to-br from-red-500 to-red-600 text-white shadow-lg">
               <p className="text-xs font-medium opacity-80">Operating Expenses</p>
-              <p className="text-xl font-bold mt-1 break-all">{fmt(kpis.totalOpex)}</p>
+              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalOpex)}</p>
+              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalOpex, exchangeRate)}</p>
             </div>
             <div className={`rounded-xl p-4 text-white shadow-lg bg-gradient-to-br ${kpis.totalProfit >= 0 ? 'from-green-500 to-green-600' : 'from-red-600 to-red-700'}`}>
               <p className="text-xs font-medium opacity-80">Net Profit</p>
-              <p className="text-xl font-bold mt-1 break-all">{fmt(kpis.totalProfit)}</p>
+              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalProfit)}</p>
+              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalProfit, exchangeRate)}</p>
             </div>
             <div className="rounded-xl p-4 bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg">
               <p className="text-xs font-medium opacity-80">Avg Margin</p>
@@ -315,9 +342,9 @@ export default function Profitability() {
                 ) : clientStats.map(cs => (
                   <tr key={cs.client.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{cs.client.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{fmt(cs.revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{fmt(cs.expenses)}</td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${cs.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(cs.profit)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900"><div>{fmt(cs.revenue)}</div><div className="text-xs text-gray-400">{fmtUSD(cs.revenue, exchangeRate)}</div></td>
+                    <td className="px-4 py-3 text-sm text-gray-900"><div>{fmt(cs.expenses)}</div><div className="text-xs text-gray-400">{fmtUSD(cs.expenses, exchangeRate)}</div></td>
+                    <td className={`px-4 py-3 text-sm font-semibold ${cs.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}><div>{fmt(cs.profit)}</div><div className="text-xs opacity-70">{fmtUSD(cs.profit, exchangeRate)}</div></td>
                     <td className={`px-4 py-3 text-sm ${marginClass(cs.margin)}`}>{fmtPct(cs.margin)}</td>
                   </tr>
                 ))}
@@ -345,11 +372,11 @@ export default function Profitability() {
                   <tr key={ps.project.id} className={`${rowBg(ps)} hover:opacity-90`}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{ps.project.name}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{ps.clientName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{fmt(ps.revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{fmt(ps.payrollCost)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{fmt(ps.operatingExpenses)}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{fmt(ps.totalExpenses)}</td>
-                    <td className={`px-4 py-3 text-sm font-semibold whitespace-nowrap ${ps.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(ps.netProfit)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"><div>{fmt(ps.revenue)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.revenue, exchangeRate)}</div></td>
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"><div>{fmt(ps.payrollCost)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.payrollCost, exchangeRate)}</div></td>
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"><div>{fmt(ps.operatingExpenses)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.operatingExpenses, exchangeRate)}</div></td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap"><div>{fmt(ps.totalExpenses)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.totalExpenses, exchangeRate)}</div></td>
+                    <td className={`px-4 py-3 text-sm font-semibold whitespace-nowrap ${ps.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}><div>{fmt(ps.netProfit)}</div><div className="text-xs opacity-70">{fmtUSD(ps.netProfit, exchangeRate)}</div></td>
                     <td className={`px-4 py-3 text-sm whitespace-nowrap ${marginClass(ps.profitMargin)}`}>{fmtPct(ps.profitMargin)}</td>
                   </tr>
                 ))}
@@ -375,7 +402,10 @@ export default function Profitability() {
                           <p className="text-xs text-gray-500 truncate">{e.project}</p>
                         </div>
                       </div>
-                      <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{fmt(e.cost)}</span>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{fmt(e.cost)}</div>
+                        <div className="text-xs text-gray-400">{fmtUSD(e.cost, exchangeRate)}</div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -393,7 +423,10 @@ export default function Profitability() {
                     <div key={i}>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-medium text-gray-700 truncate max-w-[55%]">{cp.name}</span>
-                        <span className="text-xs text-gray-600 whitespace-nowrap">{fmt(cp.cost)}</span>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-600 whitespace-nowrap">{fmt(cp.cost)}</div>
+                          <div className="text-xs text-gray-400 whitespace-nowrap">{fmtUSD(cp.cost, exchangeRate)}</div>
+                        </div>
                       </div>
                       <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                         <div
@@ -419,7 +452,10 @@ export default function Profitability() {
                   <div key={i}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-gray-700 capitalize">{ec.cat}</span>
-                      <span className="text-xs text-gray-600">{fmt(ec.amount)}</span>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-600">{fmt(ec.amount)}</div>
+                        <div className="text-xs text-gray-400">{fmtUSD(ec.amount, exchangeRate)}</div>
+                      </div>
                     </div>
                     <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                       <div
