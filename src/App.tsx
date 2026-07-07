@@ -28,6 +28,9 @@ import ChangePassword from "@/pages/ChangePassword";
 import ActivityLogs from "@/pages/ActivityLogs";
 import AccessDenied from "@/pages/AccessDenied";
 import HRDashboard from "@/pages/HRDashboard";
+import EmployeeDashboard from "@/pages/EmployeeDashboard";
+import MyPayslips from "@/pages/MyPayslips";
+import MyLeave from "@/pages/MyLeave";
 import type { SyntheticEvent } from "react";
 
 export default function App() {
@@ -85,6 +88,10 @@ export default function App() {
     if (userRole === 'hr') {
       const hrRoutes = ['/payroll', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users'];
       return hrRoutes.some(r => path === r || path.startsWith(r));
+    }
+    if (userRole === 'employee') {
+      const employeeRoutes = ['/my-payslips', '/my-leave'];
+      return employeeRoutes.some(r => path === r || path.startsWith(r));
     }
     return true; // user role sees everything except admin-only pages
   };
@@ -166,7 +173,50 @@ export default function App() {
                     HR Dashboard
                   </NavLink>
                 )}
-                {canAccess('/') && (
+                {userRole === 'employee' && (
+                  <NavLink
+                    to="/"
+                    end
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-2 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    Dashboard
+                  </NavLink>
+                )}
+                {userRole === 'employee' && (
+                  <NavLink
+                    to="/my-payslips"
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-2 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    My Payslips
+                  </NavLink>
+                )}
+                {userRole === 'employee' && (
+                  <NavLink
+                    to="/my-leave"
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-2 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    My Leave
+                  </NavLink>
+                )}
+                {canAccess('/') && userRole !== 'employee' && (
                 <NavLink
                   to="/"
                   end
@@ -452,7 +502,53 @@ export default function App() {
                     HR Dashboard
                   </NavLink>
                 )}
-                {canAccess('/') && (
+                {userRole === 'employee' && (
+                  <NavLink
+                    to="/"
+                    end
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-3 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    Dashboard
+                  </NavLink>
+                )}
+                {userRole === 'employee' && (
+                  <NavLink
+                    to="/my-payslips"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-3 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    My Payslips
+                  </NavLink>
+                )}
+                {userRole === 'employee' && (
+                  <NavLink
+                    to="/my-leave"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-lg px-4 py-3 font-medium transition-all ${
+                        isActive
+                          ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                          : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                      }`
+                    }
+                  >
+                    My Leave
+                  </NavLink>
+                )}
+                {canAccess('/') && userRole !== 'employee' && (
                 <NavLink
                   to="/"
                   end
@@ -738,13 +834,20 @@ export default function App() {
 
           <main className="glass animate-scaleIn rounded-2xl p-4 sm:p-6 shadow-xl">
             <Routes>
+              {userRole === 'employee' && (
+                <>
+                  <Route path="/" element={<EmployeeDashboard />} />
+                  <Route path="/my-payslips" element={<MyPayslips />} />
+                  <Route path="/my-leave" element={<MyLeave />} />
+                </>
+              )}
               {userRole === 'hr' && (
                 <>
                   <Route path="/hr-dashboard" element={<HRDashboard />} />
                   <Route path="/" element={<HRDashboard />} />
                 </>
               )}
-              {userRole !== 'hr' && (
+              {userRole !== 'hr' && userRole !== 'employee' && (
                 <Route path="/" element={<Home />} />
               )}
               <Route path="/access-denied" element={<AccessDenied />} />
@@ -773,7 +876,7 @@ export default function App() {
               {(userRole === 'super_admin' || userRole === 'hr') && (
                 <Route path="/users" element={<UserManagement />} />
               )}
-              <Route path="*" element={userRole === 'hr' ? <HRDashboard /> : <Home />} />
+              <Route path="*" element={userRole === 'hr' ? <HRDashboard /> : userRole === 'employee' ? <EmployeeDashboard /> : <Home />} />
             </Routes>
           </main>
 

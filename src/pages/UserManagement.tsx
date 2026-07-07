@@ -6,8 +6,14 @@ interface User {
   id: string
   email: string
   full_name: string | null
-  role: 'super_admin' | 'admin' | 'hr' | 'user'
+  role: 'super_admin' | 'admin' | 'hr' | 'employee' | 'user'
+  employee_id: string | null
   created_at: string
+}
+
+interface EmployeeOption {
+  id: string
+  name: string
 }
 
 export default function UserManagement() {
@@ -16,16 +22,28 @@ export default function UserManagement() {
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [employees, setEmployees] = useState<EmployeeOption[]>([])
 
   // Form state
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
-  const [role, setRole] = useState<'admin' | 'hr' | 'user'>('user')
+  const [role, setRole] = useState<'admin' | 'hr' | 'employee' | 'user'>('user')
+  const [linkedEmployeeId, setLinkedEmployeeId] = useState<string>('')
 
   useEffect(() => {
     loadUsers()
+    loadEmployees()
   }, [])
+
+  const loadEmployees = async () => {
+    const { data } = await supabase
+      .from('employees')
+      .select('id, name')
+      .neq('status', 'terminated')
+      .order('name', { ascending: true })
+    setEmployees((data ?? []) as EmployeeOption[])
+  }
 
   const loadUsers = async () => {
     setLoading(true)
@@ -100,6 +118,7 @@ export default function UserManagement() {
             email: authData.user.email,
             full_name: fullName.trim(),
             role: role,
+            employee_id: (role === 'employee' && linkedEmployeeId) ? linkedEmployeeId : null,
             must_change_password: true
           })
 
@@ -157,11 +176,29 @@ export default function UserManagement() {
     }
   }
 
+  const handleUpdateEmployeeLink = async (userId: string, newEmployeeId: string) => {
+    try {
+      const user = users.find(u => u.id === userId)
+      const { error } = await supabase
+        .from('users')
+        .update({ employee_id: newEmployeeId || null })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      await logActivity('updated', 'Users', `Linked user ${user?.email ?? 'Unknown'} to employee record`)
+      await loadUsers()
+    } catch (err: any) {
+      alert(err.message || 'Failed to link employee')
+    }
+  }
+
   const resetForm = () => {
     setEmail('')
     setPassword('')
     setFullName('')
     setRole('user')
+    setLinkedEmployeeId('')
   }
 
   return (
@@ -216,6 +253,7 @@ export default function UserManagement() {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">User</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Role</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Linked Employee</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Created</th>
                     <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Actions</th>
                   </tr>
@@ -240,9 +278,22 @@ export default function UserManagement() {
                           className="text-sm rounded border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                         >
                           <option value="user">User</option>
+                          <option value="employee">Employee</option>
                           <option value="hr">HR</option>
                           <option value="admin">Admin</option>
                           <option value="super_admin">Super Admin</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4">
+                        <select
+                          value={user.employee_id ?? ''}
+                          onChange={(e) => handleUpdateEmployeeLink(user.id, e.target.value)}
+                          className="text-sm rounded border-gray-300 focus:border-blue-500 focus:ring-blue-500 w-40"
+                        >
+                          <option value="">— None —</option>
+                          {employees.map(emp => (
+                            <option key={emp.id} value={emp.id}>{emp.name}</option>
+                          ))}
                         </select>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
@@ -326,14 +377,32 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value as 'admin' | 'hr' | 'user')}
+                  onChange={(e) => setRole(e.target.value as 'admin' | 'hr' | 'employee' | 'user')}
                   className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 >
                   <option value="user">User</option>
+                  <option value="employee">Employee</option>
                   <option value="hr">HR</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
+
+              {role === 'employee' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Link to Employee Record</label>
+                  <select
+                    value={linkedEmployeeId}
+                    onChange={(e) => setLinkedEmployeeId(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">— Select employee —</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Required for Employee role — grants access to their payslips and leave only.</p>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
