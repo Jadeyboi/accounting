@@ -43,6 +43,7 @@ export interface Employee {
   bank_account_number?: string | null;
   bank_account_name?: string | null;
   bank_branch?: string | null;
+  photo_url?: string | null;
   // Termination fields
   termination_date?: string | null;
   termination_reason?: string | null;

@@ -31,6 +31,12 @@ export default function HRIS() {
   const [terminationNotes, setTerminationNotes] = useState('')
   const [lastWorkingDay, setLastWorkingDay] = useState('')
   const [terminatedBy, setTerminatedBy] = useState('')
+  // Photo upload
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ url: string; name: string } | null>(null)
+
   // Salary change tracking
   const [salaryChangeReason, setSalaryChangeReason] = useState('')
   const [salaryChangeApprovedBy, setSalaryChangeApprovedBy] = useState('')
@@ -144,9 +150,35 @@ export default function HRIS() {
     await loadEmployees()
   }
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Photo must be under 5MB')
+      return
+    }
+    setPhotoFile(file)
+    setPhotoPreview(URL.createObjectURL(file))
+  }
+
+  const uploadPhoto = async (employeeId: string): Promise<string | null> => {
+    if (!photoFile) return null
+    setUploadingPhoto(true)
+    const ext = photoFile.name.split('.').pop()
+    const path = `employee-photos/${employeeId}.${ext}`
+    const { error } = await supabase.storage
+      .from('employee-photos')
+      .upload(path, photoFile, { upsert: true })
+    setUploadingPhoto(false)
+    if (error) { alert('Photo upload failed: ' + error.message); return null }
+    const { data } = supabase.storage.from('employee-photos').getPublicUrl(path)
+    return data.publicUrl
+  }
+
   const openModal = (employee?: Employee) => {
     if (employee) {
       setEditingEmployee(employee)
+      setPhotoPreview(employee.photo_url ?? null)
       setShowSalaryChangeFields(false)
       setSalaryChangeReason('')
       setSalaryChangeApprovedBy('')
@@ -194,6 +226,7 @@ export default function HRIS() {
       setBankBranch(employee.bank_branch || '')
     } else {
       resetForm()
+      setPhotoPreview(null)
     }
     setShowModal(true)
   }
@@ -233,6 +266,8 @@ export default function HRIS() {
     setSalaryChangeApprovedBy('')
     setSalaryChangeNotes('')
     setSalaryChangeEffectiveDate('')
+    setPhotoFile(null)
+    setPhotoPreview(null)
   }
 
   const handleSave = async () => {
@@ -268,6 +303,13 @@ export default function HRIS() {
       finalEmployeeNumber = `EMP-${String(nextNumber).padStart(4, '0')}`
     }
 
+    // Upload photo first if one was selected
+    let photoUrl: string | null = editingEmployee?.photo_url ?? null
+    if (photoFile) {
+      const uploaded = await uploadPhoto(editingEmployee?.id ?? 'temp')
+      if (uploaded) photoUrl = uploaded
+    }
+
     const payload: Partial<Employee> = {
       name: fullName,
       position: position.trim() || null,
@@ -295,6 +337,7 @@ export default function HRIS() {
       bank_account_number: bankAccountNumber.trim() || null,
       bank_account_name: bankAccountName.trim() || null,
       bank_branch: bankBranch.trim() || null,
+      ...(photoUrl !== null ? { photo_url: photoUrl } : {}),
     }
 
     // Calculate leave balances based on employment status
@@ -353,13 +396,23 @@ export default function HRIS() {
         })
       }
     } else {
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from('employees')
         .insert(payload)
+        .select('id')
+        .single()
       
       if (error) {
         alert(error.message)
         return
+      }
+
+      // Re-upload photo with real employee ID if we had a temp upload
+      if (photoFile && inserted?.id) {
+        const realUrl = await uploadPhoto(inserted.id)
+        if (realUrl) {
+          await supabase.from('employees').update({ photo_url: realUrl }).eq('id', inserted.id)
+        }
       }
 
       await logActivity('created', 'HRIS', `Added employee: ${fullName}`)
@@ -509,12 +562,27 @@ export default function HRIS() {
                 <tr key={employee.id} className="table-row-hover">
                   <td className="px-6 py-4">
                     <div className="flex items-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-semibold">
-                        {employee.name.charAt(0).toUpperCase()}
-                      </div>
+                      {employee.photo_url ? (
+                        <button
+                          type="button"
+                          onClick={() => setLightboxPhoto({ url: employee.photo_url!, name: employee.name })}
+                          className="focus:outline-none"
+                          title="Click to enlarge"
+                        >
+                          <img
+                            src={employee.photo_url}
+                            alt={employee.name}
+                            className="h-10 w-10 rounded-full object-cover border border-gray-200 hover:opacity-80 transition-opacity cursor-zoom-in"
+                          />
+                        </button>
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-semibold">
+                          {employee.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div className="ml-4">
                         <button
-                          onClick={() => { setViewingEmployee(employee); setShowViewModal(true); loadSalaryHistory(employee.id); }}
+                          onClick={() => { setViewingEmployee(employee); setShowViewModal(true); loadSalaryHistory(employee.id) }}
                           className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {employee.name}
@@ -631,6 +699,48 @@ export default function HRIS() {
               {/* Basic Info Tab */}
               {activeTab === 'basic' && (
                 <div className="space-y-4">
+                  {/* Photo Upload */}
+                  <div className="flex items-center gap-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="relative">
+                      {photoPreview ? (
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          className="h-20 w-20 rounded-full object-cover border-2 border-blue-300"
+                        />
+                      ) : (
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-100 text-3xl font-bold text-blue-600">
+                          {(firstName || editingEmployee?.name || '?').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-1">Employee Photo</p>
+                      <label className="cursor-pointer inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {photoPreview ? 'Change Photo' : 'Upload Photo'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={handlePhotoChange}
+                        />
+                      </label>
+                      {photoFile && (
+                        <button
+                          type="button"
+                          onClick={() => { setPhotoFile(null); setPhotoPreview(editingEmployee?.photo_url ?? null) }}
+                          className="ml-2 text-xs text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">JPG, PNG, WEBP · Max 5MB</p>
+                    </div>
+                  </div>
+
                   <div className="grid gap-4 md:grid-cols-3">
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">First Name *</label>
@@ -1072,9 +1182,10 @@ export default function HRIS() {
                 </button>
                 <button
                   onClick={handleSave}
-                  className="btn-primary"
+                  disabled={uploadingPhoto}
+                  className="btn-primary disabled:opacity-50"
                 >
-                  {editingEmployee ? 'Update Employee' : 'Add Employee'}
+                  {uploadingPhoto ? 'Uploading photo...' : editingEmployee ? 'Update Employee' : 'Add Employee'}
                 </button>
               </div>
             </div>
@@ -1089,9 +1200,24 @@ export default function HRIS() {
             <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-2xl font-bold text-blue-600">
-                    {viewingEmployee.name.charAt(0).toUpperCase()}
-                  </div>
+                  {viewingEmployee.photo_url ? (
+                    <button
+                      type="button"
+                      onClick={() => setLightboxPhoto({ url: viewingEmployee.photo_url!, name: viewingEmployee.name })}
+                      className="focus:outline-none"
+                      title="Click to enlarge"
+                    >
+                      <img
+                        src={viewingEmployee.photo_url}
+                        alt={viewingEmployee.name}
+                        className="h-16 w-16 rounded-full object-cover border-2 border-white shadow hover:opacity-80 transition-opacity cursor-zoom-in"
+                      />
+                    </button>
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-2xl font-bold text-blue-600">
+                      {viewingEmployee.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-2xl font-bold text-white">{viewingEmployee.name}</h3>
                     <p className="text-blue-100">{viewingEmployee.position || 'No position assigned'}</p>
@@ -1553,6 +1679,60 @@ export default function HRIS() {
               >
                 Confirm Termination
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Photo Lightbox */}
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-80 p-4"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <div
+            className="relative max-w-lg w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={lightboxPhoto.url}
+              alt={lightboxPhoto.name}
+              className="w-full max-h-[70vh] object-contain rounded-xl shadow-2xl"
+            />
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-white font-medium text-sm">{lightboxPhoto.name}</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    try {
+                      const res = await fetch(lightboxPhoto.url)
+                      const blob = await res.blob()
+                      const ext = blob.type.split('/')[1] || 'jpg'
+                      const blobUrl = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = blobUrl
+                      a.download = `${lightboxPhoto.name.replace(/\s+/g, '_')}_photo.${ext}`
+                      a.click()
+                      URL.revokeObjectURL(blobUrl)
+                    } catch {
+                      window.open(lightboxPhoto.url, '_blank')
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download
+                </button>
+                <button
+                  onClick={() => setLightboxPhoto(null)}
+                  className="rounded-md bg-white bg-opacity-20 px-4 py-2 text-sm font-medium text-white hover:bg-opacity-30"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
