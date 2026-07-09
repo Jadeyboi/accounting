@@ -1704,43 +1704,29 @@ export default function App() {
 
               <Route path="/access-denied" element={<AccessDenied />} />
 
-              <Route path="/monthly" element={<Monthly />} />
-
-              <Route path="/reports" element={<Reports />} />
-
-              <Route path="/savings" element={<Savings />} />
-
-              <Route path="/payroll" element={<Payroll />} />
-
-              <Route path="/hris" element={<HRIS />} />
-
-              <Route path="/oakridge" element={<Oakridge />} />
-
-              <Route path="/profitability" element={<Profitability />} />
-
-              <Route path="/profitability/clients" element={<ProfitabilityClients />} />
-
-              <Route path="/profitability/employees" element={<ProfitabilityEmployees />} />
-
-              <Route path="/profitability/expenses" element={<ProfitabilityExpenses />} />
-
-              <Route path="/profitability/revenues" element={<ProfitabilityRevenues />} />
-
-              <Route path="/leave" element={<Leave />} />
-
-              <Route path="/inventory" element={<Inventory />} />
-
-              <Route path="/loans" element={<Loans />} />
-
-              <Route path="/money-received" element={<MoneyReceived />} />
-
-              <Route path="/request-funds" element={<RequestFunds />} />
-
-              <Route path="/invoice" element={<Invoice />} />
-
-              <Route path="/invoice-history" element={<InvoiceHistory />} />
-
-              <Route path="/job-openings" element={<JobOpenings />} />
+              {userRole !== 'employee' && (
+                <>
+                  <Route path="/monthly" element={<Monthly />} />
+                  <Route path="/reports" element={<Reports />} />
+                  <Route path="/savings" element={<Savings />} />
+                  <Route path="/payroll" element={<Payroll />} />
+                  <Route path="/hris" element={<HRIS />} />
+                  <Route path="/oakridge" element={<Oakridge />} />
+                  <Route path="/profitability" element={<Profitability />} />
+                  <Route path="/profitability/clients" element={<ProfitabilityClients />} />
+                  <Route path="/profitability/employees" element={<ProfitabilityEmployees />} />
+                  <Route path="/profitability/expenses" element={<ProfitabilityExpenses />} />
+                  <Route path="/profitability/revenues" element={<ProfitabilityRevenues />} />
+                  <Route path="/leave" element={<Leave />} />
+                  <Route path="/inventory" element={<Inventory />} />
+                  <Route path="/loans" element={<Loans />} />
+                  <Route path="/money-received" element={<MoneyReceived />} />
+                  <Route path="/request-funds" element={<RequestFunds />} />
+                  <Route path="/invoice" element={<Invoice />} />
+                  <Route path="/invoice-history" element={<InvoiceHistory />} />
+                  <Route path="/job-openings" element={<JobOpenings />} />
+                </>
+              )}
 
               {(userRole === 'super_admin' || userRole === 'admin' || userRole === 'hr') && (
 
