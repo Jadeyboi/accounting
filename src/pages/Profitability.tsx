@@ -152,10 +152,19 @@ export default function Profitability() {
   const kpis = useMemo(() => {
     const totalRevenue = revenues.reduce((s, r) => s + r.amount, 0)
     const totalPayroll = empCosts.reduce((s, e) => s + totalEmpCost(e), 0)
+    // Gross profit = Revenue - Payroll (direct labour cost)
+    const grossProfit = totalRevenue - totalPayroll
+    const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0
+    // Operating expenses = ALL pm_expenses (project + client + company scoped)
     const totalOpex = expenses.reduce((s, ex) => s + ex.amount, 0)
+    // Project-scoped opex (already inside projectStats but shown separately here)
+    const projectOpex = expenses.filter(ex => ex.scope === 'project').reduce((s, ex) => s + ex.amount, 0)
+    const clientOpex = expenses.filter(ex => ex.scope === 'client').reduce((s, ex) => s + ex.amount, 0)
+    const companyOpex = expenses.filter(ex => ex.scope === 'company').reduce((s, ex) => s + ex.amount, 0)
+    // Net profit = Revenue - Payroll - ALL opex
     const totalProfit = totalRevenue - totalPayroll - totalOpex
     const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
-    return { totalRevenue, totalPayroll, totalOpex, totalProfit, avgMargin }
+    return { totalRevenue, totalPayroll, grossProfit, grossMargin, totalOpex, projectOpex, clientOpex, companyOpex, totalProfit, avgMargin }
   }, [revenues, empCosts, expenses])
 
   const alerts = useMemo(() => {
@@ -276,8 +285,84 @@ export default function Profitability() {
         <div className="py-16 text-center text-sm text-gray-500">Loading data...</div>
       ) : (
         <>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* P&L Summary Statement */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <h3 className="text-base font-semibold text-gray-900">Profit & Loss Statement — {selectedMonth}</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {/* Revenue */}
+              <div className="flex items-center justify-between px-6 py-3 bg-blue-50">
+                <span className="text-sm font-semibold text-blue-900">Total Revenue</span>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-blue-900">{fmt(kpis.totalRevenue)}</span>
+                  <div className="text-xs text-blue-500">{fmtUSD(kpis.totalRevenue, exchangeRate)}</div>
+                </div>
+              </div>
+              {/* Less: Payroll */}
+              <div className="flex items-center justify-between px-6 py-3 pl-10">
+                <span className="text-sm text-gray-600">Less: Payroll / Labour Cost</span>
+                <div className="text-right">
+                  <span className="text-sm text-red-600">({fmt(kpis.totalPayroll)})</span>
+                  <div className="text-xs text-gray-400">{fmtUSD(kpis.totalPayroll, exchangeRate)}</div>
+                </div>
+              </div>
+              {/* Gross Profit */}
+              <div className={`flex items-center justify-between px-6 py-3 ${kpis.grossProfit >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div>
+                  <span className={`text-sm font-semibold ${kpis.grossProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>Gross Profit</span>
+                  <span className="ml-2 text-xs text-gray-500">({fmtPct(kpis.grossMargin)} margin)</span>
+                </div>
+                <div className="text-right">
+                  <span className={`text-sm font-bold ${kpis.grossProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(kpis.grossProfit)}</span>
+                  <div className="text-xs text-gray-400">{fmtUSD(kpis.grossProfit, exchangeRate)}</div>
+                </div>
+              </div>
+              {/* Less: Operating Expenses breakdown */}
+              {kpis.projectOpex > 0 && (
+                <div className="flex items-center justify-between px-6 py-2 pl-10">
+                  <span className="text-xs text-gray-500">Less: Project Operating Expenses</span>
+                  <span className="text-xs text-red-500">({fmt(kpis.projectOpex)})</span>
+                </div>
+              )}
+              {kpis.clientOpex > 0 && (
+                <div className="flex items-center justify-between px-6 py-2 pl-10">
+                  <span className="text-xs text-gray-500">Less: Client Operating Expenses</span>
+                  <span className="text-xs text-red-500">({fmt(kpis.clientOpex)})</span>
+                </div>
+              )}
+              {kpis.companyOpex > 0 && (
+                <div className="flex items-center justify-between px-6 py-2 pl-10">
+                  <span className="text-xs text-gray-500">Less: Company Operating Expenses</span>
+                  <span className="text-xs text-red-500">({fmt(kpis.companyOpex)})</span>
+                </div>
+              )}
+              {/* Total Opex subtotal */}
+              <div className="flex items-center justify-between px-6 py-3 pl-10 bg-gray-50">
+                <span className="text-sm text-gray-700 font-medium">Total Operating Expenses</span>
+                <div className="text-right">
+                  <span className="text-sm text-red-600 font-medium">({fmt(kpis.totalOpex)})</span>
+                  <div className="text-xs text-gray-400">{fmtUSD(kpis.totalOpex, exchangeRate)}</div>
+                </div>
+              </div>
+              {/* Net Profit */}
+              <div className={`flex items-center justify-between px-6 py-4 ${kpis.totalProfit >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
+                <div>
+                  <span className={`text-base font-bold ${kpis.totalProfit >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                    {kpis.totalProfit >= 0 ? 'Net Profit' : 'Net Loss'}
+                  </span>
+                  <span className="ml-2 text-xs text-gray-600">({fmtPct(kpis.avgMargin)} net margin)</span>
+                </div>
+                <div className="text-right">
+                  <span className={`text-base font-bold ${kpis.totalProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(kpis.totalProfit)}</span>
+                  <div className="text-xs text-gray-500">{fmtUSD(kpis.totalProfit, exchangeRate)}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="rounded-xl p-4 bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
               <p className="text-xs font-medium opacity-80">Total Revenue</p>
               <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalRevenue)}</p>
@@ -289,18 +374,14 @@ export default function Profitability() {
               <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalPayroll, exchangeRate)}</p>
             </div>
             <div className="rounded-xl p-4 bg-gradient-to-br from-red-500 to-red-600 text-white shadow-lg">
-              <p className="text-xs font-medium opacity-80">Operating Expenses</p>
-              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalOpex)}</p>
-              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalOpex, exchangeRate)}</p>
+              <p className="text-xs font-medium opacity-80">Total Expenses</p>
+              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalPayroll + kpis.totalOpex)}</p>
+              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalPayroll + kpis.totalOpex, exchangeRate)}</p>
             </div>
             <div className={`rounded-xl p-4 text-white shadow-lg bg-gradient-to-br ${kpis.totalProfit >= 0 ? 'from-green-500 to-green-600' : 'from-red-600 to-red-700'}`}>
-              <p className="text-xs font-medium opacity-80">Net Profit</p>
+              <p className="text-xs font-medium opacity-80">{kpis.totalProfit >= 0 ? 'Net Profit' : 'Net Loss'}</p>
               <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalProfit)}</p>
-              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalProfit, exchangeRate)}</p>
-            </div>
-            <div className="rounded-xl p-4 bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg">
-              <p className="text-xs font-medium opacity-80">Avg Margin</p>
-              <p className="text-xl font-bold mt-1">{fmtPct(kpis.avgMargin)}</p>
+              <p className="text-xs opacity-70 mt-0.5">{fmtPct(kpis.avgMargin)} margin</p>
             </div>
           </div>
 
