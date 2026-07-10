@@ -454,61 +454,64 @@ export default function HRIS() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">HRIS - Employee Management</h2>
-          <p className="text-sm text-gray-600">Manage employee information and records</p>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">HRIS</h2>
+          <p className="mt-1 text-sm text-gray-500">Employee management and records</p>
         </div>
         <button
           onClick={() => openModal()}
-          className="btn-primary"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 active:bg-blue-800"
         >
-          + Add Employee
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Employee
         </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="card-hover rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-6 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-blue-600">Total Employees</p>
-              <p className="mt-2 text-3xl font-bold text-blue-900">{activeEmployees}</p>
-            </div>
-            <div className="rounded-full bg-blue-200 p-3">
-              <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-xl border border-blue-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-lg bg-blue-50 p-3">
+              <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Total Employees</p>
+              <p className="text-2xl font-bold text-gray-900 sm:text-3xl">{activeEmployees}</p>
+            </div>
           </div>
         </div>
 
-        <div className="card-hover rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-green-100 p-6 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-green-600">Total Payroll</p>
-              <p className="mt-2 text-3xl font-bold text-green-900">₱{totalSalary.toLocaleString()}</p>
-            </div>
-            <div className="rounded-full bg-green-200 p-3">
-              <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="rounded-xl border border-green-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-lg bg-green-50 p-3">
+              <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Total Payroll</p>
+              <p className="text-2xl font-bold text-gray-900 sm:text-3xl">₱{totalSalary.toLocaleString()}</p>
+            </div>
           </div>
         </div>
 
-        <div className="card-hover rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100 p-6 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-purple-600">Avg. Salary</p>
-              <p className="mt-2 text-3xl font-bold text-purple-900">
-                ₱{activeEmployees > 0 ? Math.round(totalSalary / activeEmployees).toLocaleString() : 0}
-              </p>
-            </div>
-            <div className="rounded-full bg-purple-200 p-3">
-              <svg className="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="rounded-xl border border-purple-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6">
+          <div className="flex items-center gap-4">
+            <div className="rounded-lg bg-purple-50 p-3">
+              <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Avg. Salary</p>
+              <p className="text-2xl font-bold text-gray-900 sm:text-3xl">
+                ₱{activeEmployees > 0 ? Math.round(totalSalary / activeEmployees).toLocaleString() : 0}
+              </p>
             </div>
           </div>
         </div>
@@ -516,26 +519,39 @@ export default function HRIS() {
 
       {/* Search */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search employees by name or position..."
-          className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="relative">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by name or position..."
+            className="block w-full rounded-lg border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 sm:text-base"
+          />
+        </div>
       </div>
 
       {/* Employee List */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-lg">
+        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4 sm:px-6">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900 sm:text-lg">Employees</h3>
+            <p className="text-xs text-gray-500 sm:text-sm">{filteredEmployees.length} record{filteredEmployees.length !== 1 ? 's' : ''} found</p>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Position</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Base Salary</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 sm:px-6">Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 sm:px-6">Position</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600 sm:px-6">Base Salary</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600 sm:px-6">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-600 sm:px-6">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -594,35 +610,49 @@ export default function HRIS() {
                   <td className="px-6 py-4 text-right text-sm font-medium text-gray-900">
                     {employee.base_salary ? `₱${employee.base_salary.toLocaleString()}` : '-'}
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={
-                      employee.status === 'terminated' ? 'badge-error' :
-                      employee.status === 'inactive' ? 'badge-warning' : 'badge-success'
-                    }>
+                  <td className="px-4 py-4 text-center sm:px-6">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      employee.status === 'terminated' ? 'bg-red-100 text-red-700' :
+                      employee.status === 'inactive' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
+                    }`}>
                       {employee.status === 'terminated' ? 'Terminated' : employee.status === 'inactive' ? 'Inactive' : 'Active'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right text-sm">
-                    <button
-                      onClick={() => openModal(employee)}
-                      className="mr-3 text-blue-600 hover:text-blue-800"
-                    >
-                      Edit
-                    </button>
-                    {employee.status !== 'terminated' && (
+                  <td className="px-4 py-4 text-right text-sm sm:px-6">
+                    <div className="flex items-center justify-end gap-1 sm:gap-2">
                       <button
-                        onClick={() => { setTerminatingEmployee(employee); setShowTerminateModal(true) }}
-                        className="mr-3 text-orange-600 hover:text-orange-800"
+                        onClick={() => openModal(employee)}
+                        title="Edit"
+                        className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
                       >
-                        Terminate
+                        <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        <span className="sr-only">Edit</span>
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(employee.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Delete
-                    </button>
+                      {employee.status !== 'terminated' && (
+                        <button
+                          onClick={() => { setTerminatingEmployee(employee); setShowTerminateModal(true) }}
+                          title="Terminate"
+                          className="rounded-md p-1.5 text-orange-600 hover:bg-orange-50 hover:text-orange-800"
+                        >
+                          <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                          </svg>
+                          <span className="sr-only">Terminate</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(employee.id)}
+                        title="Delete"
+                        className="rounded-md p-1.5 text-red-600 hover:bg-red-50 hover:text-red-800"
+                      >
+                        <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span className="sr-only">Delete</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -633,16 +663,21 @@ export default function HRIS() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-6 pt-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 sm:p-4">
+          <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+            <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-4 sm:px-6 sm:pt-6">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-gray-900">
-                  {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
-                </h3>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 sm:text-2xl">
+                    {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
+                  </h3>
+                  <p className="text-xs text-gray-500 sm:text-sm">
+                    {editingEmployee ? 'Update employee information below' : 'Fill in the details to add a new employee'}
+                  </p>
+                </div>
                 <button
                   onClick={() => { setShowModal(false); resetForm(); setActiveTab('basic'); }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                 >
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -651,51 +686,29 @@ export default function HRIS() {
               </div>
 
               {/* Tabs */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setActiveTab('basic')}
-                  className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === 'basic'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Basic Info
-                </button>
-                <button
-                  onClick={() => setActiveTab('contact')}
-                  className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === 'contact'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Contact & Emergency
-                </button>
-                <button
-                  onClick={() => setActiveTab('government')}
-                  className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === 'government'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Government IDs
-                </button>
-                <button
-                  onClick={() => setActiveTab('banking')}
-                  className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === 'banking'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Banking Details
-                </button>
+              <div className="flex gap-1 overflow-x-auto pb-1 sm:gap-2">
+                {[
+                  { id: 'basic', label: 'Basic Info' },
+                  { id: 'contact', label: 'Contact' },
+                  { id: 'government', label: 'Government' },
+                  { id: 'banking', label: 'Banking' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                    className={`whitespace-nowrap rounded-t-lg px-3 py-2 text-xs font-medium transition-colors sm:px-4 sm:text-sm ${
+                      activeTab === tab.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {/* Basic Info Tab */}
               {activeTab === 'basic' && (
                 <div className="space-y-4">
@@ -1172,18 +1185,18 @@ export default function HRIS() {
               )}
             </div>
 
-            <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
-              <div className="flex justify-end gap-3">
+            <div className="border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                 <button
                   onClick={() => { setShowModal(false); resetForm(); setActiveTab('basic'); }}
-                  className="btn-secondary"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300 sm:w-auto"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={uploadingPhoto}
-                  className="btn-primary disabled:opacity-50"
+                  className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 sm:w-auto"
                 >
                   {uploadingPhoto ? 'Uploading photo...' : editingEmployee ? 'Update Employee' : 'Add Employee'}
                 </button>
@@ -1195,11 +1208,11 @@ export default function HRIS() {
 
       {/* View Employee Details Modal */}
       {showViewModal && viewingEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 sm:p-4">
+          <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+            <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-4 sm:px-6 sm:py-6">
+              <div className="flex items-start justify-between gap-4 sm:items-center">
+                <div className="flex items-center gap-3 sm:gap-4">
                   {viewingEmployee.photo_url ? (
                     <button
                       type="button"
@@ -1210,22 +1223,22 @@ export default function HRIS() {
                       <img
                         src={viewingEmployee.photo_url}
                         alt={viewingEmployee.name}
-                        className="h-16 w-16 rounded-full object-cover border-2 border-white shadow hover:opacity-80 transition-opacity cursor-zoom-in"
+                        className="h-12 w-12 rounded-full object-cover border-2 border-white shadow hover:opacity-80 transition-opacity cursor-zoom-in sm:h-16 sm:w-16"
                       />
                     </button>
                   ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-2xl font-bold text-blue-600">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-xl font-bold text-blue-600 sm:h-16 sm:w-16 sm:text-2xl">
                       {viewingEmployee.name.charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div>
-                    <h3 className="text-2xl font-bold text-white">{viewingEmployee.name}</h3>
-                    <p className="text-blue-100">{viewingEmployee.position || 'No position assigned'}</p>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-lg font-bold text-white sm:text-2xl">{viewingEmployee.name}</h3>
+                    <p className="truncate text-sm text-blue-100">{viewingEmployee.position || 'No position assigned'}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => { setShowViewModal(false); setViewingEmployee(null); }}
-                  className="text-white hover:text-blue-100"
+                  className="rounded-full p-1 text-white hover:bg-white/10"
                 >
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1234,7 +1247,7 @@ export default function HRIS() {
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               {/* Basic Information Section */}
               <div className="mb-6 rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50 to-white p-6">
                 <h4 className="mb-4 flex items-center text-lg font-bold text-gray-900">
@@ -1261,8 +1274,10 @@ export default function HRIS() {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Status</p>
                     <p className="mt-1">
-                      <span className={viewingEmployee.status === 'active' ? 'badge-success' : 'badge-error'}>
-                        {viewingEmployee.status || 'Active'}
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        viewingEmployee.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {viewingEmployee.status === 'active' ? 'Active' : viewingEmployee.status === 'terminated' ? 'Terminated' : 'Inactive'}
                       </span>
                     </p>
                   </div>
@@ -1281,7 +1296,9 @@ export default function HRIS() {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Employment Status</p>
                     <p className="mt-1">
-                      <span className={viewingEmployee.employment_status === 'regular' ? 'badge-success' : 'badge-warning'}>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        viewingEmployee.employment_status === 'regular' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
                         {viewingEmployee.employment_status === 'regular' ? 'Regular' : 'Probationary'}
                       </span>
                     </p>
@@ -1494,11 +1511,11 @@ export default function HRIS() {
               )}
             </div>
 
-            <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
-              <div className="flex justify-end gap-3">
+            <div className="border-t border-gray-200 bg-gray-50 px-4 py-4 sm:px-6">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
                 <button
                   onClick={() => { setShowViewModal(false); setViewingEmployee(null); }}
-                  className="btn-secondary"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300 sm:w-auto"
                 >
                   Close
                 </button>
@@ -1508,7 +1525,7 @@ export default function HRIS() {
                     openModal(viewingEmployee);
                     setViewingEmployee(null);
                   }}
-                  className="btn-primary"
+                  className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-auto"
                 >
                   Edit Employee
                 </button>
@@ -1666,16 +1683,16 @@ export default function HRIS() {
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4">
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-200 bg-gray-50 px-4 py-4 sm:flex-row sm:justify-end sm:gap-3 sm:px-6">
               <button
                 onClick={() => { setShowTerminateModal(false); setTerminatingEmployee(null) }}
-                className="btn-secondary"
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 sm:w-auto"
               >
                 Cancel
               </button>
               <button
                 onClick={handleTerminate}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                className="w-full rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 sm:w-auto"
               >
                 Confirm Termination
               </button>
@@ -1687,11 +1704,11 @@ export default function HRIS() {
       {/* Photo Lightbox */}
       {lightboxPhoto && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-80 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
           onClick={() => setLightboxPhoto(null)}
         >
           <div
-            className="relative max-w-lg w-full"
+            className="relative w-full max-w-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <img
