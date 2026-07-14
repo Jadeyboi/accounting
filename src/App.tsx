@@ -180,7 +180,7 @@ export default function App() {
 
     }
 
-    if (userRole === 'employee') {
+    if (userRole === 'employee' || userRole === 'user') {
 
       const employeeRoutes = ['/my-payslips', '/my-leave'];
 
@@ -188,7 +188,7 @@ export default function App() {
 
     }
 
-    return true; // user role sees everything except admin-only pages
+    return false;
 
   };
 
@@ -348,7 +348,7 @@ export default function App() {
 
                 )}
 
-                {userRole === 'employee' && (
+                {(userRole === 'employee' || userRole === 'user') && (
 
                   <NavLink
 
@@ -378,7 +378,7 @@ export default function App() {
 
                 )}
 
-                {userRole === 'employee' && (
+                {(userRole === 'employee' || userRole === 'user') && (
 
                   <NavLink
 
@@ -406,7 +406,7 @@ export default function App() {
 
                 )}
 
-                {userRole === 'employee' && (
+                {(userRole === 'employee' || userRole === 'user') && (
 
                   <NavLink
 
@@ -434,7 +434,7 @@ export default function App() {
 
                 )}
 
-                {canAccess('/') && userRole !== 'employee' && (
+                {canAccess('/') && userRole !== 'employee' && userRole !== 'user' && (
 
                 <NavLink
 
@@ -1006,7 +1006,7 @@ export default function App() {
 
                 )}
 
-                {userRole === 'employee' && (
+                {(userRole === 'employee' || userRole === 'user') && (
 
                   <NavLink
 
@@ -1038,7 +1038,7 @@ export default function App() {
 
                 )}
 
-                {userRole === 'employee' && (
+                {(userRole === 'employee' || userRole === 'user') && (
 
                   <NavLink
 
@@ -1068,7 +1068,7 @@ export default function App() {
 
                 )}
 
-                {userRole === 'employee' && (
+                {(userRole === 'employee' || userRole === 'user') && (
 
                   <NavLink
 
@@ -1098,7 +1098,7 @@ export default function App() {
 
                 )}
 
-                {canAccess('/') && userRole !== 'employee' && (
+                {canAccess('/') && userRole !== 'employee' && userRole !== 'user' && (
 
                 <NavLink
 
@@ -1670,7 +1670,7 @@ export default function App() {
 
             <Routes>
 
-              {userRole === 'employee' && (
+              {(userRole === 'employee' || userRole === 'user') && (
 
                 <>
 
@@ -1696,7 +1696,7 @@ export default function App() {
 
               )}
 
-              {userRole !== 'hr' && (
+              {userRole !== 'hr' && userRole !== 'employee' && userRole !== 'user' && (
 
                 <Route path="/" element={<Home />} />
 
@@ -1704,7 +1704,7 @@ export default function App() {
 
               <Route path="/access-denied" element={<AccessDenied />} />
 
-              {userRole !== 'employee' && (
+              {userRole !== 'employee' && userRole !== 'user' && (
                 <>
                   <Route path="/monthly" element={<Monthly />} />
                   <Route path="/reports" element={<Reports />} />
@@ -1740,7 +1740,7 @@ export default function App() {
 
               )}
 
-              <Route path="*" element={userRole === 'hr' ? <HRDashboard /> : userRole === 'employee' ? <EmployeeDashboard /> : <Home />} />
+              <Route path="*" element={userRole === 'hr' ? <HRDashboard /> : (userRole === 'employee' || userRole === 'user') ? <EmployeeDashboard /> : <Home />} />
 
             </Routes>
 

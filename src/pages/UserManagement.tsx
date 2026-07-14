@@ -16,7 +16,17 @@ interface User {
 
   role: 'super_admin' | 'admin' | 'hr' | 'user'
 
+  employee_id: string | null
+
   created_at: string
+
+}
+
+interface Employee {
+
+  id: string
+
+  name: string
 
 }
 
@@ -34,6 +44,8 @@ export default function UserManagement() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null)
 
+  const [employees, setEmployees] = useState<Employee[]>([])
+
 
 
   // Form state
@@ -46,13 +58,35 @@ export default function UserManagement() {
 
   const [role, setRole] = useState<'admin' | 'hr' | 'user'>('user')
 
+  const [linkedEmployeeId, setLinkedEmployeeId] = useState<string>('')
+
 
 
   useEffect(() => {
 
     loadUsers()
 
+    loadEmployees()
+
   }, [])
+
+
+
+  const loadEmployees = async () => {
+
+    const { data } = await supabase
+
+      .from('employees')
+
+      .select('id, name')
+
+      .neq('status', 'terminated')
+
+      .order('name', { ascending: true })
+
+    setEmployees((data ?? []) as Employee[])
+
+  }
 
 
 
@@ -202,6 +236,8 @@ export default function UserManagement() {
 
             role: role,
 
+            employee_id: linkedEmployeeId || null,
+
             must_change_password: true
 
           })
@@ -280,6 +316,40 @@ export default function UserManagement() {
 
 
 
+  const handleLinkEmployee = async (userId: string, employeeId: string) => {
+
+    try {
+
+      const user = users.find(u => u.id === userId)
+
+      const { error } = await supabase
+
+        .from('users')
+
+        .update({ employee_id: employeeId || null })
+
+        .eq('id', userId)
+
+
+
+      if (error) throw error
+
+
+
+      await logActivity('updated', 'Users', `Linked employee record for ${user?.email ?? 'Unknown'}`)
+
+      await loadUsers()
+
+    } catch (err: any) {
+
+      alert(err.message || 'Failed to link employee')
+
+    }
+
+  }
+
+
+
   const handleUpdateRole = async (userId: string, newRole: string) => {
 
     try {
@@ -325,6 +395,8 @@ export default function UserManagement() {
     setFullName('')
 
     setRole('user')
+
+    setLinkedEmployeeId('')
 
   }
 
@@ -434,6 +506,8 @@ export default function UserManagement() {
 
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Role</th>
 
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Linked Employee</th>
+
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">Created</th>
 
                     <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-600">Actions</th>
@@ -491,6 +565,32 @@ export default function UserManagement() {
                         </select>
 
                       </td>
+
+                      <td className="px-6 py-4">
+
+                        <select
+
+                          value={user.employee_id ?? ''}
+
+                          onChange={(e) => handleLinkEmployee(user.id, e.target.value)}
+
+                          className="text-sm rounded border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+
+                        >
+
+                          <option value="">— Not linked —</option>
+
+                          {employees.map(emp => (
+
+                            <option key={emp.id} value={emp.id}>{emp.name}</option>
+
+                          ))}
+
+                        </select>
+
+                      </td>
+
+
 
                       <td className="px-6 py-4 text-sm text-gray-500">
 
@@ -667,6 +767,34 @@ export default function UserManagement() {
                   <option value="admin">Admin</option>
 
                 </select>
+
+              </div>
+
+              <div>
+
+                <label className="block text-sm font-medium text-gray-700 mb-1">Linked Employee</label>
+
+                <select
+
+                  value={linkedEmployeeId}
+
+                  onChange={(e) => setLinkedEmployeeId(e.target.value)}
+
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+
+                >
+
+                  <option value="">— None —</option>
+
+                  {employees.map(emp => (
+
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+
+                  ))}
+
+                </select>
+
+                <p className="mt-1 text-xs text-gray-500">Required for User role to access payslips and leave.</p>
 
               </div>
 
