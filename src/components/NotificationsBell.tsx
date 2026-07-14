@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import type { Employee, LeaveRequest } from '@/types'
 import Notifications from './Notifications'
@@ -18,6 +19,8 @@ export default function NotificationsBell() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [loading, setLoading] = useState(true)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
 
   const calculateDaysUntil = (targetDate: string): number => {
     const today = new Date()
@@ -204,10 +207,22 @@ export default function NotificationsBell() {
   const urgentCount = notifications.filter(n => n.daysUntil <= 7).length
   const hasNotifications = notifications.length > 0
 
+  const handleToggle = () => {
+    if (!showDropdown && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setDropdownPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      })
+    }
+    setShowDropdown(!showDropdown)
+  }
+
   return (
     <div className="relative">
       <button
-        onClick={() => setShowDropdown(!showDropdown)}
+        ref={buttonRef}
+        onClick={handleToggle}
         className={`relative rounded-lg p-2 transition-all ${
           hasNotifications 
             ? 'bg-red-100 text-red-600 hover:bg-red-200' 
@@ -232,20 +247,24 @@ export default function NotificationsBell() {
         )}
       </button>
 
-      {/* Dropdown */}
-      {showDropdown && (
+      {/* Dropdown — rendered via portal to escape header stacking context */}
+      {showDropdown && createPortal(
         <>
           {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-10" 
+          <div
+            className="fixed inset-0"
+            style={{ zIndex: 9998 }}
             onClick={() => setShowDropdown(false)}
           />
-          
           {/* Dropdown content */}
-          <div className="fixed right-4 top-24 z-50 w-80 max-h-[80vh] overflow-y-auto rounded-xl shadow-2xl">
+          <div
+            className="fixed w-96 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl"
+            style={{ top: dropdownPos.top, right: dropdownPos.right, zIndex: 9999 }}
+          >
             <Notifications onClose={() => setShowDropdown(false)} />
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )
