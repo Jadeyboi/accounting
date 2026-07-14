@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { Employee, Payslip, Loan } from '@/types'
 import PayslipView from '@/components/PayslipView'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 type Mode = 'list' | 'edit'
 
@@ -91,6 +93,9 @@ export default function Payroll() {
       })
       .sort((a, b) => new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime())
   }, [payslips])
+
+  const periodsPagination = usePagination(payrollPeriods)
+  const payslipsPagination = usePagination(payslips)
 
   const refresh = async () => {
     setLoading(true)
@@ -916,7 +921,7 @@ export default function Payroll() {
             </div>
           </div>
           <div className="space-y-4">
-            {payrollPeriods.map((period, index) => {
+            {periodsPagination.pageItems.map((period, index) => {
               const periodKey = `${period.periodStart}_${period.periodEnd}`
               const isSelected = selectedPeriodKeys.has(periodKey)
               return (
@@ -1059,6 +1064,16 @@ export default function Payroll() {
               )
             })}
           </div>
+          <Pagination
+            page={periodsPagination.page}
+            pageSize={periodsPagination.pageSize}
+            totalItems={periodsPagination.totalItems}
+            totalPages={periodsPagination.totalPages}
+            from={periodsPagination.from}
+            to={periodsPagination.to}
+            onPageChange={periodsPagination.setPage}
+            onPageSizeChange={periodsPagination.setPageSize}
+          />
         </div>
       )}
 
@@ -1081,7 +1096,7 @@ export default function Payroll() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {payslips.map((p) => {
+                {payslipsPagination.pageItems.map((p) => {
                   const emp = allEmployees.find((e) => e.id === p.employee_id)
                   return (
                     <tr key={p.id}>
@@ -1105,6 +1120,16 @@ export default function Payroll() {
                 )}
               </tbody>
             </table>
+            <Pagination
+              page={payslipsPagination.page}
+              pageSize={payslipsPagination.pageSize}
+              totalItems={payslipsPagination.totalItems}
+              totalPages={payslipsPagination.totalPages}
+              from={payslipsPagination.from}
+              to={payslipsPagination.to}
+              onPageChange={payslipsPagination.setPage}
+              onPageSizeChange={payslipsPagination.setPageSize}
+            />
           </div>
         </div>
       )}

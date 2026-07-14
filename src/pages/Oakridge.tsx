@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { OakridgeBilling } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (d: string | null | undefined): string => {
   if (!d) return '-'
@@ -95,6 +97,8 @@ export default function Oakridge() {
     if (selectedMonth === 'all') return billings
     return billings.filter(b => (b.billing_month || '').slice(0, 7) === selectedMonth)
   }, [billings, selectedMonth])
+
+  const pagination = usePagination(filtered)
 
   const totalDue = useMemo(() => filtered.reduce((s, b) => s + b.amount_due, 0), [filtered])
   const totalPaid = useMemo(() => filtered.reduce((s, b) => s + b.amount_paid, 0), [filtered])
@@ -253,7 +257,7 @@ export default function Oakridge() {
         <label className="text-sm font-medium text-gray-700">Billing Month:</label>
         <select
           value={selectedMonth}
-          onChange={e => setSelectedMonth(e.target.value)}
+          onChange={e => { setSelectedMonth(e.target.value); pagination.resetPage() }}
           className="input-field w-auto"
         >
           <option value="all">All Months</option>
@@ -345,6 +349,7 @@ export default function Oakridge() {
               No billing records for {selectedMonth}. Click "+ Add Billing" to get started.
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -361,7 +366,7 @@ export default function Oakridge() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {filtered.map(b => (
+                  {pagination.pageItems.map(b => (
                     <tr key={b.id} className="table-row-hover">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{categoryLabel[b.category] ?? b.category}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{b.description || '-'}</td>
@@ -425,6 +430,17 @@ export default function Oakridge() {
                 </tfoot>
               </table>
             </div>
+            <Pagination
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              totalPages={pagination.totalPages}
+              from={pagination.from}
+              to={pagination.to}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+            </>
           )}
         </div>
       </div>

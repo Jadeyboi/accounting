@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { Employee, LeaveRequest } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -242,9 +244,9 @@ export default function Leave() {
     if (filterStatus !== 'all' && leave.status !== filterStatus) return false
     if (filterEmployee !== 'all' && leave.employee_id !== filterEmployee) return false
     return true
-  }).sort((a, b) => {
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
+
+  const pagination = usePagination(filteredLeaves)
 
   const recalculateAllBalances = async () => {
     if (!confirm('Recalculate all employee leave balances? This will reset all balances to default and then subtract approved leaves.')) return
@@ -532,7 +534,7 @@ ${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate
             <label className="mb-1 block text-sm font-medium text-gray-700">Filter by Status</label>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as any)}
+              onChange={(e) => { setFilterStatus(e.target.value as any); pagination.resetPage() }}
               className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Status</option>
@@ -545,7 +547,7 @@ ${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate
             <label className="mb-1 block text-sm font-medium text-gray-700">Filter by Employee</label>
             <select
               value={filterEmployee}
-              onChange={(e) => setFilterEmployee(e.target.value)}
+              onChange={(e) => { setFilterEmployee(e.target.value); pagination.resetPage() }}
               className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Employees</option>
@@ -592,7 +594,7 @@ ${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate
                   </td>
                 </tr>
               )}
-              {!loading && !error && filteredLeaves.map((leave) => {
+              {!loading && !error && pagination.pageItems.map((leave) => {
                 const employee = employees.find(e => e.id === leave.employee_id)
                 return (
                   <tr key={leave.id} className="table-row-hover">
@@ -659,6 +661,16 @@ ${approvedLeaves.map(l => `- ${l.leave_type}: ${l.days_count} days (${formatDate
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          from={pagination.from}
+          to={pagination.to}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {/* Employee Leave Balances */}

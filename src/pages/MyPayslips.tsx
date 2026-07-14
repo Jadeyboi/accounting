@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import PayslipView from '@/components/PayslipView'
 import type { Employee, Payslip } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (dateString: string): string => {
   if (!dateString) return ''
@@ -85,6 +87,8 @@ export default function MyPayslips() {
     win.close()
   }
 
+  const pagination = usePagination(payslips)
+
   if (userLoading || loading) {
     return (
       <div className="py-16 text-center text-sm text-gray-500">
@@ -162,7 +166,7 @@ export default function MyPayslips() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {payslips.map((slip) => {
+                  {pagination.pageItems.map((slip) => {
                     const totalDeductions =
                       (slip.sss ?? 0) + (slip.pagibig ?? 0) + (slip.philhealth ?? 0) +
                       (slip.tax ?? 0) + (slip.cash_advance ?? 0) + (slip.loan_deductions ?? 0) +
@@ -192,6 +196,16 @@ export default function MyPayslips() {
                   })}
                 </tbody>
               </table>
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                totalPages={pagination.totalPages}
+                from={pagination.from}
+                to={pagination.to}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+              />
             </div>
           )}
         </div>

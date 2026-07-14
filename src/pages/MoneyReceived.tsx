@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { MoneyReceived } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -246,6 +248,8 @@ export default function MoneyReceived() {
     return true
   })
 
+  const pagination = usePagination(filteredRecords)
+
   // Calculate totals
   const totalAmountUSD = filteredRecords.reduce((sum, record) => sum + record.amount_usd, 0)
   const totalAmountPHP = filteredRecords.reduce((sum, record) => sum + record.amount_php, 0)
@@ -343,7 +347,7 @@ export default function MoneyReceived() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              onChange={(e) => { setFilterStatus(e.target.value); pagination.resetPage() }}
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             >
               <option value="all">All Status</option>
@@ -356,7 +360,7 @@ export default function MoneyReceived() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
             <select
               value={filterMethod}
-              onChange={(e) => setFilterMethod(e.target.value)}
+              onChange={(e) => { setFilterMethod(e.target.value); pagination.resetPage() }}
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             >
               <option value="all">All Methods</option>
@@ -374,7 +378,7 @@ export default function MoneyReceived() {
             <input
               type="date"
               value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
+              onChange={(e) => { setFilterDateFrom(e.target.value); pagination.resetPage() }}
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
@@ -383,7 +387,7 @@ export default function MoneyReceived() {
             <input
               type="date"
               value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
+              onChange={(e) => { setFilterDateTo(e.target.value); pagination.resetPage() }}
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />
           </div>
@@ -423,6 +427,7 @@ export default function MoneyReceived() {
               <p className="text-gray-500">No records found. Add your first money received record!</p>
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -438,7 +443,7 @@ export default function MoneyReceived() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {filteredRecords.map((record) => (
+                  {pagination.pageItems.map((record) => (
                     <tr key={record.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm text-gray-900">
                         {formatDate(record.date_received)}
@@ -500,6 +505,17 @@ export default function MoneyReceived() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              totalPages={pagination.totalPages}
+              from={pagination.from}
+              to={pagination.to}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+            </>
           )}
         </div>
       </div>

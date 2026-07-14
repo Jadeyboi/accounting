@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { Employee, SalaryHistory } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -448,6 +450,8 @@ export default function HRIS() {
     (emp.position && emp.position.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
+  const pagination = usePagination(filteredEmployees)
+
   const activeEmployees = filteredEmployees.length
   const totalSalary = filteredEmployees.reduce((sum, emp) => sum + (emp.base_salary || 0), 0)
 
@@ -528,7 +532,7 @@ export default function HRIS() {
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); pagination.resetPage() }}
             placeholder="Search by name or position..."
             className="block w-full rounded-lg border-gray-300 py-2.5 pl-10 pr-4 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 sm:text-base"
           />
@@ -574,7 +578,7 @@ export default function HRIS() {
                   </td>
                 </tr>
               )}
-              {!loading && !error && filteredEmployees.map((employee) => (
+              {!loading && !error && pagination.pageItems.map((employee) => (
                 <tr key={employee.id} className="table-row-hover">
                   <td className="px-6 py-4">
                     <div className="flex items-center">
@@ -659,6 +663,16 @@ export default function HRIS() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          from={pagination.from}
+          to={pagination.to}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {/* Modal */}

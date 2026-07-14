@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { JobOpening, Applicant } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (d: string | null | undefined) => {
   if (!d) return '-'
@@ -218,6 +220,8 @@ export default function JobOpenings() {
     return matchSearch && matchStatus
   })
 
+  const pagination = usePagination(filtered)
+
   const openCount = jobs.filter(j => j.status === 'open').length
   const closedCount = jobs.filter(j => j.status === 'closed').length
   const onHoldCount = jobs.filter(j => j.status === 'on_hold').length
@@ -250,10 +254,10 @@ export default function JobOpenings() {
       </div>
 
       <div className="flex flex-wrap gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+        <input type="text" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); pagination.resetPage() }}
           placeholder="Search by title or department..."
           className="flex-1 min-w-48 rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); pagination.resetPage() }}
           className="rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500">
           <option value="all">All Status</option>
           <option value="open">Open</option>
@@ -284,7 +288,7 @@ export default function JobOpenings() {
                   {searchTerm || filterStatus !== 'all' ? 'No jobs match your filters.' : 'No job openings yet. Post your first one!'}
                 </td></tr>
               )}
-              {!loading && filtered.map((job) => (
+              {!loading && pagination.pageItems.map((job) => (
                 <tr key={job.id} className="table-row-hover">
                   <td className="px-6 py-4">
                     <button onClick={() => { setViewingJob(job); setShowViewModal(true); loadApplicants(job.id) }}
@@ -313,6 +317,16 @@ export default function JobOpenings() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          from={pagination.from}
+          to={pagination.to}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {/* Job Add/Edit Modal */}

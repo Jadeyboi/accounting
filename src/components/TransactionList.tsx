@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activityLogger";
 import type { Transaction } from "@/types";
+import { usePagination } from "@/hooks/usePagination";
+import Pagination from "@/components/Pagination";
 
 interface Props {
   refreshKey: number;
@@ -101,16 +103,16 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
   };
 
   const toggleSelectAll = () => {
-    if (filtered.every(t => selectedIds.has(t.id))) {
+    if (pagination.pageItems.every(t => selectedIds.has(t.id))) {
       setSelectedIds(prev => {
         const next = new Set(prev);
-        filtered.forEach(t => next.delete(t.id));
+        pagination.pageItems.forEach(t => next.delete(t.id));
         return next;
       });
     } else {
       setSelectedIds(prev => {
         const next = new Set(prev);
-        filtered.forEach(t => next.add(t.id));
+        pagination.pageItems.forEach(t => next.add(t.id));
         return next;
       });
     }
@@ -155,10 +157,12 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
     onChanged();
   };
 
+  const pagination = usePagination(filtered);
+
+  const allFilteredSelected = pagination.pageItems.length > 0 && pagination.pageItems.every(t => selectedIds.has(t.id));
+
   if (loading) return <div className="mt-4 text-sm text-slate-600">Loading...</div>;
   if (error) return <div className="mt-4 text-sm text-rose-600">{error}</div>;
-
-  const allFilteredSelected = filtered.length > 0 && filtered.every(t => selectedIds.has(t.id));
 
   return (
     <div className="mt-4 space-y-3">
@@ -167,13 +171,13 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
         <input
           type="text"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => { setSearchTerm(e.target.value); pagination.resetPage(); }}
           placeholder="Search category or note..."
           className="flex-1 min-w-40 rounded-lg border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
         />
         <select
           value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
+          onChange={(e) => { setFilterType(e.target.value); pagination.resetPage(); }}
           className="rounded-lg border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
         >
           <option value="all">All Types</option>
@@ -184,20 +188,20 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
         <input
           type="date"
           value={filterDateFrom}
-          onChange={(e) => setFilterDateFrom(e.target.value)}
+          onChange={(e) => { setFilterDateFrom(e.target.value); pagination.resetPage(); }}
           className="rounded-lg border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
           title="From date"
         />
         <input
           type="date"
           value={filterDateTo}
-          onChange={(e) => setFilterDateTo(e.target.value)}
+          onChange={(e) => { setFilterDateTo(e.target.value); pagination.resetPage(); }}
           className="rounded-lg border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
           title="To date"
         />
         {(searchTerm || filterType !== 'all' || filterDateFrom || filterDateTo) && (
           <button
-            onClick={() => { setSearchTerm(''); setFilterType('all'); setFilterDateFrom(''); setFilterDateTo(''); }}
+            onClick={() => { setSearchTerm(''); setFilterType('all'); setFilterDateFrom(''); setFilterDateTo(''); pagination.resetPage(); }}
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
           >
             Clear
@@ -240,7 +244,7 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {filtered.map((t, idx) => (
+            {pagination.pageItems.map((t, idx) => (
               <tr key={t.id} className={`${selectedIds.has(t.id) ? 'bg-blue-50' : idx % 2 === 0 ? "bg-white" : "bg-slate-50 hover:bg-slate-100"}`}>
                 {editId === t.id ? (
                   <>
@@ -319,9 +323,16 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
           </tbody>
         </table>
       </div>
-      {filtered.length > 0 && (
-        <p className="text-xs text-slate-500 text-right">Showing {filtered.length} of {items.length} transactions</p>
-      )}
+      <Pagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        totalPages={pagination.totalPages}
+        from={pagination.from}
+        to={pagination.to}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+      />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 interface InvoiceItem {
   id: string
@@ -56,6 +58,8 @@ export default function InvoiceHistory() {
     inv.clientName.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const pagination = usePagination(filteredInvoices)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -75,7 +79,7 @@ export default function InvoiceHistory() {
         <input
           type="text"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => { setSearchTerm(e.target.value); pagination.resetPage() }}
           placeholder="Search by invoice number or client name..."
           className="w-full rounded-md border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
         />
@@ -96,8 +100,9 @@ export default function InvoiceHistory() {
           )}
         </div>
       ) : (
+        <>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredInvoices.map((invoice) => (
+          {pagination.pageItems.map((invoice) => (
             <div key={invoice.id} className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
               <div className="mb-4 flex items-start justify-between">
                 <div>
@@ -154,6 +159,17 @@ export default function InvoiceHistory() {
             </div>
           ))}
         </div>
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          from={pagination.from}
+          to={pagination.to}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
+        </>
       )}
     </div>
   )

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activityLogger";
 import type { Saving } from "@/types";
+import { usePagination } from "@/hooks/usePagination";
+import Pagination from "@/components/Pagination";
 
 export default function Savings() {
   const [items, setItems] = useState<Saving[]>([]);
@@ -52,6 +54,8 @@ export default function Savings() {
   useEffect(() => {
     load();
   }, []);
+
+  const pagination = usePagination(items);
 
   const total = items.reduce((s, it) => s + (it.amount ?? 0), 0);
 
@@ -402,7 +406,7 @@ export default function Savings() {
             )}
             {!loading &&
               !error &&
-              items.map((it) => (
+              pagination.pageItems.map((it) => (
                 <tr key={it.id}>
                   {editId === it.id ? (
                     <>
@@ -570,6 +574,16 @@ export default function Savings() {
               ))}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          from={pagination.from}
+          to={pagination.to}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {/* Paid History Modal */}

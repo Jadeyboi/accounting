@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 
 import { supabase } from '@/lib/supabase'
 
 import { logActivity } from '@/lib/activityLogger'
+
+import { usePagination } from '@/hooks/usePagination'
+
+import Pagination from '@/components/Pagination'
 
 
 
@@ -45,6 +49,7 @@ export default function UserManagement() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
 
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
 
 
 
@@ -386,6 +391,15 @@ export default function UserManagement() {
 
 
 
+  const filteredUsers = useMemo(() =>
+    users.filter(u =>
+      (u.full_name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.role.toLowerCase().includes(searchTerm.toLowerCase())
+    ), [users, searchTerm])
+
+  const pagination = usePagination(filteredUsers)
+
   const resetForm = () => {
 
     setEmail('')
@@ -440,7 +454,16 @@ export default function UserManagement() {
 
         <div className="p-6">
 
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">System Users</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">System Users</h3>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); pagination.resetPage() }}
+              placeholder="Search by name, email or role..."
+              className="rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 sm:w-64"
+            />
+          </div>
 
           
 
@@ -518,17 +541,7 @@ export default function UserManagement() {
 
                 <tbody className="divide-y divide-gray-200 bg-white">
 
-                  {users
-
-                    .sort((a, b) => {
-
-                      const nameA = a.full_name || a.email || ''
-
-                      const nameB = b.full_name || b.email || ''
-
-                      return nameA.localeCompare(nameB)
-
-                    })
+                  {pagination.pageItems
 
                     .map((user) => (
 
@@ -624,6 +637,19 @@ export default function UserManagement() {
 
             </div>
 
+          )}
+
+          {!loading && !error && (
+            <Pagination
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              totalPages={pagination.totalPages}
+              from={pagination.from}
+              to={pagination.to}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
           )}
 
         </div>

@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import type { Employee, LeaveRequest } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -147,6 +149,8 @@ export default function MyLeave() {
     await loadData()
   }
 
+  const pagination = usePagination(leaveRequests)
+
   if (userLoading || loading) {
     return (
       <div className="py-16 text-center text-sm text-gray-500">
@@ -234,7 +238,7 @@ export default function MyLeave() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {leaveRequests.map((leave) => (
+                  {pagination.pageItems.map((leave) => (
                     <tr key={leave.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize">
                         {leave.leave_type.replace(/_/g, ' ')}
@@ -265,6 +269,16 @@ export default function MyLeave() {
                   ))}
                 </tbody>
               </table>
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                totalPages={pagination.totalPages}
+                from={pagination.from}
+                to={pagination.to}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+              />
             </div>
           )}
         </div>

@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { ActivityLog } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDateTime = (d: string) => {
   const date = new Date(d)
@@ -55,6 +57,8 @@ export default function ActivityLogs() {
     })
   }, [logs, searchTerm, filterModule, filterAction])
 
+  const pagination = usePagination(filtered)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -70,13 +74,13 @@ export default function ActivityLogs() {
         <input
           type="text"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => { setSearchTerm(e.target.value); pagination.resetPage() }}
           placeholder="Search by description or email..."
           className="flex-1 min-w-48 rounded-lg border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
         />
         <select
           value={filterModule}
-          onChange={(e) => setFilterModule(e.target.value)}
+          onChange={(e) => { setFilterModule(e.target.value); pagination.resetPage() }}
           className="rounded-lg border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
         >
           <option value="all">All Modules</option>
@@ -84,7 +88,7 @@ export default function ActivityLogs() {
         </select>
         <select
           value={filterAction}
-          onChange={(e) => setFilterAction(e.target.value)}
+          onChange={(e) => { setFilterAction(e.target.value); pagination.resetPage() }}
           className="rounded-lg border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
         >
           <option value="all">All Actions</option>
@@ -115,7 +119,7 @@ export default function ActivityLogs() {
               {!loading && filtered.length === 0 && (
                 <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">No activity logs found.</td></tr>
               )}
-              {!loading && filtered.map(log => (
+              {!loading && pagination.pageItems.map(log => (
                 <tr key={log.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDateTime(log.created_at)}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{log.user_email || 'System'}</td>
@@ -131,11 +135,16 @@ export default function ActivityLogs() {
             </tbody>
           </table>
         </div>
-        {filtered.length > 0 && (
-          <div className="border-t border-gray-200 px-4 py-3 text-right text-xs text-gray-500">
-            Showing {filtered.length} of {logs.length} logs
-          </div>
-        )}
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          from={pagination.from}
+          to={pagination.to}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       </div>
     </div>
   )

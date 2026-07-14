@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { Employee, Loan, LoanPayment } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -333,6 +335,14 @@ export default function Loans() {
     return badges[status as keyof typeof badges] || 'bg-gray-100 text-gray-800'
   }
 
+  const sortedLoans = useMemo(() => [...loans].sort((a, b) => {
+    const empA = employees.find(e => e.id === a.employee_id)
+    const empB = employees.find(e => e.id === b.employee_id)
+    return (empA?.name ?? '').localeCompare(empB?.name ?? '')
+  }), [loans, employees])
+
+  const pagination = usePagination(sortedLoans)
+
   const activeLoans = loans.filter(loan => loan.status === 'active')
   const totalActiveAmount = activeLoans.reduce((sum, loan) => sum + loan.remaining_balance, 0)
   const totalLoanedAmount = loans.reduce((sum, loan) => sum + loan.total_amount, 0)
@@ -431,6 +441,7 @@ export default function Loans() {
               <p className="text-gray-500">No loans found. Create your first loan!</p>
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -445,15 +456,7 @@ export default function Loans() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {loans
-                    .sort((a, b) => {
-                      const empA = getEmployee(a.employee_id)
-                      const empB = getEmployee(b.employee_id)
-                      const nameA = empA?.name || ''
-                      const nameB = empB?.name || ''
-                      return nameA.localeCompare(nameB)
-                    })
-                    .map((loan) => {
+                  {pagination.pageItems.map((loan) => {
                     const employee = getEmployee(loan.employee_id)
                     const progress = ((loan.total_amount - loan.remaining_balance) / loan.total_amount) * 100
                     
@@ -522,6 +525,17 @@ export default function Loans() {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              totalPages={pagination.totalPages}
+              from={pagination.from}
+              to={pagination.to}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+            </>
           )}
         </div>
       </div>

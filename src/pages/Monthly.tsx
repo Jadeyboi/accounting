@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/types'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 interface ParsedTransaction {
   date: string
@@ -55,6 +57,8 @@ export default function Monthly() {
     load()
     return () => { cancelled = true }
   }, [month])
+
+  const pagination = usePagination(items)
 
   const { credit, debit, remaining } = useMemo(() => {
     const sums = items.reduce(
@@ -210,7 +214,7 @@ export default function Monthly() {
             <input
               type="month"
               value={month}
-              onChange={(e) => setMonth(e.target.value)}
+              onChange={(e) => { setMonth(e.target.value); pagination.resetPage() }}
               className="mt-1 w-full rounded border px-3 py-2"
             />
           </div>
@@ -356,7 +360,7 @@ export default function Monthly() {
                 <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">No transactions for this month.</td>
               </tr>
             )}
-            {!loading && !error && items.map((t) => (
+            {!loading && !error && pagination.pageItems.map((t) => (
               <tr key={t.id}>
                 <td className="px-4 py-2 text-sm text-gray-800">{t.date}</td>
                 <td className="px-4 py-2 text-sm">
@@ -377,6 +381,16 @@ export default function Monthly() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+          from={pagination.from}
+          to={pagination.to}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
       </div>
     </div>
   )

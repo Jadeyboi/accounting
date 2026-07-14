@@ -1,9 +1,11 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { InventoryItem, InventoryHistory } from '@/types'
 import * as QRCode from 'qrcode'
 import QrScanner from 'qr-scanner'
+import { usePagination } from '@/hooks/usePagination'
+import Pagination from '@/components/Pagination'
 
 export default function Inventory() {
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -167,6 +169,18 @@ export default function Inventory() {
     }
   }
 
+  const filteredItems = useMemo(() => items.filter(item => {
+    const matchesSearch = item.item_description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         item.asset_tag?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         item.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         item.model?.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter
+    const matchesStatus = statusFilter === 'all' || item.status === statusFilter
+    return matchesSearch && matchesCategory && matchesStatus
+  }), [items, searchQuery, categoryFilter, statusFilter])
+
+  const inventoryPagination = usePagination(filteredItems)
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -174,18 +188,6 @@ export default function Inventory() {
       </div>
     )
   }
-
-  const filteredItems = items.filter(item => {
-    const matchesSearch = item.item_description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.asset_tag?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.model?.toLowerCase().includes(searchQuery.toLowerCase())
-    
-    const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter
-    
-    return matchesSearch && matchesCategory && matchesStatus
-  })
 
   const categories = [...new Set([...predefinedCategories, ...items.map(item => item.category)])]
 
@@ -760,12 +762,12 @@ export default function Inventory() {
           type="text"
           placeholder="Search items..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => { setSearchQuery(e.target.value); inventoryPagination.resetPage() }}
           className="input-field"
         />
         <select
           value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
+          onChange={(e) => { setCategoryFilter(e.target.value); inventoryPagination.resetPage() }}
           className="input-field"
         >
           <option value="all">All Categories</option>
@@ -775,7 +777,7 @@ export default function Inventory() {
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => { setStatusFilter(e.target.value); inventoryPagination.resetPage() }}
           className="input-field"
         >
           <option value="all">All Status</option>
@@ -791,7 +793,7 @@ export default function Inventory() {
 
       {/* Items Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredItems.map((item) => (
+        {inventoryPagination.pageItems.map((item) => (
           <div key={item.id} className="glass rounded-xl p-4 space-y-3 relative">
             <div className="absolute top-3 left-3">
               <input
@@ -855,6 +857,16 @@ export default function Inventory() {
           <p className="text-gray-500">No inventory items found.</p>
         </div>
       )}
+      <Pagination
+        page={inventoryPagination.page}
+        pageSize={inventoryPagination.pageSize}
+        totalItems={inventoryPagination.totalItems}
+        totalPages={inventoryPagination.totalPages}
+        from={inventoryPagination.from}
+        to={inventoryPagination.to}
+        onPageChange={inventoryPagination.setPage}
+        onPageSizeChange={inventoryPagination.setPageSize}
+      />
 
       {/* Add/Edit Modal */}
       {showModal && (
