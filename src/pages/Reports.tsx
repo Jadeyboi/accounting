@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Transaction } from "@/types";
+import { usePagination } from "@/hooks/usePagination";
+import Pagination from "@/components/Pagination";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import {
@@ -78,6 +80,9 @@ export default function Reports() {
   const [rateError, setRateError] = useState<string>("");
 
   const reportRef = useRef<HTMLDivElement | null>(null);
+
+  const txPagination = usePagination(items);
+  const savingsPagination = usePagination(savingsItems);
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -856,7 +861,7 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((transaction) => (
+                  {txPagination.pageItems.map((transaction) => (
                     <tr key={transaction.id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-3 py-2 text-slate-900">{transaction.date}</td>
                       <td className="px-3 py-2">
@@ -897,6 +902,18 @@ export default function Reports() {
                 </tfoot>
               </table>
             </div>
+            <div className="no-print">
+              <Pagination
+                page={txPagination.page}
+                pageSize={txPagination.pageSize}
+                totalItems={txPagination.totalItems}
+                totalPages={txPagination.totalPages}
+                from={txPagination.from}
+                to={txPagination.to}
+                onPageChange={txPagination.setPage}
+                onPageSizeChange={txPagination.setPageSize}
+              />
+            </div>
           </div>
         )}
 
@@ -933,7 +950,7 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {savingsItems.map((saving, index) => (
+                  {savingsPagination.pageItems.map((saving, index) => (
                     <tr key={saving.id || index} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-3 py-2 text-slate-900">{saving.date}</td>
                       <td className="px-3 py-2 text-slate-700">{saving.description || '-'}</td>
@@ -959,6 +976,18 @@ export default function Reports() {
                   </tr>
                 </tfoot>
               </table>
+            </div>
+            <div className="no-print">
+              <Pagination
+                page={savingsPagination.page}
+                pageSize={savingsPagination.pageSize}
+                totalItems={savingsPagination.totalItems}
+                totalPages={savingsPagination.totalPages}
+                from={savingsPagination.from}
+                to={savingsPagination.to}
+                onPageChange={savingsPagination.setPage}
+                onPageSizeChange={savingsPagination.setPageSize}
+              />
             </div>
 
             {/* Savings Summary by Account */}
