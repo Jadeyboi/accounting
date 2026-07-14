@@ -316,8 +316,6 @@ export default function App() {
 
               <div className="hidden lg:flex items-center gap-4">
 
-                <NotificationsBell />
-
                 <nav className="flex flex-wrap gap-2 text-sm">
 
                 {userRole === 'hr' && (
@@ -953,6 +951,8 @@ export default function App() {
                 </button>
 
                 </nav>
+
+                <NotificationsBell />
 
               </div>
 

@@ -242,7 +242,7 @@ export default function NotificationsBell() {
           />
           
           {/* Dropdown content */}
-          <div className="absolute right-0 top-full z-20 mt-2 w-80 max-h-96 overflow-y-auto">
+          <div className="fixed right-4 top-24 z-50 w-80 max-h-[80vh] overflow-y-auto rounded-xl shadow-2xl">
             <Notifications onClose={() => setShowDropdown(false)} />
           </div>
         </>
