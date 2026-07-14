@@ -172,6 +172,7 @@ export default function NotificationsBell() {
       const { data: employees, error: employeesError } = await supabase
         .from('employees')
         .select('*')
+        .neq('status', 'terminated')
         .order('name')
 
       if (employeesError) throw employeesError
