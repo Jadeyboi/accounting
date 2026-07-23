@@ -17,6 +17,7 @@ export interface Employee {
   name: string;
   position?: string | null;
   base_salary?: number | null;
+  declared_salary?: number | null;
   employee_number?: string | null;
   email?: string | null;
   phone?: string | null;

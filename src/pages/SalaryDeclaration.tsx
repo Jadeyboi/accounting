@@ -8,20 +8,9 @@ import type { Employee } from '@/types'
 const formatMoney = (amount: number) =>
   `₱ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-const declaredSalariesStorageKey = 'salary-declaration-salaries'
-
-const loadDeclaredSalaries = (): Record<string, number> => {
-  try {
-    const storedSalaries = localStorage.getItem(declaredSalariesStorageKey)
-    return storedSalaries ? JSON.parse(storedSalaries) : {}
-  } catch {
-    return {}
-  }
-}
-
 export default function SalaryDeclaration() {
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [declaredSalaries, setDeclaredSalaries] = useState<Record<string, number>>(loadDeclaredSalaries)
+  const [declaredSalaries, setDeclaredSalaries] = useState<Record<string, number>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,10 +35,6 @@ export default function SalaryDeclaration() {
     loadEmployees()
   }, [])
 
-  useEffect(() => {
-    localStorage.setItem(declaredSalariesStorageKey, JSON.stringify(declaredSalaries))
-  }, [declaredSalaries])
-
   const filteredEmployees = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
     if (!normalizedSearch) return employees
@@ -62,7 +47,7 @@ export default function SalaryDeclaration() {
 
   const pagination = usePagination(filteredEmployees)
 
-  const getSalary = (employee: Employee) => declaredSalaries[employee.id] ?? employee.base_salary ?? 0
+  const getSalary = (employee: Employee) => declaredSalaries[employee.id] ?? employee.declared_salary ?? employee.base_salary ?? 0
 
   const totals = useMemo(() => {
     return filteredEmployees.reduce((result, employee) => {
@@ -83,9 +68,33 @@ export default function SalaryDeclaration() {
     }))
   }
 
-  const resetSalaries = () => {
-    localStorage.removeItem(declaredSalariesStorageKey)
+  const saveDeclaredSalary = async (employeeId: string, salary: number) => {
+    const { error: saveError } = await supabase
+      .from('employees')
+      .update({ declared_salary: salary || null })
+      .eq('id', employeeId)
+
+    if (saveError) {
+      alert(`Unable to save declared salary: ${saveError.message}`)
+      return
+    }
+
+    setEmployees((current) => current.map((employee) =>
+      employee.id === employeeId ? { ...employee, declared_salary: salary || null } : employee
+    ))
+  }
+
+  const resetSalaries = async () => {
+    const results = await Promise.all(employees.map((employee) =>
+      supabase.from('employees').update({ declared_salary: null }).eq('id', employee.id)
+    ))
+    const resetError = results.find((result) => result.error)?.error
+    if (resetError) {
+      alert(`Unable to reset declared salaries: ${resetError.message}`)
+      return
+    }
     setDeclaredSalaries({})
+    setEmployees((current) => current.map((employee) => ({ ...employee, declared_salary: null })))
   }
 
   return (
@@ -121,7 +130,7 @@ export default function SalaryDeclaration() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-semibold text-slate-900">Employee declaration grid</h3>
-            <p className="text-sm text-slate-600">Values update instantly and are not saved to payroll or employee records.</p>
+            <p className="text-sm text-slate-600">Values update instantly and save to the employee declaration when you leave a salary field.</p>
           </div>
           <input
             type="search"
@@ -176,6 +185,7 @@ export default function SalaryDeclaration() {
                           step="0.01"
                           value={salary || ''}
                           onChange={(event) => setSalary(employee.id, event.target.value)}
+                          onBlur={(event) => saveDeclaredSalary(employee.id, Math.max(0, Number(event.target.value) || 0))}
                           placeholder="0.00"
                           className="w-32 rounded border-blue-200 bg-white px-2 py-1 text-right font-medium text-slate-900 focus:border-blue-500 focus:ring-blue-500"
                         />
