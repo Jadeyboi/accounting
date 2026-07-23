@@ -14,6 +14,8 @@ import Reports from "@/pages/Reports";
 
 import Payroll from "@/pages/Payroll";
 
+import SalaryDeclaration from "@/pages/SalaryDeclaration";
+
 import Savings from "@/pages/Savings";
 
 import RequestFunds from "@/pages/RequestFunds";
@@ -174,7 +176,7 @@ export default function App() {
 
     if (userRole === 'hr') {
 
-      const hrRoutes = ['/payroll', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users'];
+      const hrRoutes = ['/payroll', '/salary-declaration', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users'];
 
       return hrRoutes.some(r => path === r || path.startsWith(r));
 
@@ -569,6 +571,34 @@ export default function App() {
                 >
 
                   Payroll
+
+                </NavLink>
+
+                )}
+
+                {canAccess('/salary-declaration') && (
+
+                <NavLink
+
+                  to="/salary-declaration"
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+
+                    }`
+
+                  }
+
+                >
+
+                  Salary Declaration
 
                 </NavLink>
 
@@ -1250,6 +1280,36 @@ export default function App() {
 
                 )}
 
+                {canAccess('/salary-declaration') && (
+
+                <NavLink
+
+                  to="/salary-declaration"
+
+                  onClick={() => setMobileMenuOpen(false)}
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-3 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+
+                    }`
+
+                  }
+
+                >
+
+                  Salary Declaration
+
+                </NavLink>
+
+                )}
+
                 {canAccess('/hris') && (
 
                 <NavLink
@@ -1710,6 +1770,7 @@ export default function App() {
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/savings" element={<Savings />} />
                   <Route path="/payroll" element={<Payroll />} />
+                  <Route path="/salary-declaration" element={<SalaryDeclaration />} />
                   <Route path="/hris" element={<HRIS />} />
                   <Route path="/oakridge" element={<Oakridge />} />
                   <Route path="/profitability" element={<Profitability />} />
