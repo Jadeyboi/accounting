@@ -8,9 +8,20 @@ import type { Employee } from '@/types'
 const formatMoney = (amount: number) =>
   `₱ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+const declaredSalariesStorageKey = 'salary-declaration-salaries'
+
+const loadDeclaredSalaries = (): Record<string, number> => {
+  try {
+    const storedSalaries = localStorage.getItem(declaredSalariesStorageKey)
+    return storedSalaries ? JSON.parse(storedSalaries) : {}
+  } catch {
+    return {}
+  }
+}
+
 export default function SalaryDeclaration() {
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [declaredSalaries, setDeclaredSalaries] = useState<Record<string, number>>({})
+  const [declaredSalaries, setDeclaredSalaries] = useState<Record<string, number>>(loadDeclaredSalaries)
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +45,10 @@ export default function SalaryDeclaration() {
 
     loadEmployees()
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem(declaredSalariesStorageKey, JSON.stringify(declaredSalaries))
+  }, [declaredSalaries])
 
   const filteredEmployees = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -68,7 +83,10 @@ export default function SalaryDeclaration() {
     }))
   }
 
-  const resetSalaries = () => setDeclaredSalaries({})
+  const resetSalaries = () => {
+    localStorage.removeItem(declaredSalariesStorageKey)
+    setDeclaredSalaries({})
+  }
 
   return (
     <div className="space-y-6">
