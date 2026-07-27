@@ -1046,10 +1046,16 @@ export default function Payroll() {
                                     View
                                   </button>
                                   <button
-                                    className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                                    className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-slate-200 mr-1"
                                     onClick={() => onEditPayslip(payslip)}
                                   >
                                     Edit
+                                  </button>
+                                  <button
+                                    className="rounded-md bg-rose-50 px-2 py-1 text-xs text-rose-700 hover:bg-rose-100"
+                                    onClick={() => onDeletePayslip(payslip.id)}
+                                  >
+                                    Delete
                                   </button>
                                 </td>
                               </tr>
