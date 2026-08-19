@@ -22,100 +22,102 @@ export default function NotificationsBell() {
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
 
-  const calculateDaysUntil = (targetDate: string): number => {
-    const today = new Date()
-    const target = new Date(targetDate)
-    
-    // For birthdays and anniversaries, we need to check this year's date
-    if (target.getFullYear() !== today.getFullYear()) {
-      target.setFullYear(today.getFullYear())
-      
-      // If the date has already passed this year, check next year
-      if (target < today) {
-        target.setFullYear(today.getFullYear() + 1)
-      }
-    }
-    
-    const diffTime = target.getTime() - today.getTime()
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  const calculateDaysUntil = (_targetDate: string): number => 0 // replaced below
+
+  // Get today as local YYYY-MM-DD (no UTC shift)
+  const localToday = (): string => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   }
+
+  // Integer days between two local date strings (0 = same day)
+  const daysBetween = (fromISO: string, toISO: string): number => {
+    const [fy,fm,fd] = fromISO.split('-').map(Number)
+    const [ty,tm,td] = toISO.split('-').map(Number)
+    return Math.round((new Date(ty,tm-1,td).getTime() - new Date(fy,fm-1,fd).getTime()) / 86400000)
+  }
+
+  // Next occurrence of a date's MM-DD on or after todayISO
+  const nextOccurrence = (dateISO: string, todayISO: string): string => {
+    const [,em,ed] = dateISO.split('-').map(Number)
+    const curYear = Number(todayISO.split('-')[0])
+    const thisYear = `${curYear}-${String(em).padStart(2,'0')}-${String(ed).padStart(2,'0')}`
+    if (thisYear >= todayISO) return thisYear
+    return `${curYear+1}-${String(em).padStart(2,'0')}-${String(ed).padStart(2,'0')}`
+  }
+
+  // Years completed between hire date and a given anniversary date
+  const completedYears = (hiredISO: string, anniversaryISO: string): number =>
+    Number(anniversaryISO.split('-')[0]) - Number(hiredISO.split('-')[0])
+
+  const ordinal = (n: number): string =>
+    n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`
 
   const generateNotifications = (employees: Employee[], leaveRequests: LeaveRequest[]): Notification[] => {
     const notifications: Notification[] = []
-    const today = new Date()
+    const todayISO = localToday()
 
     employees.forEach(employee => {
-      // Birthday notifications (30 days ahead)
+      // ── Birthday ──────────────────────────────────────────────────────────
       if (employee.birthdate) {
-        const daysUntil = calculateDaysUntil(employee.birthdate)
-        if (daysUntil >= 0 && daysUntil <= 30) {
+        const nextDate = nextOccurrence(employee.birthdate, todayISO)
+        const days = daysBetween(todayISO, nextDate)
+        if (days >= 0 && days <= 30) {
           notifications.push({
             id: `birthday-${employee.id}`,
             type: 'birthday',
             employee,
-            date: employee.birthdate,
-            daysUntil,
-            message: daysUntil === 0 
-              ? `🎉 Today is ${employee.name}'s birthday!`
-              : daysUntil === 1
+            date: nextDate,
+            daysUntil: days,
+            message: days === 0
+              ? `🎂 Today is ${employee.name}'s Birthday!`
+              : days === 1
               ? `🎂 ${employee.name}'s birthday is tomorrow`
-              : `🎂 ${employee.name}'s birthday is in ${daysUntil} days`
+              : `🎂 ${employee.name}'s birthday is in ${days} days`
           })
         }
       }
 
-      // Regularization notifications (for probationary employees)
+      // ── Regularization ────────────────────────────────────────────────────
       if (employee.employment_status === 'probationary' && employee.date_hired) {
-        const hiredDate = new Date(employee.date_hired)
-        const regularizationDate = new Date(hiredDate)
-        regularizationDate.setMonth(regularizationDate.getMonth() + 6) // 6 months after hire date
-        
-        const daysUntil = Math.ceil((regularizationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-        
-        if (daysUntil >= 0 && daysUntil <= 30) {
+        const hd = new Date(employee.date_hired)
+        const rd = new Date(hd)
+        rd.setMonth(rd.getMonth() + 6)
+        const regISO = `${rd.getFullYear()}-${String(rd.getMonth()+1).padStart(2,'0')}-${String(rd.getDate()).padStart(2,'0')}`
+        const days = daysBetween(todayISO, regISO)
+        if (days >= 0 && days <= 30) {
           notifications.push({
             id: `regularization-${employee.id}`,
             type: 'regularization',
             employee,
-            date: regularizationDate.toISOString().split('T')[0],
-            daysUntil,
-            message: daysUntil === 0
-              ? `📋 ${employee.name} is eligible for regularization today!`
-              : daysUntil === 1
+            date: regISO,
+            daysUntil: days,
+            message: days === 0
+              ? `📋 ${employee.name} is eligible for regularization Today!`
+              : days === 1
               ? `📋 ${employee.name} is eligible for regularization tomorrow`
-              : `📋 ${employee.name} is eligible for regularization in ${daysUntil} days`
+              : `📋 ${employee.name} is eligible for regularization in ${days} days`
           })
         }
       }
 
-      // Work anniversary notifications (yearly)
+      // ── Work Anniversary ──────────────────────────────────────────────────
       if (employee.date_hired) {
-        const hiredDate = new Date(employee.date_hired)
-        const thisYearAnniversary = new Date(today.getFullYear(), hiredDate.getMonth(), hiredDate.getDate())
-        
-        // If this year's anniversary has passed, check next year
-        if (thisYearAnniversary < today) {
-          thisYearAnniversary.setFullYear(today.getFullYear() + 1)
-        }
-        
-        const daysUntil = Math.ceil((thisYearAnniversary.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-        const yearsOfService = today.getFullYear() - hiredDate.getFullYear()
-        
-        // Only show if it's at least 1 year and within 30 days
-        if (yearsOfService >= 1 && daysUntil >= 0 && daysUntil <= 30) {
-          const nextYearOfService = yearsOfService + (thisYearAnniversary.getFullYear() > today.getFullYear() ? 0 : 1)
-          
+        const nextDate = nextOccurrence(employee.date_hired, todayISO)
+        const days = daysBetween(todayISO, nextDate)
+        const years = completedYears(employee.date_hired, nextDate)
+        if (years >= 1 && days >= 0 && days <= 30) {
           notifications.push({
             id: `anniversary-${employee.id}`,
             type: 'anniversary',
             employee,
-            date: thisYearAnniversary.toISOString().split('T')[0],
-            daysUntil,
-            message: daysUntil === 0
-              ? `🎊 Today is ${employee.name}'s ${nextYearOfService} year work anniversary!`
-              : daysUntil === 1
-              ? `🎊 ${employee.name}'s ${nextYearOfService} year work anniversary is tomorrow`
-              : `🎊 ${employee.name}'s ${nextYearOfService} year work anniversary is in ${daysUntil} days`
+            date: nextDate,
+            daysUntil: days,
+            message: days === 0
+              ? `🎉 Today is ${employee.name}'s ${ordinal(years)} Work Anniversary!`
+              : days === 1
+              ? `🎉 ${employee.name}'s ${ordinal(years)} work anniversary is tomorrow`
+              : `🎉 ${employee.name}'s ${ordinal(years)} work anniversary is in ${days} days`
           })
         }
       }
@@ -126,8 +128,7 @@ export default function NotificationsBell() {
       const employee = employees.find(emp => emp.id === leave.employee_id)
       if (!employee || leave.status !== 'approved') return
 
-      const startDate = new Date(leave.start_date)
-      const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      const daysUntil = daysBetween(localToday(), leave.start_date)
       
       // Only show leaves starting within the next 7 days
       if (daysUntil >= 0 && daysUntil <= 7) {
@@ -177,17 +178,20 @@ export default function NotificationsBell() {
 
       if (employeesError) throw employeesError
 
-      // Fetch approved leave requests starting within the next 7 days
-      const today = new Date()
-      const nextWeek = new Date()
-      nextWeek.setDate(today.getDate() + 7)
+      // Fetch approved leave requests starting today or within the next 7 days
+      const todayLocal = localToday()
+      const nextWeekLocal = (() => {
+        const d = new Date()
+        d.setDate(d.getDate() + 7)
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      })()
 
       const { data: leaveRequests, error: leaveError } = await supabase
         .from('leave_requests')
         .select('*')
         .eq('status', 'approved')
-        .gte('start_date', today.toISOString().split('T')[0])
-        .lte('start_date', nextWeek.toISOString().split('T')[0])
+        .gte('start_date', todayLocal)
+        .lte('start_date', nextWeekLocal)
         .order('start_date')
 
       if (leaveError) throw leaveError
