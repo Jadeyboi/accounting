@@ -65,6 +65,7 @@ export default function Invoice() {
   const [newDescription, setNewDescription] = useState('')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [logoDataUrl, setLogoDataUrl] = useState<string>('/avensetech-logo.jpg')
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string>('')
 
   // ── History state ─────────────────────────────────────────────────────────
   const [invoices, setInvoices] = useState<SavedInvoice[]>([])
@@ -87,7 +88,22 @@ export default function Invoice() {
         reader.readAsDataURL(blob)
       })
       .catch((err) => console.error('Failed to preload logo:', err))
+    // Preload an optional signature image (public/signature.png). Falls back to a typed name.
+    fetch('/signature.png')
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error('no signature'))))
+      .then((blob) => {
+        const reader = new FileReader()
+        reader.onloadend = () => setSignatureDataUrl(reader.result as string)
+        reader.readAsDataURL(blob)
+      })
+      .catch(() => {
+        /* no signature image; the typed-name fallback will be used */
+      })
   }, [])
+
+  // Signatory shown on invoices
+  const SIGNATORY_NAME = 'Jade Malvin Cordero'
+  const SIGNATORY_COMPANY = 'Avensetech Software Development Services'
 
   // One-time migration of any legacy localStorage data into Supabase.
   // Runs once per browser, then removes the old keys so it never repeats.
@@ -356,26 +372,77 @@ export default function Invoice() {
     return rows
   }
 
+  // Return the logo as an inline base64 data URL (fetch if not already cached)
+  const getLogoData = async (): Promise<string> => {
+    if (logoDataUrl.startsWith('data:')) return logoDataUrl
+    try {
+      const res = await fetch('/avensetech-logo.jpg')
+      const blob = await res.blob()
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    } catch (e) {
+      console.error('Could not embed logo for PDF:', e)
+      return logoDataUrl
+    }
+  }
+
+  // Return the signature image as a base64 data URL, or '' if none exists
+  const getSignatureData = async (): Promise<string> => {
+    if (signatureDataUrl) return signatureDataUrl
+    try {
+      const res = await fetch('/signature.png')
+      if (!res.ok) return ''
+      const blob = await res.blob()
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    } catch {
+      return ''
+    }
+  }
+
+  // Turn an already-rendered element into a downloaded PDF
+  const generatePdf = async (element: HTMLElement, filename: string) => {
+    const canvas = await html2canvas(element, {
+      scale: 2, useCORS: true, allowTaint: true, imageTimeout: 0, logging: false,
+      backgroundColor: '#ffffff', windowWidth: 1200,
+    })
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const imgWidth = 210
+    const pageHeight = 297
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+    let heightLeft = imgHeight
+    let position = 0
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+    heightLeft -= pageHeight
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight
+      pdf.addPage()
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+    }
+    pdf.save(filename)
+  }
+
+  const pdfFileName = (client: string, invNo: string) => {
+    const safeClient = (client || 'Client').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ')
+    return `${safeClient} - ${invNo || new Date().toISOString().split('T')[0]}.pdf`
+  }
+
   const handlePrint = async () => {
     const invoiceElement = document.getElementById('invoice-content')
     if (!invoiceElement) { alert('Invoice content not found'); return }
     try {
       // Ensure the logo is an inline base64 data URL so html2canvas can render it
-      let logoData = logoDataUrl
-      if (!logoData.startsWith('data:')) {
-        try {
-          const res = await fetch('/avensetech-logo.jpg')
-          const blob = await res.blob()
-          logoData = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onloadend = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(blob)
-          })
-        } catch (e) {
-          console.error('Could not embed logo for PDF:', e)
-        }
-      }
+      const logoData = await getLogoData()
 
       const clonedElement = invoiceElement.cloneNode(true) as HTMLElement
       clonedElement.querySelectorAll('.print\\:hidden').forEach(el => el.remove())
@@ -398,32 +465,9 @@ export default function Invoice() {
         })
       }
 
-      const canvas = await html2canvas(clonedElement, {
-        scale: 2, useCORS: true, allowTaint: true, imageTimeout: 0, logging: false,
-        backgroundColor: '#ffffff', windowWidth: 1200
-      })
+      await generatePdf(clonedElement, pdfFileName(clientName, invoiceNumber))
       document.body.removeChild(clonedElement)
 
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const imgWidth = 210
-      const pageHeight = 297
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
-      let position = 0
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-      heightLeft -= pageHeight
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight
-        pdf.addPage()
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-        heightLeft -= pageHeight
-      }
-      // Filename: "<Client> - <InvoiceNumber>.pdf" for easy sorting/finding
-      const safeClient = (clientName || 'Client').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ')
-      const invNo = invoiceNumber || new Date().toISOString().split('T')[0]
-      const filename = `${safeClient} - ${invNo}.pdf`
-      pdf.save(filename)
       const savedRows = await saveInvoiceToHistory()
       if (savedRows) {
         alert('Invoice saved successfully!')
@@ -511,6 +555,148 @@ export default function Invoice() {
     const due = new Date(inv.dueDate)
     due.setHours(0, 0, 0, 0)
     return due.getTime() < today.getTime()
+  }
+
+  const esc = (s: string) =>
+    (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+  // Build an off-screen invoice document from a saved invoice and download it as PDF
+  const downloadInvoicePdf = async (inv: SavedInvoice) => {
+    try {
+      const logoData = await getLogoData()
+      const signatureData = await getSignatureData()
+      const signatureImg = signatureData
+        ? `<img src="${signatureData}" alt="Signature" style="display:block;margin:0 auto -16px;height:64px;object-fit:contain;" />`
+        : `<div style="height:32px;"></div>`
+      const rows = inv.items
+        .map((it) => {
+          const qty = Number((it as InvoiceItem).qty) || 1
+          const unitPrice =
+            (it as InvoiceItem).unitPrice != null
+              ? Number((it as InvoiceItem).unitPrice)
+              : Number(it.amount) / (qty || 1)
+          return `
+            <tr style="border-bottom:1px solid #f3f4f6;">
+              <td style="padding:8px 16px;font-size:13px;font-weight:600;color:#111827;">${esc(it.description) || 'Item description'}</td>
+              <td style="padding:8px 16px;text-align:center;font-size:13px;color:#374151;">${qty}</td>
+              <td style="padding:8px 16px;text-align:right;font-size:13px;color:#374151;">${money(unitPrice)}</td>
+              <td style="padding:8px 16px;text-align:right;font-size:13px;font-weight:700;color:#111827;">${money(Number(it.amount) || qty * unitPrice)}</td>
+            </tr>`
+        })
+        .join('')
+
+      const html = `
+        <div style="width:794px;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+          <div style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:24px 40px;color:#fff;">
+            <div style="display:flex;align-items:center;gap:16px;">
+              <div style="display:flex;height:64px;width:64px;align-items:center;justify-content:center;border-radius:8px;background:#fff;padding:8px;">
+                <img src="${logoData}" alt="Logo" style="height:100%;width:100%;object-fit:contain;" />
+              </div>
+              <div>
+                <p style="margin:0;font-size:20px;font-weight:700;letter-spacing:.05em;">AVENSETECH</p>
+                <p style="margin:2px 0 0;font-size:12px;color:#cbd5e1;">Software Development Services</p>
+              </div>
+            </div>
+            <div style="margin-top:16px;display:flex;align-items:flex-end;justify-content:space-between;">
+              <span style="border-radius:8px;background:linear-gradient(to right,#3b82f6,#22d3ee);padding:8px 20px;font-size:14px;font-weight:700;letter-spacing:.05em;color:#fff;">INVOICE ${esc(inv.invoiceNumber) || 'INV-0001'}</span>
+              <div style="display:flex;gap:40px;text-align:right;">
+                <div>
+                  <p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#94a3b8;">Issue Date</p>
+                  <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#fff;">${esc(inv.invoiceDate)}</p>
+                </div>
+                <div>
+                  <p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#94a3b8;">Due Date</p>
+                  <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#fff;">${esc(inv.dueDate) || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:48px;padding:32px 40px;">
+            <div style="flex:1;">
+              <p style="margin:0 0 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:#9ca3af;">From</p>
+              <p style="margin:0;font-size:18px;font-weight:700;color:#111827;">Avensetech</p>
+              <p style="margin:4px 0 0;font-size:13px;line-height:1.6;color:#4b5563;">OIT2-806 Oakridge Business Park<br/>AS Fortuna, Banilad, Mandaue City<br/>Philippines<br/>09297246296 / (032) 234-1362</p>
+            </div>
+            <div style="flex:1;">
+              <p style="margin:0 0 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:#9ca3af;">Bill To</p>
+              <p style="margin:0;font-size:18px;font-weight:700;color:#111827;">${esc(inv.clientName) || 'Client Name'}</p>
+              <p style="margin:4px 0 0;font-size:13px;line-height:1.6;color:#4b5563;white-space:pre-line;">${esc(inv.clientAddress) || 'Client Address'}</p>
+            </div>
+          </div>
+
+          <div style="padding:0 40px;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#f9fafb;font-size:10px;text-transform:uppercase;letter-spacing:.15em;color:#6b7280;">
+                  <th style="padding:8px 16px;text-align:left;font-weight:700;">Description</th>
+                  <th style="padding:8px 16px;text-align:center;font-weight:700;">Qty</th>
+                  <th style="padding:8px 16px;text-align:right;font-weight:700;">Unit Price</th>
+                  <th style="padding:8px 16px;text-align:right;font-weight:700;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;padding:32px 40px;">
+            <div style="width:320px;border-radius:8px;background:#f9fafb;padding:24px;">
+              <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span style="color:#4b5563;">Subtotal</span><span style="font-weight:500;color:#111827;">${money(inv.subtotal)}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;"><span style="color:#4b5563;">Tax (0%)</span><span style="font-weight:500;color:#111827;">${money(inv.tax)}</span></div>
+              <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #d1d5db;padding-top:12px;"><span style="font-size:18px;font-weight:700;color:#111827;">TOTAL</span><span style="font-size:24px;font-weight:800;color:#111827;">${money(inv.total)}</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;padding:0 40px 8px;">
+            <div style="width:256px;text-align:center;">
+              ${signatureImg}
+              <div style="margin-top:4px;border-top:1px solid #9ca3af;padding-top:4px;">
+                <p style="margin:0;font-size:13px;font-weight:600;color:#111827;">${esc(SIGNATORY_NAME)}</p>
+                <p style="margin:0;font-size:11px;color:#6b7280;">${esc(SIGNATORY_COMPANY)}</p>
+                <p style="margin:0;font-size:11px;color:#6b7280;">Authorized Signature</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin:0 40px 32px;border-radius:12px;border:1px solid #e5e7eb;background:#f9fafb;padding:20px 24px;">
+            <p style="margin:0 0 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.15em;color:#6b7280;">Bank Transfer Details</p>
+            <div style="display:flex;flex-wrap:wrap;">
+              <div style="width:50%;margin-bottom:16px;"><p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;color:#9ca3af;">Account Name</p><p style="margin:2px 0 0;font-size:13px;font-weight:500;color:#1f2937;">Avensetech Software Development Services</p></div>
+              <div style="width:50%;margin-bottom:16px;"><p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;color:#9ca3af;">Account Number</p><p style="margin:2px 0 0;font-size:13px;font-weight:500;color:#1f2937;">004744-0246-63</p></div>
+              <div style="width:50%;margin-bottom:16px;"><p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;color:#9ca3af;">Bank Name</p><p style="margin:2px 0 0;font-size:13px;font-weight:500;color:#1f2937;">Bank Of The Philippine Islands (BPI)</p></div>
+              <div style="width:50%;margin-bottom:16px;"><p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;color:#9ca3af;">Swift Code</p><p style="margin:2px 0 0;font-size:13px;font-weight:500;color:#1f2937;">BOPIPHMMXXX</p></div>
+              <div style="width:100%;"><p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;color:#9ca3af;">Bank Address</p><p style="margin:2px 0 0;font-size:13px;font-weight:500;color:#1f2937;">Astra Centre on A.S. Fortuna Street, Barangay Banilad, Mandaue City, 6014, Philippines</p></div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid #e5e7eb;background:#f9fafb;padding:24px 40px;text-align:center;">
+            <p style="margin:0;font-size:14px;font-weight:600;color:#374151;">Thank you for your business!</p>
+            <p style="margin:4px 0 0;font-size:12px;color:#6b7280;">Avensetech Software Development Services • OIT2-806, Oakridge Business Park, Banilad, Mandaue City, Cebu</p>
+          </div>
+        </div>`
+
+      const container = document.createElement('div')
+      container.style.position = 'absolute'
+      container.style.left = '-9999px'
+      container.style.top = '0'
+      container.innerHTML = html
+      document.body.appendChild(container)
+
+      // Wait for the logo image to decode
+      const img = container.querySelector('img') as HTMLImageElement | null
+      if (img && !img.complete) {
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve()
+          img.onerror = () => resolve()
+        })
+      }
+
+      await generatePdf(container.firstElementChild as HTMLElement, pdfFileName(inv.clientName, inv.invoiceNumber))
+      document.body.removeChild(container)
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      alert('Failed to generate PDF. Please try again.')
+    }
   }
 
   const filteredInvoices = invoices.filter(inv =>
@@ -789,6 +975,22 @@ export default function Invoice() {
               </div>
             </div>
 
+            {/* Signature */}
+            <div className="flex justify-end px-10 pb-2">
+              <div className="w-64 text-center">
+                {signatureDataUrl ? (
+                  <img src={signatureDataUrl} alt="Signature" className="mx-auto -mb-4 h-16 object-contain" />
+                ) : (
+                  <div className="h-8" />
+                )}
+                <div className="mt-1 border-t border-gray-400 pt-1">
+                  <p className="text-sm font-semibold text-gray-900">{SIGNATORY_NAME}</p>
+                  <p className="text-[11px] text-gray-500">{SIGNATORY_COMPANY}</p>
+                  <p className="text-[11px] text-gray-500">Authorized Signature</p>
+                </div>
+              </div>
+            </div>
+
             {/* Bank Transfer Details */}
             <div className="mx-10 mb-8 rounded-xl border border-gray-200 bg-gray-50 px-6 py-5">
               <h4 className="mb-4 text-[10px] font-bold uppercase tracking-widest text-gray-500">Bank Transfer Details</h4>
@@ -901,8 +1103,8 @@ export default function Invoice() {
                   >
                     <div className="mb-4 flex items-start justify-between">
                       <div>
-                        <h3 className="text-lg font-bold text-gray-900">{invoice.invoiceNumber || 'No Number'}</h3>
-                        <p className="text-sm text-gray-600">{invoice.clientName || 'No Client'}</p>
+                        <h3 className="text-lg font-bold text-gray-900">{invoice.clientName || 'No Client'}</h3>
+                        <p className="text-xs text-gray-500">{invoice.invoiceNumber || 'No Number'}</p>
                       </div>
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -966,6 +1168,12 @@ export default function Invoice() {
                           className="flex-1 rounded border border-blue-300 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
                         >
                           View/Edit
+                        </button>
+                        <button
+                          onClick={() => downloadInvoicePdf(invoice)}
+                          className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Save as PDF
                         </button>
                         <button
                           onClick={() => deleteInvoice(invoice.id)}
