@@ -416,7 +416,7 @@ export default function Invoice() {
   const generatePdf = async (element: HTMLElement, filename: string, logoOverlay?: string) => {
     const canvas = await html2canvas(element, {
       scale: 2, useCORS: true, imageTimeout: 15000, logging: false,
-      backgroundColor: '#ffffff', windowWidth: 1200,
+      backgroundColor: '#ffffff', width: 794, windowWidth: 794,
     })
     const imgData = canvas.toDataURL('image/png')
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -438,11 +438,11 @@ export default function Invoice() {
       try {
         pdf.setPage(1)
         const props = pdf.getImageProperties(logoOverlay)
-        const logoH = 13 // mm
+        const logoH = 12 // mm
         const logoW = (props.width / props.height) * logoH
-        // Sits inside the white chip in the dark header (approx position)
+        // Header logo position (no chip)
         const fmt = logoOverlay.substring(11, logoOverlay.indexOf(';')).toUpperCase() === 'PNG' ? 'PNG' : 'JPEG'
-        pdf.addImage(logoOverlay, fmt, 13, 10, logoW, logoH)
+        pdf.addImage(logoOverlay, fmt, 11, 8, logoW, logoH)
       } catch (e) {
         console.error('Could not overlay logo on PDF:', e)
       }
@@ -471,8 +471,13 @@ export default function Invoice() {
       const clonedLogo = clonedElement.querySelector('#invoice-logo') as HTMLImageElement | null
       if (clonedLogo) clonedLogo.style.visibility = 'hidden'
 
+      // Fix the clone to an exact width so html2canvas captures full-width with no side gaps
       clonedElement.style.position = 'absolute'
       clonedElement.style.left = '-9999px'
+      clonedElement.style.top = '0'
+      clonedElement.style.width = '794px'
+      clonedElement.style.maxWidth = 'none'
+      clonedElement.style.margin = '0'
       document.body.appendChild(clonedElement)
 
       await generatePdf(clonedElement, pdfFileName(clientName, invoiceNumber), logoData)
@@ -599,13 +604,15 @@ export default function Invoice() {
         <div style="width:794px;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827;">
           <div style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:24px 40px;color:#fff;">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
-              <div>
-                <img src="${logoData}" alt="Logo" style="visibility:hidden;height:48px;width:150px;object-fit:contain;" />
-                <p style="margin:9px 0 0;font-size:18px;color:#cbd5e1;">Software Development Services</p>
+              <div style="display:inline-block;">
+                <img src="${logoData}" alt="Logo" style="visibility:hidden;display:block;height:44px;width:140px;object-fit:contain;" />
+                <p style="margin:5px 5px 0;width: 300px;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.18em;color:#cbd5e1;">Software Development Services</p>
               </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:16px;">
-                <span style="border-radius:8px;background:linear-gradient(to right,#3b82f6,#22d3ee);padding:8px 20px;font-size:14px;font-weight:700;letter-spacing:.05em;color:#fff;">INVOICE ${esc(inv.invoiceNumber) || 'INV-0001'}</span>
-                <div style="display:flex;gap:40px;text-align:right;">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+                <span style="border-radius:8px;background:linear-gradient(to right,#3b82f6,#22d3ee); padding: 12px; height: 40px; width: 150px;">
+                  <p style="font-size:14px;font-weight:700; color:#fff; position: absolute; top: 28px;">INVOICE ${esc(inv.invoiceNumber) || 'INV-0001'}</p>
+                </span>
+                <div style="display:flex;gap:40px;text-align:center;">
                   <div>
                     <p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#94a3b8;">Issue Date</p>
                     <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#fff;">${esc(inv.invoiceDate)}</p>
@@ -851,17 +858,17 @@ export default function Invoice() {
             {/* Dark Header */}
             <div className="bg-gradient-to-br from-slate-900 to-slate-800 px-10 py-6 text-white">
               <div className="flex items-start justify-between gap-6">
-                {/* Left: logo above company tagline */}
-                <div>
-                  <img id="invoice-logo" src={logoDataUrl} alt="Avensetech Logo" className="h-12 w-auto rounded bg-white object-contain" />
-                  <p className="mt-1.5 text-xs tracking-wide text-slate-300">Software Development Services</p>
+                {/* Left: logo above company tagline (tagline fits logo width) */}
+                <div className="inline-block">
+                  <img id="invoice-logo" src={logoDataUrl} alt="Avensetech Logo" className="block h-11 w-auto object-contain" />
+                  <p className="mt-1.5 w-full text-center text-[9px] font-medium uppercase tracking-[0.18em] text-slate-300" style={{ transform: 'scaleY(1)' }}>Software Development Services</p>
                 </div>
-                {/* Right: invoice pill + dates */}
+                {/* Right: invoice pill above dates */}
                 <div className="flex flex-col items-end gap-4">
-                  <span className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-5 py-2 text-sm font-bold tracking-wide text-white shadow">
+                  <span className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-2 text-center text-sm font-bold tracking-wide text-white shadow">
                     INVOICE {invoiceNumber || 'INV-0001'}
                   </span>
-                  <div className="flex gap-10 text-right">
+                  <div className="flex gap-8 text-right">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Issue Date</p>
                       <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-right text-sm font-semibold text-white focus:border-blue-400 focus:outline-none print:hidden" />
