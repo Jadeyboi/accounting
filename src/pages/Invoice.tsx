@@ -10,7 +10,9 @@ type Tab = 'maker' | 'history'
 interface InvoiceItem {
   id: string
   description: string
-  amount: number
+  qty: number
+  unitPrice: number
+  amount: number // computed: qty * unitPrice
 }
 
 interface SavedClient {
@@ -53,9 +55,7 @@ export default function Invoice() {
   const [clientName, setClientName] = useState('')
   const [clientEmail, setClientEmail] = useState('')
   const [clientAddress, setClientAddress] = useState('')
-  const [items, setItems] = useState<InvoiceItem[]>([{ id: '1', description: '', amount: 0 }])
-  const [notes, setNotes] = useState('')
-  const [terms, setTerms] = useState('Payment due within 30 days')
+  const [items, setItems] = useState<InvoiceItem[]>([{ id: '1', description: '', qty: 1, unitPrice: 0, amount: 0 }])
 
   // Saved clients and descriptions
   const [savedClients, setSavedClients] = useState<SavedClient[]>([])
@@ -64,6 +64,7 @@ export default function Invoice() {
   const [showDescriptionModal, setShowDescriptionModal] = useState(false)
   const [newDescription, setNewDescription] = useState('')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [logoDataUrl, setLogoDataUrl] = useState<string>('/avensetech-logo.jpg')
 
   // ── History state ─────────────────────────────────────────────────────────
   const [invoices, setInvoices] = useState<SavedInvoice[]>([])
@@ -77,6 +78,15 @@ export default function Invoice() {
       await loadDescriptions()
       await loadInvoices()
     })()
+    // Preload the logo as a base64 data URL so it renders reliably in the PDF (html2canvas)
+    fetch('/avensetech-logo.jpg')
+      .then((res) => res.blob())
+      .then((blob) => {
+        const reader = new FileReader()
+        reader.onloadend = () => setLogoDataUrl(reader.result as string)
+        reader.readAsDataURL(blob)
+      })
+      .catch((err) => console.error('Failed to preload logo:', err))
   }, [])
 
   // One-time migration of any legacy localStorage data into Supabase.
@@ -299,7 +309,7 @@ export default function Invoice() {
   // ── Items helpers ─────────────────────────────────────────────────────────
   const addItem = () => {
     const newId = (Math.max(...items.map(i => parseInt(i.id)), 0) + 1).toString()
-    setItems([...items, { id: newId, description: '', amount: 0 }])
+    setItems([...items, { id: newId, description: '', qty: 1, unitPrice: 0, amount: 0 }])
   }
 
   const removeItem = (id: string) => {
@@ -307,7 +317,13 @@ export default function Invoice() {
   }
 
   const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
-    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item))
+    setItems(items.map(item => {
+      if (item.id !== id) return item
+      const updated = { ...item, [field]: value }
+      // Line amount is always qty * unit price
+      updated.amount = (Number(updated.qty) || 0) * (Number(updated.unitPrice) || 0)
+      return updated
+    }))
   }
 
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0)
@@ -324,8 +340,8 @@ export default function Invoice() {
       client_email: clientEmail,
       client_address: clientAddress,
       items,
-      notes,
-      terms,
+      notes: '',
+      terms: '',
       subtotal,
       tax,
       total,
@@ -343,17 +359,46 @@ export default function Invoice() {
     const invoiceElement = document.getElementById('invoice-content')
     if (!invoiceElement) { alert('Invoice content not found'); return }
     try {
+      // Ensure the logo is an inline base64 data URL so html2canvas can render it
+      let logoData = logoDataUrl
+      if (!logoData.startsWith('data:')) {
+        try {
+          const res = await fetch('/avensetech-logo.jpg')
+          const blob = await res.blob()
+          logoData = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+        } catch (e) {
+          console.error('Could not embed logo for PDF:', e)
+        }
+      }
+
       const clonedElement = invoiceElement.cloneNode(true) as HTMLElement
       clonedElement.querySelectorAll('.print\\:hidden').forEach(el => el.remove())
       clonedElement.querySelectorAll('.print\\:block').forEach(el => {
         (el as HTMLElement).style.display = 'block'
       })
+      // Force the cloned logo to use the inline data URL
+      const clonedLogo = clonedElement.querySelector('#invoice-logo') as HTMLImageElement | null
+      if (clonedLogo && logoData.startsWith('data:')) clonedLogo.src = logoData
+
       clonedElement.style.position = 'absolute'
       clonedElement.style.left = '-9999px'
       document.body.appendChild(clonedElement)
 
+      // Wait for the cloned logo image to finish decoding before capture
+      if (clonedLogo && !clonedLogo.complete) {
+        await new Promise<void>((resolve) => {
+          clonedLogo.onload = () => resolve()
+          clonedLogo.onerror = () => resolve()
+        })
+      }
+
       const canvas = await html2canvas(clonedElement, {
-        scale: 2, useCORS: true, logging: false,
+        scale: 2, useCORS: true, allowTaint: true, imageTimeout: 0, logging: false,
         backgroundColor: '#ffffff', windowWidth: 1200
       })
       document.body.removeChild(clonedElement)
@@ -397,9 +442,7 @@ export default function Invoice() {
     setClientName('')
     setClientEmail('')
     setClientAddress('')
-    setItems([{ id: '1', description: '', amount: 0 }])
-    setNotes('')
-    setTerms('Payment due within 30 days')
+    setItems([{ id: '1', description: '', qty: 1, unitPrice: 0, amount: 0 }])
   }
 
   const handleReset = () => {
@@ -414,9 +457,23 @@ export default function Invoice() {
     setClientName(invoice.clientName)
     setClientEmail(invoice.clientEmail)
     setClientAddress(invoice.clientAddress)
-    setItems(invoice.items)
-    setNotes(invoice.notes)
-    setTerms(invoice.terms)
+    // Normalize legacy items that may not have qty/unitPrice
+    setItems(
+      invoice.items.map((it) => {
+        const qty = Number((it as InvoiceItem).qty) || 1
+        const unitPrice =
+          (it as InvoiceItem).unitPrice != null
+            ? Number((it as InvoiceItem).unitPrice)
+            : Number(it.amount) / (qty || 1)
+        return {
+          id: it.id,
+          description: it.description,
+          qty,
+          unitPrice,
+          amount: qty * unitPrice,
+        }
+      })
+    )
     setActiveTab('maker')
   }
 
@@ -601,140 +658,164 @@ export default function Invoice() {
           )}
 
           {/* Invoice Document */}
-          <div id="invoice-content" className="rounded-lg border border-gray-200 bg-white shadow-lg" style={{ maxWidth: '210mm', margin: '0 auto' }}>
-            {/* Header */}
-            <div className="border-b-4 border-blue-600 bg-white p-10">
+          <div id="invoice-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ maxWidth: '210mm', margin: '0 auto' }}>
+            {/* Dark Header */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-800 px-10 py-6 text-white">
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-6">
-                  <img src="/avensetech-logo.jpg" alt="Avensetech Logo" className="h-24 w-24 rounded object-contain shadow-sm" />
+                <div className="flex items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-white p-2 shadow-md">
+                    <img id="invoice-logo" src={logoDataUrl} alt="Avensetech Logo" className="h-full w-full object-contain" />
+                  </div>
                   <div>
-                    <p className="mt-1 text-sm text-gray-600">OITC2 - 806, Oakridge Business Park, Banilad, Mandaue City, Cebu</p>
-                    <p className="text-sm text-gray-600">(032) 234-1362 • 09297246296</p>
+                    <p className="text-xl font-bold tracking-wide text-white">AVENSETECH</p>
+                    <p className="mt-0.5 text-xs tracking-wide text-slate-300">Software Development Services</p>
                   </div>
                 </div>
-                <h2 className="text-right text-4xl font-bold text-blue-600">INVOICE</h2>
+              </div>
+              <div className="mt-4 flex items-end justify-between">
+                <span className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-5 py-2 text-sm font-bold tracking-wide text-white shadow">
+                  INVOICE {invoiceNumber || 'INV-0001'}
+                </span>
+                <div className="flex gap-10 text-right">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Issue Date</p>
+                    <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-right text-sm font-semibold text-white focus:border-blue-400 focus:outline-none print:hidden" />
+                    <p className="mt-1 hidden text-sm font-semibold text-white print:block">{invoiceDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Due Date</p>
+                    <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-right text-sm font-semibold text-white focus:border-blue-400 focus:outline-none print:hidden" />
+                    <p className="mt-1 hidden text-sm font-semibold text-white print:block">{dueDate || 'N/A'}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Invoice Details and Bill To */}
-            <div className="bg-gray-50 p-10">
-              <div className="grid grid-cols-2 gap-12">
-                {/* Bill To */}
-                <div>
-                  <div className="mb-3 flex items-center justify-between print:block">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Bill To:</h3>
-                    <button
-                      type="button"
-                      onClick={() => setShowClientModal(true)}
-                      className="rounded bg-emerald-500 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600 print:hidden"
-                    >
-                      📋 Saved Clients
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Client Name" className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm font-semibold focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
-                    <p className="hidden text-sm font-semibold text-gray-900 print:block">{clientName || 'Client Name'}</p>
-                    <textarea value={clientAddress} onChange={(e) => setClientAddress(e.target.value)} placeholder="Client Address" rows={3} className="w-full resize-none rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
-                    <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{clientAddress || 'Client Address'}</p>
-                  </div>
-                </div>
-
-                {/* Invoice Info */}
-                <div className="space-y-3">
-                  <div className="grid grid-cols-[100px_1fr] gap-3">
-                    <span className="text-xs font-bold uppercase text-gray-500">Invoice #:</span>
-                    <input type="text" value={invoiceNumber} readOnly title="Auto-generated" placeholder="INV-0001" className="cursor-not-allowed rounded border border-gray-300 bg-gray-100 px-3 py-2 text-right text-sm font-semibold text-gray-700 focus:outline-none print:hidden" />
-                    <span className="hidden print:block"></span>
-                    <p className="hidden text-right text-sm font-semibold text-gray-900 print:block">{invoiceNumber || 'INV-001'}</p>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-3">
-                    <span className="text-xs font-bold uppercase text-gray-500">Date:</span>
-                    <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="rounded border border-gray-300 bg-white px-3 py-2 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
-                    <span className="hidden print:block"></span>
-                    <p className="hidden text-right text-sm text-gray-900 print:block">{invoiceDate}</p>
-                  </div>
-                  <div className="grid grid-cols-[100px_1fr] gap-3">
-                    <span className="text-xs font-bold uppercase text-gray-500">Due Date:</span>
-                    <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="rounded border border-gray-300 bg-white px-3 py-2 text-right text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
-                    <span className="hidden print:block"></span>
-                    <p className="hidden text-right text-sm text-gray-900 print:block">{dueDate || 'N/A'}</p>
-                  </div>
-                </div>
+            {/* From / Bill To */}
+            <div className="grid grid-cols-2 gap-12 px-10 py-8">
+              {/* From */}
+              <div>
+                <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">From</h3>
+                <p className="text-lg font-bold text-gray-900">Avensetech</p>
+                <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                  OIT2-806 Oakridge Business Park<br />
+                  AS Fortuna, Banilad, Mandaue City<br />
+                  Philippines<br />
+                  09297246296 / (032) 234-1362
+                </p>
               </div>
 
-              {/* Items Table */}
-              <div className="p-10">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b-2 border-gray-800">
-                      <th className="py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-700">Description</th>
-                      <th className="w-40 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-700">Amount</th>
-                      <th className="w-10 print:hidden"></th>
+              {/* Bill To */}
+              <div>
+                <div className="mb-2 flex items-center justify-between print:block">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Bill To</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowClientModal(true)}
+                    className="rounded bg-emerald-500 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600 print:hidden"
+                  >
+                    📋 Saved Clients
+                  </button>
+                </div>
+                <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Client Name" className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-lg font-bold text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
+                <p className="hidden text-lg font-bold text-gray-900 print:block">{clientName || 'Client Name'}</p>
+                <textarea value={clientAddress} onChange={(e) => setClientAddress(e.target.value)} placeholder="Client Address" rows={3} className="mt-2 w-full resize-none rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
+                <p className="mt-1 hidden whitespace-pre-line text-sm leading-relaxed text-gray-600 print:block">{clientAddress || 'Client Address'}</p>
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="px-10">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 text-[10px] uppercase tracking-widest text-gray-500">
+                    <th className="rounded-l-md px-4 py-2 text-left font-bold">Description</th>
+                    <th className="w-24 px-4 py-2 text-center font-bold">Qty</th>
+                    <th className="w-32 px-4 py-2 text-right font-bold">Unit Price</th>
+                    <th className="w-32 px-4 py-2 text-right font-bold">Amount</th>
+                    <th className="w-10 print:hidden"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id} className="border-b border-gray-100 align-top">
+                      <td className="px-4 py-2">
+                        <div className="flex gap-2 print:hidden">
+                          <input type="text" value={item.description} onChange={(e) => updateItem(item.id, 'description', e.target.value)} placeholder="Item description" className="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-sm font-semibold text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                          <button type="button" onClick={() => { setSelectedItemId(item.id); setShowDescriptionModal(true) }} className="rounded bg-purple-100 px-2 text-xs text-purple-700 hover:bg-purple-200" title="Load saved description">📝</button>
+                        </div>
+                        <p className="hidden py-1 text-sm font-semibold text-gray-900 print:block">{item.description || 'Item description'}</p>
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <input type="number" value={item.qty} onChange={(e) => updateItem(item.id, 'qty', parseFloat(e.target.value) || 0)} min="0" step="1" className="w-16 rounded border border-gray-300 bg-white px-2 py-1 text-center text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
+                        <p className="hidden py-1 text-center text-sm text-gray-700 print:block">{item.qty}</p>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)} min="0" step="0.01" placeholder="0.00" className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-right text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
+                        <p className="hidden py-1 text-right text-sm text-gray-700 print:block">{money(item.unitPrice)}</p>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <p className="py-1 text-sm font-bold text-gray-900">{money(item.amount)}</p>
+                      </td>
+                      <td className="px-2 py-2 text-center print:hidden">
+                        <button onClick={() => removeItem(item.id)} className="text-red-500 hover:text-red-700" disabled={items.length === 1}>✕</button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => (
-                      <tr key={item.id} className="border-b border-gray-200">
-                        <td className="py-3">
-                          <div className="flex gap-2 print:hidden">
-                            <input type="text" value={item.description} onChange={(e) => updateItem(item.id, 'description', e.target.value)} placeholder="Item description" className="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                            <button type="button" onClick={() => { setSelectedItemId(item.id); setShowDescriptionModal(true) }} className="rounded bg-purple-100 px-2 text-xs text-purple-700 hover:bg-purple-200" title="Load saved description">📝</button>
-                          </div>
-                          <p className="hidden py-1 text-sm text-gray-900 print:block">{item.description || 'Item description'}</p>
-                        </td>
-                        <td className="py-3 text-right">
-                          <input type="number" value={item.amount} onChange={(e) => updateItem(item.id, 'amount', parseFloat(e.target.value) || 0)} min="0" step="0.01" placeholder="0.00" className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-right text-sm font-medium focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
-                          <p className="hidden py-1 text-sm font-medium text-gray-900 print:block">${item.amount.toFixed(2)}</p>
-                        </td>
-                        <td className="py-3 text-center print:hidden">
-                          <button onClick={() => removeItem(item.id)} className="text-red-600 hover:text-red-800" disabled={items.length === 1}>✕</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <button onClick={addItem} className="mt-3 text-sm text-blue-600 hover:text-blue-800 print:hidden">+ Add Item</button>
-              </div>
+                  ))}
+                </tbody>
+              </table>
+              <button onClick={addItem} className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-800 print:hidden">+ Add Item</button>
+            </div>
 
-              {/* Totals */}
-              <div className="bg-gray-50 p-10">
-                <div className="flex justify-end">
-                  <div className="w-64 space-y-2">
-                    <div className="flex justify-between border-b border-gray-200 py-2 text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium text-gray-900">${subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-gray-200 py-2 text-sm">
-                      <span className="text-gray-600">Tax (0%):</span>
-                      <span className="font-medium text-gray-900">${tax.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between border-t-2 border-gray-800 py-3">
-                      <span className="text-lg font-bold text-gray-900">Total:</span>
-                      <span className="text-xl font-bold text-gray-900">${total.toFixed(2)}</span>
-                    </div>
-                  </div>
+            {/* Totals */}
+            <div className="flex justify-end px-10 py-8">
+              <div className="w-80 rounded-lg bg-gray-50 p-6">
+                <div className="flex justify-between py-1 text-sm">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span className="font-medium text-gray-900">{money(subtotal)}</span>
                 </div>
-
-                {/* Notes and Terms */}
-                <div className="space-y-4 border-t border-gray-200 p-10">
-                  <div>
-                    <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Notes</label>
-                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Additional notes or special instructions" rows={2} className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
-                    <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{notes || 'No additional notes'}</p>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-bold uppercase text-gray-500">Terms & Conditions</label>
-                    <textarea value={terms} onChange={(e) => setTerms(e.target.value)} rows={2} className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden" />
-                    <p className="hidden whitespace-pre-line text-sm text-gray-700 print:block">{terms}</p>
-                  </div>
+                <div className="flex justify-between py-1 text-sm">
+                  <span className="text-gray-600">Tax (0%)</span>
+                  <span className="font-medium text-gray-900">{money(tax)}</span>
                 </div>
-
-                {/* Footer */}
-                <div className="border-t border-gray-200 bg-gray-100 p-6 text-center">
-                  <p className="text-xs text-gray-600">Thank you for your business!</p>
-                  <p className="mt-1 text-xs text-gray-500">Avensetech Software Development Services • OITC2 - 806, Oakridge Business Park, Banilad, Mandaue City, Cebu</p>
+                <div className="mt-2 flex items-center justify-between border-t border-gray-300 pt-3">
+                  <span className="text-lg font-bold text-gray-900">TOTAL</span>
+                  <span className="text-2xl font-extrabold text-gray-900">{money(total)}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Bank Transfer Details */}
+            <div className="mx-10 mb-8 rounded-xl border border-gray-200 bg-gray-50 px-6 py-5">
+              <h4 className="mb-4 text-[10px] font-bold uppercase tracking-widest text-gray-500">Bank Transfer Details</h4>
+              <div className="grid grid-cols-2 gap-x-10 gap-y-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Account Name</p>
+                  <p className="text-sm font-medium text-gray-800">Avensetech Software Development Services</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Account Number</p>
+                  <p className="text-sm font-medium text-gray-800">004744-0246-63</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Bank Name</p>
+                  <p className="text-sm font-medium text-gray-800">Bank Of The Philippine Islands (BPI)</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Swift Code</p>
+                  <p className="text-sm font-medium text-gray-800">BOPIPHMMXXX</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Bank Address</p>
+                  <p className="text-sm font-medium text-gray-800">Astra Centre on A.S. Fortuna Street, Barangay Banilad, Mandaue City, 6014, Philippines</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-gray-200 bg-gray-50 px-10 py-6 text-center">
+              <p className="text-sm font-semibold text-gray-700">Thank you for your business!</p>
+              <p className="mt-1 text-xs text-gray-500">Avensetech Software Development Services • OIT2-806, Oakridge Business Park, Banilad, Mandaue City, Cebu</p>
             </div>
           </div>
         </div>
