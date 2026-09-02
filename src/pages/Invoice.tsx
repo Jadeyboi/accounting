@@ -419,9 +419,10 @@ export default function Invoice() {
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
         heightLeft -= pageHeight
       }
-      const filename = invoiceNumber
-        ? `Invoice-${invoiceNumber}.pdf`
-        : `Invoice-${new Date().toISOString().split('T')[0]}.pdf`
+      // Filename: "<Client> - <InvoiceNumber>.pdf" for easy sorting/finding
+      const safeClient = (clientName || 'Client').trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ')
+      const invNo = invoiceNumber || new Date().toISOString().split('T')[0]
+      const filename = `${safeClient} - ${invNo}.pdf`
       pdf.save(filename)
       const savedRows = await saveInvoiceToHistory()
       if (savedRows) {
