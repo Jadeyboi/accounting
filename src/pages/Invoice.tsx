@@ -4,6 +4,7 @@ import Pagination from '@/components/Pagination'
 import { supabase } from '@/lib/supabase'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import invoiceLogo from '@/assets/invoice-logo.jpg'
 
 type Tab = 'maker' | 'history'
 
@@ -64,7 +65,7 @@ export default function Invoice() {
   const [showDescriptionModal, setShowDescriptionModal] = useState(false)
   const [newDescription, setNewDescription] = useState('')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
-  const [logoDataUrl, setLogoDataUrl] = useState<string>('/avensetech-logo.jpg')
+  const [logoDataUrl, setLogoDataUrl] = useState<string>(invoiceLogo)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string>('')
 
   // ── History state ─────────────────────────────────────────────────────────
@@ -79,15 +80,18 @@ export default function Invoice() {
       await loadDescriptions()
       await loadInvoices()
     })()
-    // Preload the logo as a base64 data URL so it renders reliably in the PDF (html2canvas)
-    fetch('/avensetech-logo.jpg')
+    // Convert the bundled logo to a base64 data URL so html2canvas renders it in the PDF.
+    // Only replace state on success so the on-screen image never goes blank.
+    fetch(invoiceLogo)
       .then((res) => res.blob())
-      .then((blob) => {
+      .then((blob) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
-        reader.onloadend = () => setLogoDataUrl(reader.result as string)
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.onerror = reject
         reader.readAsDataURL(blob)
-      })
-      .catch((err) => console.error('Failed to preload logo:', err))
+      }))
+      .then((dataUrl) => { if (dataUrl && dataUrl.startsWith('data:')) setLogoDataUrl(dataUrl) })
+      .catch((err) => console.error('Failed to embed logo:', err))
     // Preload an optional signature image (public/signature.png). Falls back to a typed name.
     fetch('/signature.png')
       .then((res) => (res.ok ? res.blob() : Promise.reject(new Error('no signature'))))
@@ -376,7 +380,7 @@ export default function Invoice() {
   const getLogoData = async (): Promise<string> => {
     if (logoDataUrl.startsWith('data:')) return logoDataUrl
     try {
-      const res = await fetch('/avensetech-logo.jpg')
+      const res = await fetch(invoiceLogo)
       const blob = await res.blob()
       return await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
@@ -409,9 +413,9 @@ export default function Invoice() {
   }
 
   // Turn an already-rendered element into a downloaded PDF
-  const generatePdf = async (element: HTMLElement, filename: string) => {
+  const generatePdf = async (element: HTMLElement, filename: string, logoOverlay?: string) => {
     const canvas = await html2canvas(element, {
-      scale: 2, useCORS: true, allowTaint: true, imageTimeout: 0, logging: false,
+      scale: 2, useCORS: true, imageTimeout: 15000, logging: false,
       backgroundColor: '#ffffff', windowWidth: 1200,
     })
     const imgData = canvas.toDataURL('image/png')
@@ -429,6 +433,20 @@ export default function Invoice() {
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
       heightLeft -= pageHeight
     }
+    // Draw the logo directly onto the first page (html2canvas can't reliably capture it)
+    if (logoOverlay && logoOverlay.startsWith('data:')) {
+      try {
+        pdf.setPage(1)
+        const props = pdf.getImageProperties(logoOverlay)
+        const logoH = 13 // mm
+        const logoW = (props.width / props.height) * logoH
+        // Sits inside the white chip in the dark header (approx position)
+        const fmt = logoOverlay.substring(11, logoOverlay.indexOf(';')).toUpperCase() === 'PNG' ? 'PNG' : 'JPEG'
+        pdf.addImage(logoOverlay, fmt, 13, 10, logoW, logoH)
+      } catch (e) {
+        console.error('Could not overlay logo on PDF:', e)
+      }
+    }
     pdf.save(filename)
   }
 
@@ -441,7 +459,7 @@ export default function Invoice() {
     const invoiceElement = document.getElementById('invoice-content')
     if (!invoiceElement) { alert('Invoice content not found'); return }
     try {
-      // Ensure the logo is an inline base64 data URL so html2canvas can render it
+      // Get the logo as base64 to overlay directly onto the PDF (html2canvas can't reliably capture it)
       const logoData = await getLogoData()
 
       const clonedElement = invoiceElement.cloneNode(true) as HTMLElement
@@ -449,23 +467,15 @@ export default function Invoice() {
       clonedElement.querySelectorAll('.print\\:block').forEach(el => {
         (el as HTMLElement).style.display = 'block'
       })
-      // Force the cloned logo to use the inline data URL
+      // Hide the in-DOM logo image; we draw it onto the PDF afterwards
       const clonedLogo = clonedElement.querySelector('#invoice-logo') as HTMLImageElement | null
-      if (clonedLogo && logoData.startsWith('data:')) clonedLogo.src = logoData
+      if (clonedLogo) clonedLogo.style.visibility = 'hidden'
 
       clonedElement.style.position = 'absolute'
       clonedElement.style.left = '-9999px'
       document.body.appendChild(clonedElement)
 
-      // Wait for the cloned logo image to finish decoding before capture
-      if (clonedLogo && !clonedLogo.complete) {
-        await new Promise<void>((resolve) => {
-          clonedLogo.onload = () => resolve()
-          clonedLogo.onerror = () => resolve()
-        })
-      }
-
-      await generatePdf(clonedElement, pdfFileName(clientName, invoiceNumber))
+      await generatePdf(clonedElement, pdfFileName(clientName, invoiceNumber), logoData)
       document.body.removeChild(clonedElement)
 
       const savedRows = await saveInvoiceToHistory()
@@ -588,25 +598,22 @@ export default function Invoice() {
       const html = `
         <div style="width:794px;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827;">
           <div style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:24px 40px;color:#fff;">
-            <div style="display:flex;align-items:center;gap:16px;">
-              <div style="display:flex;height:64px;width:64px;align-items:center;justify-content:center;border-radius:8px;background:#fff;padding:8px;">
-                <img src="${logoData}" alt="Logo" style="height:100%;width:100%;object-fit:contain;" />
-              </div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
               <div>
-                <p style="margin:0;font-size:20px;font-weight:700;letter-spacing:.05em;">AVENSETECH</p>
-                <p style="margin:2px 0 0;font-size:12px;color:#cbd5e1;">Software Development Services</p>
+                <img src="${logoData}" alt="Logo" style="visibility:hidden;height:48px;width:150px;object-fit:contain;" />
+                <p style="margin:9px 0 0;font-size:18px;color:#cbd5e1;">Software Development Services</p>
               </div>
-            </div>
-            <div style="margin-top:16px;display:flex;align-items:flex-end;justify-content:space-between;">
-              <span style="border-radius:8px;background:linear-gradient(to right,#3b82f6,#22d3ee);padding:8px 20px;font-size:14px;font-weight:700;letter-spacing:.05em;color:#fff;">INVOICE ${esc(inv.invoiceNumber) || 'INV-0001'}</span>
-              <div style="display:flex;gap:40px;text-align:right;">
-                <div>
-                  <p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#94a3b8;">Issue Date</p>
-                  <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#fff;">${esc(inv.invoiceDate)}</p>
-                </div>
-                <div>
-                  <p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#94a3b8;">Due Date</p>
-                  <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#fff;">${esc(inv.dueDate) || 'N/A'}</p>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:16px;">
+                <span style="border-radius:8px;background:linear-gradient(to right,#3b82f6,#22d3ee);padding:8px 20px;font-size:14px;font-weight:700;letter-spacing:.05em;color:#fff;">INVOICE ${esc(inv.invoiceNumber) || 'INV-0001'}</span>
+                <div style="display:flex;gap:40px;text-align:right;">
+                  <div>
+                    <p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#94a3b8;">Issue Date</p>
+                    <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#fff;">${esc(inv.invoiceDate)}</p>
+                  </div>
+                  <div>
+                    <p style="margin:0;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.15em;color:#94a3b8;">Due Date</p>
+                    <p style="margin:4px 0 0;font-size:14px;font-weight:600;color:#fff;">${esc(inv.dueDate) || 'N/A'}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -683,15 +690,7 @@ export default function Invoice() {
       document.body.appendChild(container)
 
       // Wait for the logo image to decode
-      const img = container.querySelector('img') as HTMLImageElement | null
-      if (img && !img.complete) {
-        await new Promise<void>((resolve) => {
-          img.onload = () => resolve()
-          img.onerror = () => resolve()
-        })
-      }
-
-      await generatePdf(container.firstElementChild as HTMLElement, pdfFileName(inv.clientName, inv.invoiceNumber))
+      await generatePdf(container.firstElementChild as HTMLElement, pdfFileName(inv.clientName, inv.invoiceNumber), logoData)
       document.body.removeChild(container)
     } catch (error) {
       console.error('Error generating PDF:', error)
@@ -851,31 +850,28 @@ export default function Invoice() {
           <div id="invoice-content" className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ maxWidth: '210mm', margin: '0 auto' }}>
             {/* Dark Header */}
             <div className="bg-gradient-to-br from-slate-900 to-slate-800 px-10 py-6 text-white">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-white p-2 shadow-md">
-                    <img id="invoice-logo" src={logoDataUrl} alt="Avensetech Logo" className="h-full w-full object-contain" />
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold tracking-wide text-white">AVENSETECH</p>
-                    <p className="mt-0.5 text-xs tracking-wide text-slate-300">Software Development Services</p>
-                  </div>
+              <div className="flex items-start justify-between gap-6">
+                {/* Left: logo above company tagline */}
+                <div>
+                  <img id="invoice-logo" src={logoDataUrl} alt="Avensetech Logo" className="h-12 w-auto rounded bg-white object-contain" />
+                  <p className="mt-1.5 text-xs tracking-wide text-slate-300">Software Development Services</p>
                 </div>
-              </div>
-              <div className="mt-4 flex items-end justify-between">
-                <span className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-5 py-2 text-sm font-bold tracking-wide text-white shadow">
-                  INVOICE {invoiceNumber || 'INV-0001'}
-                </span>
-                <div className="flex gap-10 text-right">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Issue Date</p>
-                    <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-right text-sm font-semibold text-white focus:border-blue-400 focus:outline-none print:hidden" />
-                    <p className="mt-1 hidden text-sm font-semibold text-white print:block">{invoiceDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Due Date</p>
-                    <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-right text-sm font-semibold text-white focus:border-blue-400 focus:outline-none print:hidden" />
-                    <p className="mt-1 hidden text-sm font-semibold text-white print:block">{dueDate || 'N/A'}</p>
+                {/* Right: invoice pill + dates */}
+                <div className="flex flex-col items-end gap-4">
+                  <span className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 px-5 py-2 text-sm font-bold tracking-wide text-white shadow">
+                    INVOICE {invoiceNumber || 'INV-0001'}
+                  </span>
+                  <div className="flex gap-10 text-right">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Issue Date</p>
+                      <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-right text-sm font-semibold text-white focus:border-blue-400 focus:outline-none print:hidden" />
+                      <p className="mt-1 hidden text-sm font-semibold text-white print:block">{invoiceDate}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Due Date</p>
+                      <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="mt-1 rounded border border-slate-600 bg-slate-700 px-2 py-1 text-right text-sm font-semibold text-white focus:border-blue-400 focus:outline-none print:hidden" />
+                      <p className="mt-1 hidden text-sm font-semibold text-white print:block">{dueDate || 'N/A'}</p>
+                    </div>
                   </div>
                 </div>
               </div>
