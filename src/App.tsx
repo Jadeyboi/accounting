@@ -22,7 +22,6 @@ import RequestFunds from "@/pages/RequestFunds";
 
 import Invoice from "@/pages/Invoice";
 
-import InvoiceHistory from "@/pages/InvoiceHistory";
 
 import HRIS from "@/pages/HRIS";
 
@@ -856,34 +855,6 @@ export default function App() {
 
                 )}
 
-                {canAccess('/invoice-history') && (
-
-                <NavLink
-
-                  to="/invoice-history"
-
-                  className={({ isActive }) =>
-
-                    `rounded-lg px-4 py-2 font-medium transition-all ${
-
-                      isActive
-
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
-
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
-
-                    }`
-
-                  }
-
-                >
-
-                  History
-
-                </NavLink>
-
-                )}
-
                 {canAccess('/job-openings') && (
 
                 <NavLink
@@ -1580,36 +1551,6 @@ export default function App() {
 
                 )}
 
-                {canAccess('/invoice-history') && (
-
-                <NavLink
-
-                  to="/invoice-history"
-
-                  onClick={() => setMobileMenuOpen(false)}
-
-                  className={({ isActive }) =>
-
-                    `rounded-lg px-4 py-3 font-medium transition-all ${
-
-                      isActive
-
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
-
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
-
-                    }`
-
-                  }
-
-                >
-
-                  History
-
-                </NavLink>
-
-                )}
-
                 {canAccess('/job-openings') && (
 
                 <NavLink
@@ -1784,7 +1725,7 @@ export default function App() {
                   <Route path="/money-received" element={<MoneyReceived />} />
                   <Route path="/request-funds" element={<RequestFunds />} />
                   <Route path="/invoice" element={<Invoice />} />
-                  <Route path="/invoice-history" element={<InvoiceHistory />} />
+                  <Route path="/invoice-history" element={<Invoice />} />
                   <Route path="/job-openings" element={<JobOpenings />} />
                 </>
               )}
