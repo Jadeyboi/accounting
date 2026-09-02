@@ -210,19 +210,20 @@ export default function Invoice() {
     createdAt: row.created_at,
   })
 
-  const loadInvoices = async () => {
+  const loadInvoices = async (): Promise<SavedInvoice[]> => {
     const { data, error } = await supabase
       .from('invoices')
       .select('*')
       .order('created_at', { ascending: false })
     if (error) {
       console.error('Error loading invoices:', error)
-      return
+      return []
     }
     const rows = (data || []).map(mapInvoiceRow)
     setInvoices(rows)
     // Auto-generate the next invoice number from the highest existing one
     if (!invoiceNumber) setInvoiceNumber(computeNextInvoiceNumber(rows))
+    return rows
   }
 
   // Compute the next invoice number based on the highest existing INV-#### number
@@ -331,7 +332,7 @@ export default function Invoice() {
   const total = subtotal + tax
 
   // ── Save / PDF ────────────────────────────────────────────────────────────
-  const saveInvoiceToHistory = async (): Promise<boolean> => {
+  const saveInvoiceToHistory = async (): Promise<SavedInvoice[] | null> => {
     const { error } = await supabase.from('invoices').insert({
       invoice_number: invoiceNumber,
       invoice_date: invoiceDate || null,
@@ -349,10 +350,10 @@ export default function Invoice() {
     if (error) {
       console.error('Error saving invoice:', error)
       alert('PDF downloaded, but saving to history failed. Please try again.')
-      return false
+      return null
     }
-    await loadInvoices()
-    return true
+    const rows = await loadInvoices()
+    return rows
   }
 
   const handlePrint = async () => {
@@ -422,11 +423,12 @@ export default function Invoice() {
         ? `Invoice-${invoiceNumber}.pdf`
         : `Invoice-${new Date().toISOString().split('T')[0]}.pdf`
       pdf.save(filename)
-      const saved = await saveInvoiceToHistory()
-      if (saved) {
+      const savedRows = await saveInvoiceToHistory()
+      if (savedRows) {
         alert('Invoice saved successfully!')
-        // Advance to a fresh invoice with the next auto-generated number
-        startNewInvoice()
+        // Reset the form and advance to the next auto-generated number
+        // (use the freshly loaded list so the number increments correctly)
+        startNewInvoice(savedRows)
       }
     } catch (error) {
       console.error('Error generating PDF:', error)
@@ -434,9 +436,10 @@ export default function Invoice() {
     }
   }
 
-  // Reset the form fields and assign the next auto-generated invoice number
-  const startNewInvoice = () => {
-    setInvoiceNumber(computeNextInvoiceNumber(invoices))
+  // Reset the form fields and assign the next auto-generated invoice number.
+  // Optionally pass a fresh invoice list (e.g. right after saving) to avoid stale state.
+  const startNewInvoice = (list?: SavedInvoice[]) => {
+    setInvoiceNumber(computeNextInvoiceNumber(list ?? invoices))
     setInvoiceDate(new Date().toISOString().split('T')[0])
     setDueDate('')
     setClientName('')
