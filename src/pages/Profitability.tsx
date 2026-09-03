@@ -1,36 +1,66 @@
 import { useEffect, useState, useMemo } from 'react'
-import { NavLink } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import type { PmClient, PmProject, PmRevenue, PmEmployeeCost, PmExpense } from '@/types'
+import { logActivity } from '@/lib/activityLogger'
 
-const fmt = (n: number) =>
-  `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-
-const fmtUSD = (n: number, rate: number) =>
-  rate > 0 ? `$${(n / rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''
-
-const fmtBoth = (n: number, rate: number) => {
-  const php = fmt(n)
-  const usd = fmtUSD(n, rate)
-  return usd ? `${php} (${usd})` : php
+// ── Types ─────────────────────────────────────────────────────────────────
+interface IncomeRow {
+  id: string
+  month: string
+  description: string
+  client: string | null
+  project: string | null
+  amount: number
 }
 
-const fmtPct = (n: number) => `${n.toFixed(1)}%`
+interface ExpenseRow {
+  id: string
+  month: string
+  category: string
+  description: string | null
+  project: string | null
+  amount: number
+}
+
+// Expense pulled from the transactions tracker (read-only here)
+interface TrackerExpense {
+  id: string
+  date: string
+  type: 'out' | 'expense'
+  category: string | null
+  note: string | null
+  amount: number
+}
+
+const EXPENSE_CATEGORIES = [
+  'Payroll', 'Software', 'Equipment', 'Internet', 'Office', 'Rent',
+  'Utilities', 'Recruitment', 'Training', 'Taxes', 'Other',
+]
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const php = (n: number) =>
+  `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+const usd = (n: number, rate: number) =>
+  rate > 0 ? `$${(n / rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''
+
+const pct = (n: number) => `${n.toFixed(1)}%`
 
 const currentMonth = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-const prevMonth = (m: string) => {
+const monthRange = (m: string) => {
   const [y, mo] = m.split('-').map(Number)
-  const d = new Date(y, mo - 2, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  const first = `${y}-${String(mo).padStart(2, '0')}-01`
+  const lastDay = new Date(y, mo, 0).getDate()
+  const last = `${y}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { first, last }
 }
 
 const last6Months = (m: string): string[] => {
+  const [y, mo] = m.split('-').map(Number)
   const months: string[] = []
-  let [y, mo] = m.split('-').map(Number)
   for (let i = 5; i >= 0; i--) {
     const d = new Date(y, mo - 1 - i, 1)
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
@@ -38,556 +68,499 @@ const last6Months = (m: string): string[] => {
   return months
 }
 
-const totalEmpCost = (e: PmEmployeeCost) =>
-  e.basic_salary + e.sss + e.philhealth + e.pagibig +
-  e.ot_pay + e.night_differential + e.incentives + e.other_costs
-
-interface ProjectStats {
-  project: PmProject
-  clientName: string
-  revenue: number
-  payrollCost: number
-  operatingExpenses: number
-  totalExpenses: number
-  netProfit: number
-  profitMargin: number
-}
-
-interface ClientStats {
-  client: PmClient
-  revenue: number
-  expenses: number
-  profit: number
-  margin: number
-}
+const UNALLOCATED = 'Unallocated'
 
 export default function Profitability() {
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth())
-  const [exchangeRate, setExchangeRate] = useState<number>(56)
-  const [clients, setClients] = useState<PmClient[]>([])
-  const [projects, setProjects] = useState<PmProject[]>([])
-  const [revenues, setRevenues] = useState<PmRevenue[]>([])
-  const [empCosts, setEmpCosts] = useState<PmEmployeeCost[]>([])
-  const [expenses, setExpenses] = useState<PmExpense[]>([])
-  const [prevRevenues, setPrevRevenues] = useState<PmRevenue[]>([])
+  const [month, setMonth] = useState(currentMonth())
+  const [rate, setRate] = useState(56)
+  const [income, setIncome] = useState<IncomeRow[]>([])
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([])
+  const [trackerExpenses, setTrackerExpenses] = useState<TrackerExpense[]>([])
   const [loading, setLoading] = useState(true)
-  const [trendData, setTrendData] = useState<Array<{ month: string; revenue: number; expenses: number; profit: number }>>([])
+  const [trend, setTrend] = useState<Array<{ month: string; income: number; expenses: number; profit: number }>>([])
 
-  useEffect(() => {
-    loadData()
-  }, [selectedMonth])
+  // Modals
+  const [showIncomeModal, setShowIncomeModal] = useState(false)
+  const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [editIncome, setEditIncome] = useState<IncomeRow | null>(null)
+  const [editExpense, setEditExpense] = useState<ExpenseRow | null>(null)
+
+  // Income form
+  const [iDesc, setIDesc] = useState('')
+  const [iClient, setIClient] = useState('')
+  const [iProject, setIProject] = useState('')
+  const [iAmount, setIAmount] = useState('')
+
+  // Expense form
+  const [eCategory, setECategory] = useState('Payroll')
+  const [eDesc, setEDesc] = useState('')
+  const [eProject, setEProject] = useState('')
+  const [eAmount, setEAmount] = useState('')
+
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { loadData() }, [month])
 
   const loadData = async () => {
     setLoading(true)
-    const pm = prevMonth(selectedMonth)
-    const months6 = last6Months(selectedMonth)
-    const [cl, pr, rv, ec, ex, prv, trend] = await Promise.all([
-      supabase.from('pm_clients').select('*').order('name'),
-      supabase.from('pm_projects').select('*').order('name'),
-      supabase.from('pm_revenues').select('*').eq('month', selectedMonth),
-      supabase.from('pm_employee_costs').select('*').eq('month', selectedMonth),
-      supabase.from('pm_expenses').select('*').eq('month', selectedMonth),
-      supabase.from('pm_revenues').select('*').eq('month', pm),
+    const months6 = last6Months(month)
+    const { first, last } = monthRange(month)
+    const [inc, exp, tracker, trendRes] = await Promise.all([
+      supabase.from('pl_income').select('*').eq('month', month).order('created_at'),
+      supabase.from('pl_expenses').select('*').eq('month', month).order('created_at'),
+      supabase.from('transactions').select('id,date,type,category,note,amount')
+        .in('type', ['out', 'expense']).gte('date', first).lte('date', last)
+        .order('date', { ascending: false }),
       Promise.all(months6.map(async (mo) => {
-        const [r, ec2, ex2] = await Promise.all([
-          supabase.from('pm_revenues').select('amount').eq('month', mo),
-          supabase.from('pm_employee_costs').select('basic_salary,sss,philhealth,pagibig,ot_pay,night_differential,incentives,other_costs').eq('month', mo),
-          supabase.from('pm_expenses').select('amount').eq('month', mo),
+        const r = monthRange(mo)
+        const [i, e, t] = await Promise.all([
+          supabase.from('pl_income').select('amount').eq('month', mo),
+          supabase.from('pl_expenses').select('amount').eq('month', mo),
+          supabase.from('transactions').select('amount').in('type', ['out', 'expense']).gte('date', r.first).lte('date', r.last),
         ])
-        const rev = (r.data ?? []).reduce((s: number, x: { amount: number }) => s + x.amount, 0)
-        const payroll = (ec2.data ?? []).reduce((s: number, x: any) => s + totalEmpCost(x as PmEmployeeCost), 0)
-        const opex = (ex2.data ?? []).reduce((s: number, x: { amount: number }) => s + x.amount, 0)
-        const exp = payroll + opex
-        return { month: mo, revenue: rev, expenses: exp, profit: rev - exp }
-      }))
+        const inSum = (i.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
+        const exManual = (e.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
+        const exTracker = (t.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
+        const exSum = exManual + exTracker
+        return { month: mo, income: inSum, expenses: exSum, profit: inSum - exSum }
+      })),
     ])
-    setClients((cl.data ?? []) as PmClient[])
-    setProjects((pr.data ?? []) as PmProject[])
-    setRevenues((rv.data ?? []) as PmRevenue[])
-    setEmpCosts((ec.data ?? []) as PmEmployeeCost[])
-    setExpenses((ex.data ?? []) as PmExpense[])
-    setPrevRevenues((prv.data ?? []) as PmRevenue[])
-    setTrendData(trend)
+    setIncome((inc.data ?? []) as IncomeRow[])
+    setExpenses((exp.data ?? []) as ExpenseRow[])
+    setTrackerExpenses((tracker.data ?? []) as TrackerExpense[])
+    setTrend(trendRes)
     setLoading(false)
   }
 
-  // ── Derived calculations ───────────────────────────────────────────────────
+  // ── Totals ─────────────────────────────────────────────────────────────────
+  const totalIncome = useMemo(() => income.reduce((s, r) => s + Number(r.amount), 0), [income])
+  const manualExpenses = useMemo(() => expenses.reduce((s, r) => s + Number(r.amount), 0), [expenses])
+  const trackerExpensesTotal = useMemo(() => trackerExpenses.reduce((s, r) => s + Number(r.amount), 0), [trackerExpenses])
+  const totalExpenses = manualExpenses + trackerExpensesTotal
+  const netProfit = totalIncome - totalExpenses
+  const margin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0
 
-  const projectStats = useMemo((): ProjectStats[] => {
-    return projects.map(proj => {
-      const client = clients.find(c => c.id === proj.client_id)
-      const revenue = revenues.filter(r => r.project_id === proj.id).reduce((s, r) => s + r.amount, 0)
-      const payrollCost = empCosts.filter(e => e.project_id === proj.id).reduce((s, e) => s + totalEmpCost(e), 0)
-      const operatingExpenses = expenses.filter(ex => ex.scope === 'project' && ex.project_id === proj.id).reduce((s, ex) => s + ex.amount, 0)
-      const totalExpenses = payrollCost + operatingExpenses
-      const netProfit = revenue - totalExpenses
-      const profitMargin = revenue > 0 ? (netProfit / revenue) * 100 : 0
-      return {
-        project: proj,
-        clientName: client?.name ?? '-',
-        revenue,
-        payrollCost,
-        operatingExpenses,
-        totalExpenses,
-        netProfit,
-        profitMargin,
-      }
-    }).sort((a, b) => b.netProfit - a.netProfit)
-  }, [projects, clients, revenues, empCosts, expenses])
-
-  const clientStats = useMemo((): ClientStats[] => {
-    return clients.map(cl => {
-      const clientProjs = projects.filter(p => p.client_id === cl.id)
-      const clientProjStats = projectStats.filter(ps => clientProjs.some(cp => cp.id === ps.project.id))
-      const revenue = clientProjStats.reduce((s, ps) => s + ps.revenue, 0)
-      const projExpenses = clientProjStats.reduce((s, ps) => s + ps.totalExpenses, 0)
-      const clientScopedExpenses = expenses.filter(ex => ex.scope === 'client' && ex.client_id === cl.id).reduce((s, ex) => s + ex.amount, 0)
-      const totalExpenses = projExpenses + clientScopedExpenses
-      const profit = revenue - totalExpenses
-      const margin = revenue > 0 ? (profit / revenue) * 100 : 0
-      return { client: cl, revenue, expenses: totalExpenses, profit, margin }
-    }).sort((a, b) => b.profit - a.profit)
-  }, [clients, projects, projectStats, expenses])
-
-  const kpis = useMemo(() => {
-    const totalRevenue = revenues.reduce((s, r) => s + r.amount, 0)
-    const totalPayroll = empCosts.reduce((s, e) => s + totalEmpCost(e), 0)
-    // Gross profit = Revenue - Payroll (direct labour cost)
-    const grossProfit = totalRevenue - totalPayroll
-    const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0
-    // Operating expenses = ALL pm_expenses (project + client + company scoped)
-    const totalOpex = expenses.reduce((s, ex) => s + ex.amount, 0)
-    // Project-scoped opex (already inside projectStats but shown separately here)
-    const projectOpex = expenses.filter(ex => ex.scope === 'project').reduce((s, ex) => s + ex.amount, 0)
-    const clientOpex = expenses.filter(ex => ex.scope === 'client').reduce((s, ex) => s + ex.amount, 0)
-    const companyOpex = expenses.filter(ex => ex.scope === 'company').reduce((s, ex) => s + ex.amount, 0)
-    // Net profit = Revenue - Payroll - ALL opex
-    const totalProfit = totalRevenue - totalPayroll - totalOpex
-    const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
-    return { totalRevenue, totalPayroll, grossProfit, grossMargin, totalOpex, projectOpex, clientOpex, companyOpex, totalProfit, avgMargin }
-  }, [revenues, empCosts, expenses])
-
-  const alerts = useMemo(() => {
-    const list: Array<{ type: 'error' | 'warning'; message: string }> = []
-    for (const ps of projectStats) {
-      if (ps.revenue === 0 && ps.totalExpenses === 0) continue
-      if (ps.netProfit < 0) {
-        list.push({ type: 'error', message: `${ps.project.name} is operating at a loss of ${fmt(Math.abs(ps.netProfit))}` })
-      }
-      if (ps.revenue > 0 && ps.payrollCost / ps.revenue > 0.7) {
-        list.push({ type: 'warning', message: `${ps.project.name}: payroll is ${fmtPct((ps.payrollCost / ps.revenue) * 100)} of revenue (>70%)` })
-      }
-      if (ps.revenue > 0 && ps.profitMargin < 15 && ps.netProfit >= 0) {
-        list.push({ type: 'warning', message: `${ps.project.name}: margin is only ${fmtPct(ps.profitMargin)} (<15%)` })
-      }
-    }
-    // Month-over-month revenue decrease
-    for (const proj of projects) {
-      const currRev = revenues.filter(r => r.project_id === proj.id).reduce((s, r) => s + r.amount, 0)
-      const prevRev = prevRevenues.filter(r => r.project_id === proj.id).reduce((s, r) => s + r.amount, 0)
-      if (prevRev > 0 && currRev < prevRev) {
-        list.push({ type: 'warning', message: `${proj.name}: revenue decreased from ${fmt(prevRev)} to ${fmt(currRev)} vs last month` })
-      }
-    }
-    return list
-  }, [projectStats, projects, revenues, prevRevenues])
-
-  const topEmployees = useMemo(() => {
-    return [...empCosts]
-      .sort((a, b) => totalEmpCost(b) - totalEmpCost(a))
-      .slice(0, 5)
-      .map(e => ({
-        name: e.employee_name,
-        project: projects.find(p => p.id === e.project_id)?.name ?? '-',
-        cost: totalEmpCost(e),
-      }))
-  }, [empCosts, projects])
-
-  const costByProject = useMemo(() => {
+  const expenseByCategory = useMemo(() => {
     const map: Record<string, number> = {}
-    for (const e of empCosts) {
-      map[e.project_id] = (map[e.project_id] ?? 0) + totalEmpCost(e)
+    for (const e of expenses) map[e.category] = (map[e.category] ?? 0) + Number(e.amount)
+    for (const t of trackerExpenses) {
+      const key = t.category || (t.type === 'out' ? 'Cash Out' : 'Expense')
+      map[key] = (map[key] ?? 0) + Number(t.amount)
     }
+    return Object.entries(map).map(([cat, amt]) => ({ cat, amt })).sort((a, b) => b.amt - a.amt)
+  }, [expenses, trackerExpenses])
+
+  // ── Per-project breakdown ───────────────────────────────────────────────
+  const projectStats = useMemo(() => {
+    const map: Record<string, { income: number; expenses: number }> = {}
+    const ensure = (k: string) => (map[k] ??= { income: 0, expenses: 0 })
+    for (const r of income) ensure(r.project?.trim() || UNALLOCATED).income += Number(r.amount)
+    for (const e of expenses) ensure(e.project?.trim() || UNALLOCATED).expenses += Number(e.amount)
+    // tracker expenses are not project-tagged -> Unallocated
+    if (trackerExpensesTotal > 0) ensure(UNALLOCATED).expenses += trackerExpensesTotal
     return Object.entries(map)
-      .map(([pid, cost]) => ({ name: projects.find(p => p.id === pid)?.name ?? pid, cost }))
-      .sort((a, b) => b.cost - a.cost)
-  }, [empCosts, projects])
+      .map(([project, v]) => ({ project, income: v.income, expenses: v.expenses, profit: v.income - v.expenses }))
+      .sort((a, b) => b.profit - a.profit)
+  }, [income, expenses, trackerExpensesTotal])
 
-  const expensesByCategory = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const ex of expenses) {
-      map[ex.category] = (map[ex.category] ?? 0) + ex.amount
-    }
-    return Object.entries(map)
-      .map(([cat, amount]) => ({ cat, amount }))
-      .sort((a, b) => b.amount - a.amount)
-  }, [expenses])
+  const maxTrend = useMemo(() => Math.max(...trend.map(t => Math.max(t.income, t.expenses)), 1), [trend])
 
-  const maxCostByProject = useMemo(() => Math.max(...costByProject.map(x => x.cost), 1), [costByProject])
-  const maxExpCat = useMemo(() => Math.max(...expensesByCategory.map(x => x.amount), 1), [expensesByCategory])
-  const maxTrend = useMemo(() => Math.max(...trendData.map(t => Math.max(t.revenue, t.expenses)), 1), [trendData])
-
-  const marginClass = (m: number) =>
-    m > 30 ? 'text-green-600 font-semibold' : m >= 10 ? 'text-yellow-600 font-semibold' : 'text-red-600 font-semibold'
-
-  const rowBg = (ps: ProjectStats) => {
-    if (ps.revenue === 0 && ps.totalExpenses === 0) return ''
-    if (ps.netProfit < 0) return 'bg-red-50'
-    if (ps.profitMargin < 15) return 'bg-yellow-50'
-    if (ps.profitMargin > 30) return 'bg-green-50'
-    return ''
+  // ── Income CRUD ──────────────────────────────────────────────────────────
+  const openIncome = (r?: IncomeRow) => {
+    setEditIncome(r ?? null)
+    setIDesc(r?.description ?? '')
+    setIClient(r?.client ?? '')
+    setIProject(r?.project ?? '')
+    setIAmount(r?.amount?.toString() ?? '')
+    setShowIncomeModal(true)
   }
 
-  const subNavClass = ({ isActive }: { isActive: boolean }) =>
-    `rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${isActive ? 'bg-blue-600 text-white' : 'bg-white text-blue-700 border border-blue-200 hover:border-blue-400'}`
+  const saveIncome = async () => {
+    if (!iDesc.trim()) { alert('Description is required'); return }
+    if (!iAmount || isNaN(Number(iAmount))) { alert('Valid amount required'); return }
+    setSaving(true)
+    const payload = {
+      month,
+      description: iDesc.trim(),
+      client: iClient.trim() || null,
+      project: iProject.trim() || null,
+      amount: Number(iAmount),
+    }
+    if (editIncome) {
+      const { error } = await supabase.from('pl_income').update(payload).eq('id', editIncome.id)
+      if (error) { alert(error.message); setSaving(false); return }
+      await logActivity('UPDATE', 'P&L Income', `Updated income: ${php(Number(iAmount))} — ${iDesc}`, payload)
+    } else {
+      const { error } = await supabase.from('pl_income').insert(payload)
+      if (error) { alert(error.message); setSaving(false); return }
+      await logActivity('CREATE', 'P&L Income', `Added income: ${php(Number(iAmount))} — ${iDesc}`, payload)
+    }
+    setSaving(false)
+    setShowIncomeModal(false)
+    await loadData()
+  }
+
+  const deleteIncome = async (r: IncomeRow) => {
+    if (!confirm(`Delete income "${r.description}" of ${php(Number(r.amount))}?`)) return
+    await supabase.from('pl_income').delete().eq('id', r.id)
+    await logActivity('DELETE', 'P&L Income', `Deleted income: ${php(Number(r.amount))} — ${r.description}`, { id: r.id })
+    await loadData()
+  }
+
+  // ── Expense CRUD ─────────────────────────────────────────────────────────
+  const openExpense = (r?: ExpenseRow) => {
+    setEditExpense(r ?? null)
+    setECategory(r?.category ?? 'Payroll')
+    setEDesc(r?.description ?? '')
+    setEProject(r?.project ?? '')
+    setEAmount(r?.amount?.toString() ?? '')
+    setShowExpenseModal(true)
+  }
+
+  const saveExpense = async () => {
+    if (!eAmount || isNaN(Number(eAmount))) { alert('Valid amount required'); return }
+    setSaving(true)
+    const payload = {
+      month,
+      category: eCategory,
+      description: eDesc.trim() || null,
+      project: eProject.trim() || null,
+      amount: Number(eAmount),
+    }
+    if (editExpense) {
+      const { error } = await supabase.from('pl_expenses').update(payload).eq('id', editExpense.id)
+      if (error) { alert(error.message); setSaving(false); return }
+      await logActivity('UPDATE', 'P&L Expenses', `Updated expense: ${eCategory} ${php(Number(eAmount))}`, payload)
+    } else {
+      const { error } = await supabase.from('pl_expenses').insert(payload)
+      if (error) { alert(error.message); setSaving(false); return }
+      await logActivity('CREATE', 'P&L Expenses', `Added expense: ${eCategory} ${php(Number(eAmount))}`, payload)
+    }
+    setSaving(false)
+    setShowExpenseModal(false)
+    await loadData()
+  }
+
+  const deleteExpense = async (r: ExpenseRow) => {
+    if (!confirm(`Delete ${r.category} expense of ${php(Number(r.amount))}?`)) return
+    await supabase.from('pl_expenses').delete().eq('id', r.id)
+    await logActivity('DELETE', 'P&L Expenses', `Deleted expense: ${r.category} ${php(Number(r.amount))}`, { id: r.id })
+    await loadData()
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Profitability Dashboard</h2>
-          <p className="text-sm text-gray-600">Revenue, costs, and profit analysis</p>
+          <h2 className="text-2xl font-bold text-gray-900">Profit &amp; Loss</h2>
+          <p className="text-sm text-gray-600">Income, expenses, and per-project profitability</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={e => setSelectedMonth(e.target.value)}
-            className="input-field"
-          />
+          <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="input-field" />
           <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5">
             <span className="text-xs font-medium text-gray-600">USD Rate:</span>
             <span className="text-xs text-gray-500">₱</span>
-            <input
-              type="number"
-              min="1"
-              step="0.01"
-              value={exchangeRate}
-              onChange={e => setExchangeRate(Number(e.target.value) || 56)}
-              className="w-16 border-0 p-0 text-sm font-medium text-gray-900 focus:ring-0"
-            />
+            <input type="number" min="1" step="0.01" value={rate} onChange={e => setRate(Number(e.target.value) || 56)} className="w-16 border-0 p-0 text-sm font-medium text-gray-900 focus:ring-0" />
             <span className="text-xs text-gray-500">= $1</span>
           </div>
-          <button onClick={loadData} className="btn-secondary text-xs">↻ Refresh</button>
         </div>
       </div>
 
-      {/* Sub-nav */}
-      <div className="flex gap-2 flex-wrap">
-        <NavLink to="/profitability/clients" className={subNavClass}>Clients & Projects</NavLink>
-        <NavLink to="/profitability/revenues" className={subNavClass}>Revenues</NavLink>
-        <NavLink to="/profitability/employees" className={subNavClass}>Employee Costs</NavLink>
-        <NavLink to="/profitability/expenses" className={subNavClass}>Expenses</NavLink>
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-xl p-5 bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
+          <p className="text-xs font-medium opacity-80">Total Income</p>
+          <p className="text-2xl font-bold mt-1">{php(totalIncome)}</p>
+          <p className="text-xs opacity-70 mt-0.5">{usd(totalIncome, rate)}</p>
+        </div>
+        <div className="rounded-xl p-5 bg-gradient-to-br from-red-500 to-red-600 text-white shadow-lg">
+          <p className="text-xs font-medium opacity-80">Total Expenses</p>
+          <p className="text-2xl font-bold mt-1">{php(totalExpenses)}</p>
+          <p className="text-xs opacity-70 mt-0.5">{usd(totalExpenses, rate)}</p>
+        </div>
+        <div className={`rounded-xl p-5 text-white shadow-lg bg-gradient-to-br ${netProfit >= 0 ? 'from-green-500 to-green-600' : 'from-red-600 to-red-700'}`}>
+          <p className="text-xs font-medium opacity-80">{netProfit >= 0 ? 'Net Profit' : 'Net Loss'}</p>
+          <p className="text-2xl font-bold mt-1">{php(netProfit)}</p>
+          <p className="text-xs opacity-70 mt-0.5">{usd(netProfit, rate)} • {pct(margin)} margin</p>
+        </div>
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-sm text-gray-500">Loading data...</div>
+        <div className="py-16 text-center text-sm text-gray-500">Loading...</div>
       ) : (
         <>
-          {/* P&L Summary Statement */}
+          {/* Per-project profitability */}
           <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-              <h3 className="text-base font-semibold text-gray-900">Profit & Loss Statement — {selectedMonth}</h3>
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">Per-Project Profitability</h3>
+              <p className="text-xs text-gray-500">Tag income (and manual expenses) with a project to break it down. Tracker expenses appear under "{UNALLOCATED}".</p>
             </div>
-            <div className="divide-y divide-gray-100">
-              {/* Revenue */}
-              <div className="flex items-center justify-between px-6 py-3 bg-blue-50">
-                <span className="text-sm font-semibold text-blue-900">Total Revenue</span>
-                <div className="text-right">
-                  <span className="text-sm font-bold text-blue-900">{fmt(kpis.totalRevenue)}</span>
-                  <div className="text-xs text-blue-500">{fmtUSD(kpis.totalRevenue, exchangeRate)}</div>
-                </div>
-              </div>
-              {/* Less: Payroll */}
-              <div className="flex items-center justify-between px-6 py-3 pl-10">
-                <span className="text-sm text-gray-600">Less: Payroll / Labour Cost</span>
-                <div className="text-right">
-                  <span className="text-sm text-red-600">({fmt(kpis.totalPayroll)})</span>
-                  <div className="text-xs text-gray-400">{fmtUSD(kpis.totalPayroll, exchangeRate)}</div>
-                </div>
-              </div>
-              {/* Gross Profit */}
-              <div className={`flex items-center justify-between px-6 py-3 ${kpis.grossProfit >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                <div>
-                  <span className={`text-sm font-semibold ${kpis.grossProfit >= 0 ? 'text-green-800' : 'text-red-800'}`}>Gross Profit</span>
-                  <span className="ml-2 text-xs text-gray-500">({fmtPct(kpis.grossMargin)} margin)</span>
-                </div>
-                <div className="text-right">
-                  <span className={`text-sm font-bold ${kpis.grossProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(kpis.grossProfit)}</span>
-                  <div className="text-xs text-gray-400">{fmtUSD(kpis.grossProfit, exchangeRate)}</div>
-                </div>
-              </div>
-              {/* Less: Operating Expenses breakdown */}
-              {kpis.projectOpex > 0 && (
-                <div className="flex items-center justify-between px-6 py-2 pl-10">
-                  <span className="text-xs text-gray-500">Less: Project Operating Expenses</span>
-                  <span className="text-xs text-red-500">({fmt(kpis.projectOpex)})</span>
-                </div>
-              )}
-              {kpis.clientOpex > 0 && (
-                <div className="flex items-center justify-between px-6 py-2 pl-10">
-                  <span className="text-xs text-gray-500">Less: Client Operating Expenses</span>
-                  <span className="text-xs text-red-500">({fmt(kpis.clientOpex)})</span>
-                </div>
-              )}
-              {kpis.companyOpex > 0 && (
-                <div className="flex items-center justify-between px-6 py-2 pl-10">
-                  <span className="text-xs text-gray-500">Less: Company Operating Expenses</span>
-                  <span className="text-xs text-red-500">({fmt(kpis.companyOpex)})</span>
-                </div>
-              )}
-              {/* Total Opex subtotal */}
-              <div className="flex items-center justify-between px-6 py-3 pl-10 bg-gray-50">
-                <span className="text-sm text-gray-700 font-medium">Total Operating Expenses</span>
-                <div className="text-right">
-                  <span className="text-sm text-red-600 font-medium">({fmt(kpis.totalOpex)})</span>
-                  <div className="text-xs text-gray-400">{fmtUSD(kpis.totalOpex, exchangeRate)}</div>
-                </div>
-              </div>
-              {/* Net Profit */}
-              <div className={`flex items-center justify-between px-6 py-4 ${kpis.totalProfit >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-                <div>
-                  <span className={`text-base font-bold ${kpis.totalProfit >= 0 ? 'text-green-900' : 'text-red-900'}`}>
-                    {kpis.totalProfit >= 0 ? 'Net Profit' : 'Net Loss'}
-                  </span>
-                  <span className="ml-2 text-xs text-gray-600">({fmtPct(kpis.avgMargin)} net margin)</span>
-                </div>
-                <div className="text-right">
-                  <span className={`text-base font-bold ${kpis.totalProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>{fmt(kpis.totalProfit)}</span>
-                  <div className="text-xs text-gray-500">{fmtUSD(kpis.totalProfit, exchangeRate)}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-xl p-4 bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
-              <p className="text-xs font-medium opacity-80">Total Revenue</p>
-              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalRevenue)}</p>
-              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalRevenue, exchangeRate)}</p>
-            </div>
-            <div className="rounded-xl p-4 bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg">
-              <p className="text-xs font-medium opacity-80">Total Payroll</p>
-              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalPayroll)}</p>
-              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalPayroll, exchangeRate)}</p>
-            </div>
-            <div className="rounded-xl p-4 bg-gradient-to-br from-red-500 to-red-600 text-white shadow-lg">
-              <p className="text-xs font-medium opacity-80">Total Expenses</p>
-              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalPayroll + kpis.totalOpex)}</p>
-              <p className="text-xs opacity-70 mt-0.5">{fmtUSD(kpis.totalPayroll + kpis.totalOpex, exchangeRate)}</p>
-            </div>
-            <div className={`rounded-xl p-4 text-white shadow-lg bg-gradient-to-br ${kpis.totalProfit >= 0 ? 'from-green-500 to-green-600' : 'from-red-600 to-red-700'}`}>
-              <p className="text-xs font-medium opacity-80">{kpis.totalProfit >= 0 ? 'Net Profit' : 'Net Loss'}</p>
-              <p className="text-lg font-bold mt-1 break-all">{fmt(kpis.totalProfit)}</p>
-              <p className="text-xs opacity-70 mt-0.5">{fmtPct(kpis.avgMargin)} margin</p>
-            </div>
-          </div>
-
-          {/* Alerts */}
-          {alerts.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-base font-semibold text-gray-800">⚠ Alerts</h3>
-              {alerts.map((a, i) => (
-                <div
-                  key={i}
-                  className={`rounded-lg px-4 py-3 text-sm font-medium border ${
-                    a.type === 'error'
-                      ? 'bg-red-50 border-red-200 text-red-700'
-                      : 'bg-yellow-50 border-yellow-200 text-yellow-700'
-                  }`}
-                >
-                  {a.type === 'error' ? '🔴' : '🟡'} {a.message}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Client Profitability Table */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-x-auto">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-base font-semibold text-gray-900">Client Profitability</h3>
-            </div>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {['Client', 'Revenue', 'Expenses', 'Profit', 'Margin %'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {clientStats.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">No client data for this month.</td></tr>
-                ) : clientStats.map(cs => (
-                  <tr key={cs.client.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{cs.client.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900"><div>{fmt(cs.revenue)}</div><div className="text-xs text-gray-400">{fmtUSD(cs.revenue, exchangeRate)}</div></td>
-                    <td className="px-4 py-3 text-sm text-gray-900"><div>{fmt(cs.expenses)}</div><div className="text-xs text-gray-400">{fmtUSD(cs.expenses, exchangeRate)}</div></td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${cs.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}><div>{fmt(cs.profit)}</div><div className="text-xs opacity-70">{fmtUSD(cs.profit, exchangeRate)}</div></td>
-                    <td className={`px-4 py-3 text-sm ${marginClass(cs.margin)}`}>{fmtPct(cs.margin)}</td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Project', 'Income', 'Expenses', 'Profit', 'Margin'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Project Profitability Table */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-x-auto">
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-base font-semibold text-gray-900">Project Profitability</h3>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {projectStats.length === 0 ? (
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">No data for this month.</td></tr>
+                  ) : projectStats.map(ps => {
+                    const m = ps.income > 0 ? (ps.profit / ps.income) * 100 : 0
+                    return (
+                      <tr key={ps.project} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{ps.project}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900"><div>{php(ps.income)}</div><div className="text-xs text-gray-400">{usd(ps.income, rate)}</div></td>
+                        <td className="px-4 py-3 text-sm text-gray-900"><div>{php(ps.expenses)}</div><div className="text-xs text-gray-400">{usd(ps.expenses, rate)}</div></td>
+                        <td className={`px-4 py-3 text-sm font-semibold ${ps.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}><div>{php(ps.profit)}</div><div className="text-xs opacity-70">{usd(ps.profit, rate)}</div></td>
+                        <td className={`px-4 py-3 text-sm font-semibold ${m >= 0 ? 'text-gray-700' : 'text-red-600'}`}>{ps.income > 0 ? pct(m) : '-'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {['Project', 'Client', 'Revenue', 'Payroll', 'Op. Expenses', 'Total Expenses', 'Net Profit', 'Margin %'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {projectStats.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">No project data for this month.</td></tr>
-                ) : projectStats.map(ps => (
-                  <tr key={ps.project.id} className={`${rowBg(ps)} hover:opacity-90`}>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{ps.project.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{ps.clientName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"><div>{fmt(ps.revenue)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.revenue, exchangeRate)}</div></td>
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"><div>{fmt(ps.payrollCost)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.payrollCost, exchangeRate)}</div></td>
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap"><div>{fmt(ps.operatingExpenses)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.operatingExpenses, exchangeRate)}</div></td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap"><div>{fmt(ps.totalExpenses)}</div><div className="text-xs text-gray-400">{fmtUSD(ps.totalExpenses, exchangeRate)}</div></td>
-                    <td className={`px-4 py-3 text-sm font-semibold whitespace-nowrap ${ps.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}><div>{fmt(ps.netProfit)}</div><div className="text-xs opacity-70">{fmtUSD(ps.netProfit, exchangeRate)}</div></td>
-                    <td className={`px-4 py-3 text-sm whitespace-nowrap ${marginClass(ps.profitMargin)}`}>{fmtPct(ps.profitMargin)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
 
-          {/* Employee Cost Analysis */}
+          {/* Two columns: Income and Expenses */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Top 5 employees */}
-            <div className="rounded-xl border border-gray-200 bg-white shadow-lg p-6">
-              <h3 className="text-base font-semibold text-gray-900 mb-4">Top 5 Highest Cost Employees</h3>
-              {topEmployees.length === 0 ? (
-                <p className="text-sm text-gray-500">No employee cost data for this month.</p>
-              ) : (
-                <div className="space-y-3">
-                  {topEmployees.map((e, i) => (
-                    <div key={i} className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="flex-shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">{i + 1}</span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{e.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{e.project}</p>
-                        </div>
-                      </div>
+            {/* Income */}
+            <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-blue-50">
+                <h3 className="text-base font-semibold text-blue-900">Income</h3>
+                <button onClick={() => openIncome()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">+ Add Income</button>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {income.length === 0 ? (
+                  <p className="px-5 py-8 text-center text-sm text-gray-500">No income for this month. Add one!</p>
+                ) : income.map(r => (
+                  <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{r.description}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {[r.client, r.project].filter(Boolean).join(' • ') || '—'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
                       <div className="text-right">
-                        <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{fmt(e.cost)}</div>
-                        <div className="text-xs text-gray-400">{fmtUSD(e.cost, exchangeRate)}</div>
+                        <p className="text-sm font-semibold text-gray-900">{php(Number(r.amount))}</p>
+                        <p className="text-xs text-gray-400">{usd(Number(r.amount), rate)}</p>
+                      </div>
+                      <button onClick={() => openIncome(r)} className="text-blue-600 hover:underline text-xs">Edit</button>
+                      <button onClick={() => deleteIncome(r)} className="text-red-600 hover:underline text-xs">Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {income.length > 0 && (
+                <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50">
+                  <span className="text-sm font-semibold text-gray-700">Total Income</span>
+                  <span className="text-sm font-bold text-blue-700">{php(totalIncome)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Expenses */}
+            <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-red-50">
+                <h3 className="text-base font-semibold text-red-900">Expenses</h3>
+                <button onClick={() => openExpense()} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">+ Add Expense</button>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {/* Tracker-pulled expenses */}
+                {trackerExpenses.map(t => (
+                  <div key={t.id} className="flex items-center justify-between gap-3 px-5 py-3 bg-amber-50/40">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.type === 'expense' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                          {t.type === 'expense' ? 'Expense' : 'Cash Out'}
+                        </span>
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">From Tracker</span>
+                        {t.category && <span className="text-sm text-gray-700 truncate">{t.category}</span>}
+                      </div>
+                      {t.note && <p className="text-xs text-gray-500 truncate mt-0.5">{t.note}</p>}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-semibold text-gray-900">{php(Number(t.amount))}</p>
+                      <p className="text-xs text-gray-400">{usd(Number(t.amount), rate)}</p>
+                    </div>
+                  </div>
+                ))}
+                {/* Manual P&L expenses */}
+                {expenses.map(r => (
+                  <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Manual</span>
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{r.category}</span>
+                        {r.project && <span className="text-xs text-purple-600">{r.project}</span>}
+                        {r.description && <span className="text-sm text-gray-700 truncate">{r.description}</span>}
                       </div>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-gray-900">{php(Number(r.amount))}</p>
+                        <p className="text-xs text-gray-400">{usd(Number(r.amount), rate)}</p>
+                      </div>
+                      <button onClick={() => openExpense(r)} className="text-blue-600 hover:underline text-xs">Edit</button>
+                      <button onClick={() => deleteExpense(r)} className="text-red-600 hover:underline text-xs">Delete</button>
+                    </div>
+                  </div>
+                ))}
+                {trackerExpenses.length === 0 && expenses.length === 0 && (
+                  <p className="px-5 py-8 text-center text-sm text-gray-500">No expenses this month. Add one, or record them in the tracker.</p>
+                )}
+              </div>
+              {totalExpenses > 0 && (
+                <div className="border-t border-gray-200 bg-gray-50 px-5 py-3 space-y-1">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>From Tracker</span><span>{php(trackerExpensesTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Manual</span><span>{php(manualExpenses)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-1">
+                    <span className="text-sm font-semibold text-gray-700">Total Expenses</span>
+                    <span className="text-sm font-bold text-red-700">{php(totalExpenses)}</span>
+                  </div>
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Cost by project bar chart */}
+          {/* Expense breakdown + trend */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="rounded-xl border border-gray-200 bg-white shadow-lg p-6">
-              <h3 className="text-base font-semibold text-gray-900 mb-4">Payroll Cost by Project</h3>
-              {costByProject.length === 0 ? (
-                <p className="text-sm text-gray-500">No payroll data for this month.</p>
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Expenses by Category</h3>
+              {expenseByCategory.length === 0 ? (
+                <p className="text-sm text-gray-500">No expenses this month.</p>
               ) : (
                 <div className="space-y-3">
-                  {costByProject.map((cp, i) => (
-                    <div key={i}>
+                  {expenseByCategory.map(({ cat, amt }) => (
+                    <div key={cat}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-gray-700 truncate max-w-[55%]">{cp.name}</span>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-600 whitespace-nowrap">{fmt(cp.cost)}</div>
-                          <div className="text-xs text-gray-400 whitespace-nowrap">{fmtUSD(cp.cost, exchangeRate)}</div>
-                        </div>
+                        <span className="text-xs font-medium text-gray-700">{cat}</span>
+                        <span className="text-xs text-gray-600">{php(amt)}</span>
                       </div>
                       <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-500"
-                          style={{ width: `${(cp.cost / maxCostByProject) * 100}%` }}
-                        />
+                        <div className="h-full rounded-full bg-gradient-to-r from-red-400 to-red-500" style={{ width: `${totalExpenses > 0 ? (amt / totalExpenses) * 100 : 0}%` }} />
                       </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Expense Analysis */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-lg p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">Expense Analysis by Category</h3>
-            {expensesByCategory.length === 0 ? (
-              <p className="text-sm text-gray-500">No expense data for this month.</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {expensesByCategory.map((ec, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-gray-700 capitalize">{ec.cat}</span>
-                      <div className="text-right">
-                        <div className="text-xs text-gray-600">{fmt(ec.amount)}</div>
-                        <div className="text-xs text-gray-400">{fmtUSD(ec.amount, exchangeRate)}</div>
+            <div className="rounded-xl border border-gray-200 bg-white shadow-lg p-6">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">Last 6 Months</h3>
+              <div className="flex gap-4 text-xs text-gray-500 mb-4">
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-blue-500"></span>Income</span>
+                <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-red-400"></span>Expenses</span>
+              </div>
+              {trend.every(t => t.income === 0 && t.expenses === 0) ? (
+                <p className="text-sm text-gray-500">No data yet.</p>
+              ) : (
+                <div className="flex items-end gap-2 h-40">
+                  {trend.map((t, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <div className="w-full flex items-end justify-center gap-0.5 h-28">
+                        <div title={`Income: ${php(t.income)}`} className="flex-1 rounded-t bg-blue-500" style={{ height: `${(t.income / maxTrend) * 100}%`, minHeight: t.income > 0 ? '4px' : '0' }} />
+                        <div title={`Expenses: ${php(t.expenses)}`} className="flex-1 rounded-t bg-red-400" style={{ height: `${(t.expenses / maxTrend) * 100}%`, minHeight: t.expenses > 0 ? '4px' : '0' }} />
                       </div>
+                      <span className={`text-xs font-medium ${t.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t.profit >= 0 ? '+' : ''}{Math.round(t.profit / 1000)}k</span>
+                      <span className="text-xs text-gray-500 whitespace-nowrap">{t.month.slice(5)}/{t.month.slice(2, 4)}</span>
                     </div>
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-red-400 to-red-500"
-                        style={{ width: `${(ec.amount / maxExpCat) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Revenue Trend - Last 6 months */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-lg p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-1">Revenue Trend — Last 6 Months</h3>
-            <div className="flex gap-4 text-xs text-gray-500 mb-4">
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-blue-500"></span>Revenue</span>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-red-400"></span>Expenses</span>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded bg-green-500"></span>Profit</span>
+                  ))}
+                </div>
+              )}
             </div>
-            {trendData.every(t => t.revenue === 0 && t.expenses === 0) ? (
-              <p className="text-sm text-gray-500">No trend data available.</p>
-            ) : (
-              <div className="flex items-end gap-2 h-40 overflow-x-auto">
-                {trendData.map((t, i) => (
-                  <div key={i} className="flex-1 min-w-[60px] flex flex-col items-center gap-1">
-                    <div className="w-full flex items-end justify-center gap-0.5 h-28">
-                      <div
-                        title={`Revenue: ${fmt(t.revenue)}`}
-                        className="flex-1 rounded-t bg-blue-500 transition-all"
-                        style={{ height: `${maxTrend > 0 ? (t.revenue / maxTrend) * 100 : 0}%`, minHeight: t.revenue > 0 ? '4px' : '0' }}
-                      />
-                      <div
-                        title={`Expenses: ${fmt(t.expenses)}`}
-                        className="flex-1 rounded-t bg-red-400 transition-all"
-                        style={{ height: `${maxTrend > 0 ? (t.expenses / maxTrend) * 100 : 0}%`, minHeight: t.expenses > 0 ? '4px' : '0' }}
-                      />
-                      <div
-                        title={`Profit: ${fmt(t.profit)}`}
-                        className={`flex-1 rounded-t transition-all ${t.profit >= 0 ? 'bg-green-500' : 'bg-red-700'}`}
-                        style={{ height: `${maxTrend > 0 ? (Math.abs(t.profit) / maxTrend) * 100 : 0}%`, minHeight: Math.abs(t.profit) > 0 ? '4px' : '0' }}
-                      />
-                    </div>
-                    <span className="text-xs text-gray-500 whitespace-nowrap">{t.month.slice(5)}/{t.month.slice(2, 4)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </>
+      )}
+
+      {/* Income Modal */}
+      {showIncomeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b p-6">
+              <h3 className="text-xl font-bold">{editIncome ? 'Edit Income' : 'Add Income'}</h3>
+              <button onClick={() => setShowIncomeModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <div className="space-y-4 p-6">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Description *</label>
+                <input value={iDesc} onChange={e => setIDesc(e.target.value)} className="input-field w-full" placeholder="e.g. Monthly retainer" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Client / Label</label>
+                  <input value={iClient} onChange={e => setIClient(e.target.value)} className="input-field w-full" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Project</label>
+                  <input value={iProject} onChange={e => setIProject(e.target.value)} className="input-field w-full" placeholder="Optional" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Amount (₱) *</label>
+                <input type="number" min="0" step="0.01" value={iAmount} onChange={e => setIAmount(e.target.value)} className="input-field w-full" placeholder="0.00" />
+                {iAmount && !isNaN(Number(iAmount)) && rate > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">≈ {usd(Number(iAmount), rate)}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t p-6">
+              <button onClick={() => setShowIncomeModal(false)} className="btn-secondary">Cancel</button>
+              <button onClick={saveIncome} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editIncome ? 'Update' : 'Add Income'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expense Modal */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b p-6">
+              <h3 className="text-xl font-bold">{editExpense ? 'Edit Expense' : 'Add Expense'}</h3>
+              <button onClick={() => setShowExpenseModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <div className="space-y-4 p-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Category *</label>
+                  <select value={eCategory} onChange={e => setECategory(e.target.value)} className="input-field w-full">
+                    {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Amount (₱) *</label>
+                  <input type="number" min="0" step="0.01" value={eAmount} onChange={e => setEAmount(e.target.value)} className="input-field w-full" placeholder="0.00" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Project</label>
+                  <input value={eProject} onChange={e => setEProject(e.target.value)} className="input-field w-full" placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Description</label>
+                  <input value={eDesc} onChange={e => setEDesc(e.target.value)} className="input-field w-full" placeholder="Optional note" />
+                </div>
+              </div>
+              {eAmount && !isNaN(Number(eAmount)) && rate > 0 && (
+                <p className="text-xs text-gray-500">≈ {usd(Number(eAmount), rate)}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 border-t p-6">
+              <button onClick={() => setShowExpenseModal(false)} className="btn-secondary">Cancel</button>
+              <button onClick={saveExpense} disabled={saving} className="btn-primary">{saving ? 'Saving...' : editExpense ? 'Update' : 'Add Expense'}</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

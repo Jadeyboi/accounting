@@ -43,14 +43,6 @@ import Oakridge from "@/pages/Oakridge";
 
 import Profitability from "@/pages/Profitability";
 
-import ProfitabilityClients from "@/pages/ProfitabilityClients";
-
-import ProfitabilityEmployees from "@/pages/ProfitabilityEmployees";
-
-import ProfitabilityExpenses from "@/pages/ProfitabilityExpenses";
-
-import ProfitabilityRevenues from "@/pages/ProfitabilityRevenues";
-
 import ChangePassword from "@/pages/ChangePassword";
 
 import ActivityLogs from "@/pages/ActivityLogs";
@@ -1715,10 +1707,6 @@ export default function App() {
                   <Route path="/hris" element={<HRIS />} />
                   <Route path="/oakridge" element={<Oakridge />} />
                   <Route path="/profitability" element={<Profitability />} />
-                  <Route path="/profitability/clients" element={<ProfitabilityClients />} />
-                  <Route path="/profitability/employees" element={<ProfitabilityEmployees />} />
-                  <Route path="/profitability/expenses" element={<ProfitabilityExpenses />} />
-                  <Route path="/profitability/revenues" element={<ProfitabilityRevenues />} />
                   <Route path="/leave" element={<Leave />} />
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/loans" element={<Loans />} />
