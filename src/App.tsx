@@ -43,6 +43,8 @@ import Oakridge from "@/pages/Oakridge";
 
 import Profitability from "@/pages/Profitability";
 
+import Affiliates from "@/pages/Affiliates";
+
 import ChangePassword from "@/pages/ChangePassword";
 
 import ActivityLogs from "@/pages/ActivityLogs";
@@ -674,6 +676,34 @@ export default function App() {
                 >
 
                   P&amp;L
+
+                </NavLink>
+
+                )}
+
+                {canAccess('/affiliates') && (
+
+                <NavLink
+
+                  to="/affiliates"
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+
+                    }`
+
+                  }
+
+                >
+
+                  Affiliates
 
                 </NavLink>
 
@@ -1363,6 +1393,36 @@ export default function App() {
 
                 )}
 
+                {canAccess('/affiliates') && (
+
+                <NavLink
+
+                  to="/affiliates"
+
+                  onClick={() => setMobileMenuOpen(false)}
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-3 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+
+                    }`
+
+                  }
+
+                >
+
+                  Affiliates
+
+                </NavLink>
+
+                )}
+
                 {canAccess('/leave') && (
 
                 <NavLink
@@ -1707,6 +1767,7 @@ export default function App() {
                   <Route path="/hris" element={<HRIS />} />
                   <Route path="/oakridge" element={<Oakridge />} />
                   <Route path="/profitability" element={<Profitability />} />
+                  <Route path="/affiliates" element={<Affiliates />} />
                   <Route path="/leave" element={<Leave />} />
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/loans" element={<Loans />} />
