@@ -38,6 +38,9 @@ export default function Payroll() {
 
   // Payslip form
   const [editingPayslip, setEditingPayslip] = useState<Payslip | null>(null)
+  // Project allocation for the payslip being edited (per-payslip split)
+  const [projectsList, setProjectsList] = useState<Array<{ id: string; name: string; code: string | null; status: string }>>([])
+  const [alloc, setAlloc] = useState<Array<{ project_id: string; allocation_pct: number }>>([])
 
   // Bulk generation
   const [showBulkModal, setShowBulkModal] = useState(false)
@@ -101,11 +104,12 @@ export default function Payroll() {
     setLoading(true)
     setError(null)
     try {
-      const [empRes, allEmpRes, payRes, loansRes] = await Promise.all([
+      const [empRes, allEmpRes, payRes, loansRes, projRes] = await Promise.all([
         supabase.from('employees').select('*').neq('status', 'terminated').order('name', { ascending: true }),
         supabase.from('employees').select('*').order('name', { ascending: true }),
         supabase.from('payslips').select('*').order('created_at', { ascending: false }),
         supabase.from('loans').select('*').eq('status', 'active').order('created_at', { ascending: false }),
+        supabase.from('projects').select('id,name,code,status').order('name', { ascending: true }),
       ])
       if (empRes.error) setError(empRes.error.message)
       if (payRes.error) setError((prev) => prev ?? payRes.error!.message)
@@ -114,6 +118,7 @@ export default function Payroll() {
       setAllEmployees((allEmpRes.data ?? []) as Employee[])
       setPayslips((payRes.data ?? []) as Payslip[])
       setLoans((loansRes.data ?? []) as Loan[])
+      if (!projRes.error) setProjectsList((projRes.data ?? []) as Array<{ id: string; name: string; code: string | null; status: string }>)
       console.log('Refreshed payslips with transaction_ids:', payRes.data?.map(p => ({ id: p.id, transaction_id: p.transaction_id, employee_id: p.employee_id })))
     } catch (error) {
       console.error('Refresh error:', error)
@@ -273,9 +278,27 @@ export default function Payroll() {
     return baseSalary // Full month salary
   }
 
+  // Load existing allocations for a payslip, or seed from the employee's open project assignment(s)
+  const loadOrSeedAllocation = async (employeeId: string, payslipId: string | null) => {
+    if (payslipId) {
+      const { data } = await supabase.from('payslip_project_allocations').select('project_id,allocation_pct').eq('payslip_id', payslipId)
+      if (data && data.length > 0) { setAlloc(data.map(d => ({ project_id: d.project_id, allocation_pct: Number(d.allocation_pct) }))); return }
+    }
+    // seed from employee's open assignments (respects allocation_pct set in HRIS)
+    const { data: asgs } = await supabase.from('employee_project_assignments').select('project_id,allocation_pct').eq('employee_id', employeeId).is('end_date', null)
+    if (asgs && asgs.length > 0) {
+      setAlloc(asgs.map(a => ({ project_id: a.project_id, allocation_pct: Number(a.allocation_pct) || (100 / asgs.length) })))
+    } else {
+      // fall back to employee.current_project_id
+      const { data: emp } = await supabase.from('employees').select('current_project_id').eq('id', employeeId).maybeSingle()
+      setAlloc(emp?.current_project_id ? [{ project_id: emp.current_project_id, allocation_pct: 100 }] : [])
+    }
+  }
+
   const onEditPayslip = (p?: Payslip) => {
     if (p) {
       setEditingPayslip(p)
+      loadOrSeedAllocation(p.employee_id, p.id)
     } else {
       const newSlip = newPayslip()
       // Pre-fill with last payslip values for the selected employee
@@ -292,6 +315,7 @@ export default function Payroll() {
       // Calculate loan deductions for this employee
       newSlip.loan_deductions = calculateLoanDeductions(newSlip.employee_id, newSlip.date_issued)
       setEditingPayslip(newSlip)
+      loadOrSeedAllocation(newSlip.employee_id, null)
     }
     setMode('edit')
   }
@@ -350,7 +374,23 @@ export default function Payroll() {
       if (linkErr) return alert(linkErr.message)
     }
 
+    // Persist project allocation for this payslip (Phase 2)
+    const cleanAlloc = alloc.filter(a => a.project_id)
+    if (cleanAlloc.length > 0) {
+      const totalPct = Math.round(cleanAlloc.reduce((s, a) => s + (Number(a.allocation_pct) || 0), 0) * 100) / 100
+      if (totalPct !== 100) {
+        alert(`Project allocation must total 100% (currently ${totalPct}%). Please fix before saving.`)
+        return
+      }
+      // replace existing allocations for this payslip (no duplicates)
+      await supabase.from('payslip_project_allocations').delete().eq('payslip_id', p.id)
+      const rows = cleanAlloc.map(a => ({ payslip_id: p.id, project_id: a.project_id, allocation_pct: Number(a.allocation_pct), source: 'manual' }))
+      const { error: allocErr } = await supabase.from('payslip_project_allocations').insert(rows)
+      if (allocErr) return alert('Allocation save failed: ' + allocErr.message)
+    }
+
     setEditingPayslip(null)
+    setAlloc([])
     setMode('list')
     await logActivity('created', 'Payroll', `Processed payslip for ${currentEmployee?.name ?? 'Unknown'}`)
     await refresh()
@@ -1316,6 +1356,31 @@ export default function Payroll() {
               <label className="text-sm text-slate-600">Notes
                 <input type="text" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm" value={editingPayslip.notes ?? ''} onChange={(e) => setEditingPayslip({ ...editingPayslip, notes: e.target.value })} />
               </label>
+
+              {/* Project Allocation (Phase 2) */}
+              <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-700">Project Allocation</span>
+                  {(() => {
+                    const total = Math.round(alloc.reduce((s, a) => s + (Number(a.allocation_pct) || 0), 0) * 100) / 100
+                    return <span className={`text-xs font-medium ${total === 100 ? 'text-green-600' : 'text-amber-600'}`}>Total: {total}%{total !== 100 ? ' (must equal 100%)' : ' ✓'}</span>
+                  })()}
+                </div>
+                <div className="space-y-2">
+                  {alloc.length === 0 && <p className="text-xs text-slate-500">No allocation. Assign the employee to a project (HRIS) or add one below.</p>}
+                  {alloc.map((a, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_6rem_1.5rem] items-center gap-2">
+                      <select value={a.project_id} onChange={(e) => setAlloc(list => list.map((x, j) => j === i ? { ...x, project_id: e.target.value } : x))} className="rounded-md border-slate-300 text-sm">
+                        <option value="">Select project…</option>
+                        {projectsList.filter(p => p.status === 'active' || p.id === a.project_id).map(p => <option key={p.id} value={p.id}>{p.name}{p.code ? ` (${p.code})` : ''}</option>)}
+                      </select>
+                      <input type="number" min="0" max="100" step="0.01" value={a.allocation_pct} onChange={(e) => setAlloc(list => list.map((x, j) => j === i ? { ...x, allocation_pct: Number(e.target.value) || 0 } : x))} className="rounded-md border-slate-300 text-sm text-right" />
+                      <button onClick={() => setAlloc(list => list.filter((_, j) => j !== i))} className="text-red-500 hover:text-red-700">✕</button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setAlloc(list => [...list, { project_id: '', allocation_pct: 0 }])} className="mt-2 text-xs font-medium text-blue-600 hover:underline">+ Add project split</button>
+              </div>
 
               <div className="mt-2 grid grid-cols-3 gap-3 rounded-lg border border-slate-200 p-3 text-sm">
                 <div>
