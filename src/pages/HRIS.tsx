@@ -1610,12 +1610,20 @@ export default function HRIS() {
                         <td className="px-6 py-4 text-sm text-gray-500">{formatDate(emp.termination_date)}</td>
                         <td className="px-6 py-4 text-sm text-gray-500">{formatDate(emp.last_working_day)}</td>
                         <td className="px-6 py-4 text-right text-sm">
-                          <button
-                            onClick={() => { setViewingEmployee(emp); setShowViewModal(true); loadSalaryHistory(emp.id) }}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            View
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <a
+                              href={`/final-pay?employee=${emp.id}`}
+                              className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                            >
+                              Calculate Final Pay
+                            </a>
+                            <button
+                              onClick={() => { setViewingEmployee(emp); setShowViewModal(true); loadSalaryHistory(emp.id) }}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              View
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

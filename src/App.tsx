@@ -20,6 +20,8 @@ import Savings from "@/pages/Savings";
 
 import MonthlyExpenses from "@/pages/MonthlyExpenses";
 
+import FinalPay from "@/pages/FinalPay";
+
 import Invoice from "@/pages/Invoice";
 
 
@@ -169,7 +171,7 @@ export default function App() {
 
     if (userRole === 'hr') {
 
-      const hrRoutes = ['/payroll', '/salary-declaration', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users'];
+      const hrRoutes = ['/payroll', '/salary-declaration', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users', '/final-pay'];
 
       return hrRoutes.some(r => path === r || path.startsWith(r));
 
@@ -620,6 +622,34 @@ export default function App() {
                 >
 
                   HRIS
+
+                </NavLink>
+
+                )}
+
+                {canAccess('/final-pay') && (
+
+                <NavLink
+
+                  to="/final-pay"
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+
+                    }`
+
+                  }
+
+                >
+
+                  Final Pay
 
                 </NavLink>
 
@@ -1333,6 +1363,36 @@ export default function App() {
 
                 )}
 
+                {canAccess('/final-pay') && (
+
+                <NavLink
+
+                  to="/final-pay"
+
+                  onClick={() => setMobileMenuOpen(false)}
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-3 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+
+                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+
+                    }`
+
+                  }
+
+                >
+
+                  Final Pay
+
+                </NavLink>
+
+                )}
+
                 {canAccess('/oakridge') && (
 
                 <NavLink
@@ -1765,6 +1825,7 @@ export default function App() {
                   <Route path="/payroll" element={<Payroll />} />
                   <Route path="/salary-declaration" element={<SalaryDeclaration />} />
                   <Route path="/hris" element={<HRIS />} />
+                  <Route path="/final-pay" element={<FinalPay />} />
                   <Route path="/oakridge" element={<Oakridge />} />
                   <Route path="/profitability" element={<Profitability />} />
                   <Route path="/affiliates" element={<Affiliates />} />
