@@ -18,7 +18,7 @@ import SalaryDeclaration from "@/pages/SalaryDeclaration";
 
 import Savings from "@/pages/Savings";
 
-import RequestFunds from "@/pages/RequestFunds";
+import MonthlyExpenses from "@/pages/MonthlyExpenses";
 
 import Invoice from "@/pages/Invoice";
 
@@ -821,11 +821,11 @@ export default function App() {
 
                 )}
 
-                {canAccess('/request-funds') && (
+                {canAccess('/monthly-expenses') && (
 
                 <NavLink
 
-                  to="/request-funds"
+                  to="/monthly-expenses"
 
                   className={({ isActive }) =>
 
@@ -843,7 +843,7 @@ export default function App() {
 
                 >
 
-                  Request Funds
+                  Monthly Expenses
 
                 </NavLink>
 
@@ -1543,11 +1543,11 @@ export default function App() {
 
                 )}
 
-                {canAccess('/request-funds') && (
+                {canAccess('/monthly-expenses') && (
 
                 <NavLink
 
-                  to="/request-funds"
+                  to="/monthly-expenses"
 
                   onClick={() => setMobileMenuOpen(false)}
 
@@ -1567,7 +1567,7 @@ export default function App() {
 
                 >
 
-                  Request Funds
+                  Monthly Expenses
 
                 </NavLink>
 
@@ -1772,7 +1772,7 @@ export default function App() {
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/loans" element={<Loans />} />
                   <Route path="/money-received" element={<MoneyReceived />} />
-                  <Route path="/request-funds" element={<RequestFunds />} />
+                  <Route path="/monthly-expenses" element={<MonthlyExpenses />} />
                   <Route path="/invoice" element={<Invoice />} />
                   <Route path="/invoice-history" element={<Invoice />} />
                   <Route path="/job-openings" element={<JobOpenings />} />
