@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
+import ProjectPnL from '@/pages/ProjectPnL'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface IncomeRow {
@@ -80,6 +81,7 @@ const last6Months = (m: string): string[] => {
 const UNALLOCATED = 'Unallocated'
 
 export default function Profitability() {
+  const [tab, setTab] = useState<'overall' | 'project' | 'comparison'>('overall')
   const [month, setMonth] = useState(currentMonth())
   const [rate, setRate] = useState(56)
   const [rateInfo, setRateInfo] = useState<{ live: boolean; loading: boolean; updated: string | null }>({ live: false, loading: true, updated: null })
@@ -330,6 +332,20 @@ export default function Profitability() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {([['overall', 'Overall P&L'], ['project', 'Project P&L'], ['comparison', 'Project Comparison']] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === k ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'project' && <ProjectPnL mode="project" />}
+      {tab === 'comparison' && <ProjectPnL mode="comparison" />}
+
+      {tab === 'overall' && (<>
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl p-5 bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
@@ -573,6 +589,7 @@ export default function Profitability() {
           </div>
         </>
       )}
+      </>)}
 
       {/* Income Modal */}
       {showIncomeModal && (
