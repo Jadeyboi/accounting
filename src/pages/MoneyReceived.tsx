@@ -44,6 +44,9 @@ export default function MoneyReceived() {
   const [category, setCategory] = useState('')
   const [notes, setNotes] = useState('')
   const [status, setStatus] = useState<'pending' | 'confirmed' | 'cleared'>('confirmed')
+  const [projectId, setProjectId] = useState('')
+  const [reportingMonth, setReportingMonth] = useState('')
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; code: string | null; status: string }>>([])
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState<string>('all')
@@ -54,7 +57,13 @@ export default function MoneyReceived() {
   useEffect(() => {
     loadData()
     fetchExchangeRate()
+    loadProjects()
   }, [])
+
+  const loadProjects = async () => {
+    const { data } = await supabase.from('projects').select('id,name,code,status').order('name')
+    setProjects((data ?? []) as Array<{ id: string; name: string; code: string | null; status: string }>)
+  }
 
   const fetchExchangeRate = async () => {
     try {
@@ -103,6 +112,8 @@ export default function MoneyReceived() {
       setCategory(record.category || '')
       setNotes(record.notes || '')
       setStatus(record.status)
+      setProjectId((record as any).project_id || '')
+      setReportingMonth((record as any).reporting_month || (record.date_received ? record.date_received.slice(0, 7) : ''))
     } else {
       resetForm()
     }
@@ -122,6 +133,8 @@ export default function MoneyReceived() {
     setCategory('')
     setNotes('')
     setStatus('confirmed')
+    setProjectId('')
+    setReportingMonth('')
   }
 
   const handleSave = async () => {
@@ -157,7 +170,9 @@ export default function MoneyReceived() {
       purpose: purpose.trim(),
       category: category.trim() || null,
       notes: notes.trim() || null,
-      status: status
+      status: status,
+      project_id: projectId || null,
+      reporting_month: reportingMonth || (dateReceived ? dateReceived.slice(0, 7) : null),
     }
 
     try {
@@ -672,6 +687,32 @@ export default function MoneyReceived() {
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     placeholder="e.g., Client Payment, Loan, Investment"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">— No project (company income only) —</option>
+                    {projects.filter(p => p.status !== 'completed' && p.status !== 'cancelled' || p.id === projectId).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}{p.code ? ` (${p.code})` : ''}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-400">Assign a project to include this income in the Project P&amp;L.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reporting Month</label>
+                  <input
+                    type="month"
+                    value={reportingMonth}
+                    onChange={(e) => setReportingMonth(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">Defaults to the date received; override if it belongs to a different reporting month.</p>
                 </div>
 
                 <div>

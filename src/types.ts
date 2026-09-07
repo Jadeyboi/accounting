@@ -198,6 +198,9 @@ export interface MoneyReceived {
   notes?: string | null;
   receipt_url?: string | null;
   status: 'pending' | 'confirmed' | 'cleared';
+  project_id?: string | null;
+  reporting_month?: string | null;
+  project_txn_id?: string | null;
 }
 
 export interface FundRequestHistory {
