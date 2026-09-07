@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   creditedYearsBetween, computeSeparationPay, proratedThirteenthMonth,
   dailyRate, leaveConversion, profitMargin, toPhp, allocateAmount, round2,
+  basicEarnedTimeline,
 } from './finalPay'
 
 describe('creditedYearsBetween', () => {
@@ -88,6 +89,46 @@ describe('profitMargin', () => {
   it('computes percentage', () => {
     expect(profitMargin(100000, 25000)).toBe(25)
     expect(profitMargin(100000, -10000)).toBe(-10)
+  })
+})
+
+describe('basicEarnedTimeline (13th-month with salary changes)', () => {
+  it('single salary, full year ≈ 12 months earned', () => {
+    const { totalEarned, segments } = basicEarnedTimeline('2024-01-01', '2024-12-31', 20000, [])
+    expect(segments.length).toBe(1)
+    // ~12 months * 20000 = ~240000; 13th month = /12 ≈ 20000
+    expect(Math.round(totalEarned / 12 / 100) * 100).toBe(20000)
+  })
+  it('honors a mid-year salary increase by effective date', () => {
+    // 20000 Jan-Jun, 30000 Jul-Dec -> earned ≈ 6*20000 + 6*30000 = 300000
+    const { totalEarned, segments } = basicEarnedTimeline('2024-01-01', '2024-12-31', 20000, [
+      { effective_date: '2024-07-01', new_salary: 30000 },
+    ])
+    expect(segments.length).toBe(2)
+    expect(segments[0].monthly).toBe(20000)
+    expect(segments[1].monthly).toBe(30000)
+    // should be clearly more than naive (latest 30000 * 12 = 360000) — proves it's not just latest*months
+    expect(totalEarned).toBeLessThan(360000)
+    expect(totalEarned).toBeGreaterThan(280000)
+  })
+  it('ignores changes outside the covered range', () => {
+    const { segments } = basicEarnedTimeline('2024-01-01', '2024-06-30', 25000, [
+      { effective_date: '2024-09-01', new_salary: 40000 }, // after `to`
+    ])
+    expect(segments.length).toBe(1)
+    expect(segments[0].monthly).toBe(25000)
+  })
+  it('returns empty for invalid/reversed dates', () => {
+    expect(basicEarnedTimeline('2024-12-31', '2024-01-01', 20000, []).totalEarned).toBe(0)
+  })
+  it('13th-month from timeline never simply uses latest salary × months', () => {
+    const { totalEarned } = basicEarnedTimeline('2024-01-01', '2024-12-31', 10000, [
+      { effective_date: '2024-11-01', new_salary: 50000 },
+    ])
+    const thirteenth = proratedThirteenthMonth(totalEarned, 0)
+    // naive (50000) would be way off; correct is ~ (10*10000 + 2*50000)/12 ≈ 16667
+    expect(thirteenth).toBeLessThan(25000)
+    expect(thirteenth).toBeGreaterThan(12000)
   })
 })
 
