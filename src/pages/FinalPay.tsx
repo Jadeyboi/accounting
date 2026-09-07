@@ -4,11 +4,11 @@ import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import type { Employee, SalaryHistory } from '@/types'
+import { computeSeparationPay, creditedYearsBetween, round2, type SepKey } from '@/lib/finalPay'
 
 // ── Money / date helpers ────────────────────────────────────────────────────
 const money = (v: number | null | undefined) =>
   `₱${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '-'
   const dt = new Date(d)
@@ -16,12 +16,7 @@ const fmtDate = (d: string | null | undefined) => {
   return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' })
 }
 
-// ── Separation reasons & statutory rules ────────────────────────────────────
-type SepKey =
-  | 'retrenchment' | 'redundancy' | 'labor_saving_devices'
-  | 'closure_no_losses' | 'closure_serious_losses' | 'disease'
-  | 'resignation' | 'just_cause' | 'end_of_contract' | 'other'
-
+// ── Separation reasons (labels for the dropdown) ─────────────────────────────
 const SEPARATION_REASONS: { key: SepKey; label: string }[] = [
   { key: 'retrenchment', label: 'Retrenchment' },
   { key: 'redundancy', label: 'Redundancy' },
@@ -36,99 +31,6 @@ const SEPARATION_REASONS: { key: SepKey; label: string }[] = [
 ]
 
 interface LineItem { desc: string; amount: number }
-
-interface SepResult {
-  applies: boolean
-  amount: number
-  formula: string
-  basis: string
-  warning?: string
-}
-
-// Article 298 (formerly 283) / 299 computation. Returns amount + shown formula.
-function computeSeparationPay(reason: SepKey, monthlyBasic: number, creditedYears: number): SepResult {
-  const oneMonth = monthlyBasic
-  const halfPerYear = round2(monthlyBasic * 0.5 * creditedYears)
-  switch (reason) {
-    case 'redundancy':
-    case 'labor_saving_devices': {
-      // one month per year of service, minimum one month
-      const perYear = round2(monthlyBasic * creditedYears)
-      const amount = Math.max(perYear, oneMonth)
-      return {
-        applies: true, amount,
-        formula: `Monthly Basic (${money(monthlyBasic)}) × Credited Years (${creditedYears}) = ${money(perYear)}; not less than 1 month (${money(oneMonth)}) → ${money(amount)}`,
-        basis: 'Labor Code Art. 298 — 1 month pay per year of service (min. 1 month).',
-      }
-    }
-    case 'retrenchment':
-    case 'closure_no_losses': {
-      // 1/2 month per year, min one month
-      const amount = Math.max(halfPerYear, oneMonth)
-      return {
-        applies: true, amount,
-        formula: `Monthly Basic (${money(monthlyBasic)}) × 0.5 × Credited Years (${creditedYears}) = ${money(halfPerYear)}; not less than 1 month (${money(oneMonth)}) → ${money(amount)}`,
-        basis: 'Labor Code Art. 298 — ½ month pay per year of service (min. 1 month).',
-      }
-    }
-    case 'disease': {
-      // higher of 1 month OR 1/2 month per year
-      const amount = Math.max(oneMonth, halfPerYear)
-      return {
-        applies: true, amount,
-        formula: `Higher of 1 month (${money(oneMonth)}) or ½ month × Credited Years (${money(halfPerYear)}) → ${money(amount)}`,
-        basis: 'Labor Code Art. 299 — termination due to disease.',
-      }
-    }
-    case 'closure_serious_losses':
-      return {
-        applies: false, amount: 0,
-        formula: 'Not auto-calculated.',
-        basis: 'Labor Code Art. 298 — no statutory separation pay for closure due to serious business losses.',
-        warning: 'Closure due to serious business losses does NOT automatically grant separation pay. Supporting financial documents and HR/legal review are required. Enter any voluntary amount manually.',
-      }
-    case 'resignation':
-      return {
-        applies: false, amount: 0,
-        formula: 'Not applicable.',
-        basis: 'No statutory separation pay for resignation.',
-        warning: 'Resignation does not entitle the employee to statutory separation pay unless provided by company policy or contract. Add voluntarily as a manual earning if applicable.',
-      }
-    case 'just_cause':
-      return {
-        applies: false, amount: 0,
-        formula: 'Not applicable.',
-        basis: 'No statutory separation pay for termination for just cause (Art. 297).',
-        warning: 'Termination for just cause does not entitle the employee to separation pay unless provided voluntarily.',
-      }
-    case 'end_of_contract':
-      return {
-        applies: false, amount: 0,
-        formula: 'Not applicable.',
-        basis: 'Fixed-term contract expiration — no statutory separation pay by default.',
-        warning: 'End of a fixed-term contract does not carry statutory separation pay unless the contract provides it.',
-      }
-    default:
-      return {
-        applies: false, amount: 0,
-        formula: 'Manual entry required.',
-        basis: 'Reason not covered by a specific statutory formula.',
-        warning: 'Determine separation pay manually based on company policy or agreement.',
-      }
-  }
-}
-
-// Credited years: a fraction >= 6 months rounds up to a whole year.
-function creditedYearsBetween(hired: string | null, lastDay: string | null): number {
-  if (!hired || !lastDay) return 0
-  const a = new Date(hired), b = new Date(lastDay)
-  if (isNaN(a.getTime()) || isNaN(b.getTime()) || b < a) return 0
-  const ms = b.getTime() - a.getTime()
-  const years = ms / (1000 * 60 * 60 * 24 * 365.25)
-  const whole = Math.floor(years)
-  const remainder = years - whole
-  return remainder >= 0.5 ? whole + 1 : whole
-}
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Draft', for_review: 'For Review', approved: 'Approved', paid: 'Paid', cancelled: 'Cancelled',
