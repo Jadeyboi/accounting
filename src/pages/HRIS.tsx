@@ -59,6 +59,8 @@ export default function HRIS() {
   const [birthdate, setBirthdate] = useState('')
   const [dateHired, setDateHired] = useState('')
   const [department, setDepartment] = useState('')
+  const [projectId, setProjectId] = useState<string>('')
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; code: string | null; status: string }>>([])
   const [status, setStatus] = useState<'active' | 'inactive'>('active')
   const [gender, setGender] = useState<'male' | 'female' | 'other' | ''>('')
   const [maritalStatus, setMaritalStatus] = useState<'single' | 'married' | 'divorced' | 'widowed' | ''>('')
@@ -78,7 +80,44 @@ export default function HRIS() {
 
   useEffect(() => {
     loadEmployees()
+    loadProjects()
   }, [])
+
+  const loadProjects = async () => {
+    const { data } = await supabase
+      .from('projects')
+      .select('id,name,code,status')
+      .order('name', { ascending: true })
+    setProjects((data ?? []) as Array<{ id: string; name: string; code: string | null; status: string }>)
+  }
+
+  // Maintain project-assignment history without deleting the previous assignment.
+  // If the employee's project changed, end-date the current open assignment and open a new one.
+  const syncProjectAssignment = async (employeeId: string, newProjectId: string | null, effectiveDate: string | null) => {
+    if (!newProjectId) return
+    // find current open assignment
+    const { data: open } = await supabase
+      .from('employee_project_assignments')
+      .select('id,project_id')
+      .eq('employee_id', employeeId)
+      .is('end_date', null)
+      .maybeSingle()
+    if (open && open.project_id === newProjectId) return // no change
+    const today = effectiveDate || new Date().toISOString().slice(0, 10)
+    if (open) {
+      // end the previous assignment the day before the new one starts (keep history)
+      await supabase.from('employee_project_assignments').update({ end_date: today }).eq('id', open.id)
+    }
+    await supabase.from('employee_project_assignments').insert({
+      employee_id: employeeId,
+      project_id: newProjectId,
+      start_date: today,
+      allocation_pct: 100,
+      created_by: 'HRIS',
+      notes: open ? 'Transferred via HRIS' : 'Initial assignment via HRIS',
+    })
+    await logActivity('updated', 'HRIS', `Assigned employee to project (${newProjectId})`)
+  }
 
   const loadEmployees = async () => {
     setLoading(true)
@@ -210,6 +249,7 @@ export default function HRIS() {
       setBirthdate(employee.birthdate || '')
       setDateHired(employee.date_hired || '')
       setDepartment(employee.department || '')
+      setProjectId((employee as any).current_project_id || '')
       setStatus((employee.status as 'active' | 'inactive') || 'active')
       setGender((employee.gender as 'male' | 'female' | 'other') || '')
       setMaritalStatus((employee.marital_status as 'single' | 'married' | 'divorced' | 'widowed') || '')
@@ -247,6 +287,7 @@ export default function HRIS() {
     setBirthdate('')
     setDateHired('')
     setDepartment('')
+    setProjectId('')
     setStatus('active')
     setGender('')
     setMaritalStatus('')
@@ -323,6 +364,7 @@ export default function HRIS() {
       birthdate: birthdate || null,
       date_hired: dateHired || null,
       department: department.trim() || null,
+      current_project_id: projectId || null,
       status: status,
       gender: gender || null,
       marital_status: maritalStatus || null,
@@ -383,6 +425,8 @@ export default function HRIS() {
 
       await logActivity('updated', 'HRIS', `Updated employee: ${fullName}`)
 
+      await syncProjectAssignment(editingEmployee.id, projectId || null, dateHired || null)
+
       // Record salary history if salary changed
       const newSalaryNum = baseSalary ? Number(baseSalary) : null
       const oldSalaryNum = editingEmployee.base_salary ?? null
@@ -418,6 +462,8 @@ export default function HRIS() {
       }
 
       await logActivity('created', 'HRIS', `Added employee: ${fullName}`)
+
+      if (inserted?.id) await syncProjectAssignment(inserted.id, projectId || null, dateHired || null)
     }
 
     setShowModal(false)
@@ -831,7 +877,21 @@ export default function HRIS() {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">Department</label>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Project</label>
+                      <select
+                        value={projectId}
+                        onChange={(e) => setProjectId(e.target.value)}
+                        className="w-full rounded-lg border-gray-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">— Unassigned —</option>
+                        {projects.filter(p => p.status === 'active' || p.id === projectId).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}{p.code ? ` (${p.code})` : ''}</option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-400">Changing this keeps the previous assignment in history.</p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Department <span className="text-xs font-normal text-gray-400">(legacy)</span></label>
                       <input
                         type="text"
                         value={department}

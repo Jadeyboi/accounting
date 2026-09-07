@@ -25,6 +25,7 @@ export interface Employee {
   birthdate?: string | null;
   date_hired?: string | null;
   department?: string | null;
+  current_project_id?: string | null;
   status?: string | null;
   gender?: 'male' | 'female' | 'other' | null;
   marital_status?: 'single' | 'married' | 'divorced' | 'widowed' | null;
@@ -354,4 +355,37 @@ export interface PmExpense {
   scope: 'project' | 'client' | 'company';
   project_id?: string | null;
   client_id?: string | null;
+}
+
+
+// ── Projects (project-based financial tracking) ──────────────────────────────
+export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'cancelled';
+
+export interface Project {
+  id: string;
+  created_at?: string;
+  updated_at?: string;
+  name: string;
+  code?: string | null;
+  client_name?: string | null;
+  project_manager?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  status: ProjectStatus;
+  billing_currency: string;
+  monthly_billing: number;
+  notes?: string | null;
+  migrated_from_department?: string | null;
+}
+
+export interface EmployeeProjectAssignment {
+  id: string;
+  created_at?: string;
+  employee_id: string;
+  project_id: string;
+  start_date: string;
+  end_date?: string | null;
+  allocation_pct: number;
+  notes?: string | null;
+  created_by?: string | null;
 }
