@@ -315,6 +315,7 @@ export default function Profitability() {
           <h2 className="text-2xl font-bold text-gray-900">Profit &amp; Loss</h2>
           <p className="text-sm text-gray-600">Income, expenses, and per-project profitability</p>
         </div>
+        {tab === 'overall' && (
         <div className="flex items-center gap-3 flex-wrap">
           <input type="month" value={month} onChange={e => setMonth(e.target.value)} className="input-field" />
           <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5">
@@ -330,6 +331,7 @@ export default function Profitability() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* Tabs */}
