@@ -31,6 +31,15 @@ interface TrackerExpense {
   amount: number
 }
 
+// Cash-in pulled from the transactions tracker (read-only here)
+interface TrackerIncome {
+  id: string
+  date: string
+  category: string | null
+  note: string | null
+  amount: number
+}
+
 const EXPENSE_CATEGORIES = [
   'Payroll', 'Software', 'Equipment', 'Internet', 'Office', 'Rent',
   'Utilities', 'Recruitment', 'Training', 'Taxes', 'Other',
@@ -73,9 +82,11 @@ const UNALLOCATED = 'Unallocated'
 export default function Profitability() {
   const [month, setMonth] = useState(currentMonth())
   const [rate, setRate] = useState(56)
+  const [rateInfo, setRateInfo] = useState<{ live: boolean; loading: boolean; updated: string | null }>({ live: false, loading: true, updated: null })
   const [income, setIncome] = useState<IncomeRow[]>([])
   const [expenses, setExpenses] = useState<ExpenseRow[]>([])
   const [trackerExpenses, setTrackerExpenses] = useState<TrackerExpense[]>([])
+  const [trackerIncome, setTrackerIncome] = useState<TrackerIncome[]>([])
   const [loading, setLoading] = useState(true)
   const [trend, setTrend] = useState<Array<{ month: string; income: number; expenses: number; profit: number }>>([])
 
@@ -100,25 +111,67 @@ export default function Profitability() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadData() }, [month])
+  useEffect(() => { fetchLiveRate() }, [])
+
+  // Fetch the live USD -> PHP exchange rate (free, no-key APIs, with fallback)
+  const fetchLiveRate = async () => {
+    setRateInfo(r => ({ ...r, loading: true }))
+    // Try primary then fallback source
+    const sources: Array<() => Promise<number | null>> = [
+      async () => {
+        const res = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=PHP')
+        const d = await res.json()
+        return d?.rates?.PHP ?? null
+      },
+      async () => {
+        const res = await fetch('https://open.er-api.com/v6/latest/USD')
+        const d = await res.json()
+        return d?.rates?.PHP ?? null
+      },
+      async () => {
+        const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json')
+        const d = await res.json()
+        return d?.usd?.php ?? null
+      },
+    ]
+    for (const src of sources) {
+      try {
+        const php = await src()
+        if (php && php > 0) {
+          setRate(Number(php.toFixed(2)))
+          setRateInfo({ live: true, loading: false, updated: new Date().toLocaleTimeString() })
+          return
+        }
+      } catch { /* try next source */ }
+    }
+    // All failed — keep manual rate
+    setRateInfo({ live: false, loading: false, updated: null })
+  }
 
   const loadData = async () => {
     setLoading(true)
     const months6 = last6Months(month)
     const { first, last } = monthRange(month)
-    const [inc, exp, tracker, trendRes] = await Promise.all([
+    const [inc, exp, tracker, trackerIn, trendRes] = await Promise.all([
       supabase.from('pl_income').select('*').eq('month', month).order('created_at'),
       supabase.from('pl_expenses').select('*').eq('month', month).order('created_at'),
       supabase.from('transactions').select('id,date,type,category,note,amount')
         .in('type', ['out', 'expense']).gte('date', first).lte('date', last)
         .order('date', { ascending: false }),
+      supabase.from('transactions').select('id,date,category,note,amount')
+        .eq('type', 'in').gte('date', first).lte('date', last)
+        .order('date', { ascending: false }),
       Promise.all(months6.map(async (mo) => {
         const r = monthRange(mo)
-        const [i, e, t] = await Promise.all([
+        const [i, e, t, ti] = await Promise.all([
           supabase.from('pl_income').select('amount').eq('month', mo),
           supabase.from('pl_expenses').select('amount').eq('month', mo),
           supabase.from('transactions').select('amount').in('type', ['out', 'expense']).gte('date', r.first).lte('date', r.last),
+          supabase.from('transactions').select('amount').eq('type', 'in').gte('date', r.first).lte('date', r.last),
         ])
-        const inSum = (i.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
+        const inManual = (i.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
+        const inTracker = (ti.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
+        const inSum = inManual + inTracker
         const exManual = (e.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
         const exTracker = (t.data ?? []).reduce((s: number, x: { amount: number }) => s + Number(x.amount), 0)
         const exSum = exManual + exTracker
@@ -128,12 +181,15 @@ export default function Profitability() {
     setIncome((inc.data ?? []) as IncomeRow[])
     setExpenses((exp.data ?? []) as ExpenseRow[])
     setTrackerExpenses((tracker.data ?? []) as TrackerExpense[])
+    setTrackerIncome((trackerIn.data ?? []) as TrackerIncome[])
     setTrend(trendRes)
     setLoading(false)
   }
 
   // ── Totals ─────────────────────────────────────────────────────────────────
-  const totalIncome = useMemo(() => income.reduce((s, r) => s + Number(r.amount), 0), [income])
+  const manualIncome = useMemo(() => income.reduce((s, r) => s + Number(r.amount), 0), [income])
+  const trackerIncomeTotal = useMemo(() => trackerIncome.reduce((s, r) => s + Number(r.amount), 0), [trackerIncome])
+  const totalIncome = manualIncome + trackerIncomeTotal
   const manualExpenses = useMemo(() => expenses.reduce((s, r) => s + Number(r.amount), 0), [expenses])
   const trackerExpensesTotal = useMemo(() => trackerExpenses.reduce((s, r) => s + Number(r.amount), 0), [trackerExpenses])
   const totalExpenses = manualExpenses + trackerExpensesTotal
@@ -156,12 +212,13 @@ export default function Profitability() {
     const ensure = (k: string) => (map[k] ??= { income: 0, expenses: 0 })
     for (const r of income) ensure(r.project?.trim() || UNALLOCATED).income += Number(r.amount)
     for (const e of expenses) ensure(e.project?.trim() || UNALLOCATED).expenses += Number(e.amount)
-    // tracker expenses are not project-tagged -> Unallocated
+    // tracker income/expenses are not project-tagged -> Unallocated
+    if (trackerIncomeTotal > 0) ensure(UNALLOCATED).income += trackerIncomeTotal
     if (trackerExpensesTotal > 0) ensure(UNALLOCATED).expenses += trackerExpensesTotal
     return Object.entries(map)
       .map(([project, v]) => ({ project, income: v.income, expenses: v.expenses, profit: v.income - v.expenses }))
       .sort((a, b) => b.profit - a.profit)
-  }, [income, expenses, trackerExpensesTotal])
+  }, [income, expenses, trackerIncomeTotal, trackerExpensesTotal])
 
   const maxTrend = useMemo(() => Math.max(...trend.map(t => Math.max(t.income, t.expenses)), 1), [trend])
 
@@ -261,8 +318,14 @@ export default function Profitability() {
           <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5">
             <span className="text-xs font-medium text-gray-600">USD Rate:</span>
             <span className="text-xs text-gray-500">₱</span>
-            <input type="number" min="1" step="0.01" value={rate} onChange={e => setRate(Number(e.target.value) || 56)} className="w-16 border-0 p-0 text-sm font-medium text-gray-900 focus:ring-0" />
+            <input type="number" min="1" step="0.01" value={rate} onChange={e => { setRate(Number(e.target.value) || 56); setRateInfo(r => ({ ...r, live: false })) }} className="w-16 border-0 p-0 text-sm font-medium text-gray-900 focus:ring-0" />
             <span className="text-xs text-gray-500">= $1</span>
+            <button onClick={fetchLiveRate} title="Refresh live rate" className="ml-1 text-gray-400 hover:text-blue-600">
+              <svg className={`h-4 w-4 ${rateInfo.loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            </button>
+            {rateInfo.live && !rateInfo.loading && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700" title={rateInfo.updated ? `Updated ${rateInfo.updated}` : ''}>● Live</span>
+            )}
           </div>
         </div>
       </div>
@@ -294,7 +357,7 @@ export default function Profitability() {
           <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h3 className="text-base font-semibold text-gray-900">Per-Project Profitability</h3>
-              <p className="text-xs text-gray-500">Tag income (and manual expenses) with a project to break it down. Tracker expenses appear under "{UNALLOCATED}".</p>
+              <p className="text-xs text-gray-500">Tag income (and manual expenses) with a project to break it down. Tracker cash-in and expenses appear under "{UNALLOCATED}".</p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -334,13 +397,32 @@ export default function Profitability() {
                 <button onClick={() => openIncome()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">+ Add Income</button>
               </div>
               <div className="divide-y divide-gray-100">
-                {income.length === 0 ? (
-                  <p className="px-5 py-8 text-center text-sm text-gray-500">No income for this month. Add one!</p>
-                ) : income.map(r => (
+                {/* Tracker-pulled cash-in */}
+                {trackerIncome.map(t => (
+                  <div key={t.id} className="flex items-center justify-between gap-3 px-5 py-3 bg-emerald-50/40">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Cash In</span>
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">From Tracker</span>
+                        {t.category && <span className="text-sm text-gray-700 truncate">{t.category}</span>}
+                      </div>
+                      {t.note && <p className="text-xs text-gray-500 truncate mt-0.5">{t.note}</p>}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-semibold text-gray-900">{php(Number(t.amount))}</p>
+                      <p className="text-xs text-gray-400">{usd(Number(t.amount), rate)}</p>
+                    </div>
+                  </div>
+                ))}
+                {/* Manual P&L income */}
+                {income.map(r => (
                   <div key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{r.description}</p>
-                      <p className="text-xs text-gray-500 truncate">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Manual</span>
+                        <p className="text-sm font-medium text-gray-900 truncate">{r.description}</p>
+                      </div>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">
                         {[r.client, r.project].filter(Boolean).join(' • ') || '—'}
                       </p>
                     </div>
@@ -354,11 +436,22 @@ export default function Profitability() {
                     </div>
                   </div>
                 ))}
+                {trackerIncome.length === 0 && income.length === 0 && (
+                  <p className="px-5 py-8 text-center text-sm text-gray-500">No income this month. Add one, or record cash-in in the tracker.</p>
+                )}
               </div>
-              {income.length > 0 && (
-                <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50">
-                  <span className="text-sm font-semibold text-gray-700">Total Income</span>
-                  <span className="text-sm font-bold text-blue-700">{php(totalIncome)}</span>
+              {totalIncome > 0 && (
+                <div className="border-t border-gray-200 bg-gray-50 px-5 py-3 space-y-1">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>From Tracker</span><span>{php(trackerIncomeTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Manual</span><span>{php(manualIncome)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-gray-200 pt-1">
+                    <span className="text-sm font-semibold text-gray-700">Total Income</span>
+                    <span className="text-sm font-bold text-blue-700">{php(totalIncome)}</span>
+                  </div>
                 </div>
               )}
             </div>
