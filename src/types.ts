@@ -389,3 +389,64 @@ export interface EmployeeProjectAssignment {
   notes?: string | null;
   created_by?: string | null;
 }
+
+
+// ── Project financial transactions (Phase 3) ────────────────────────────────
+export type ProjectTxnKind = 'revenue' | 'expense' | 'liability' | 'adjustment';
+export type ProjectTxnStatus = 'draft' | 'approved' | 'paid' | 'cancelled';
+
+export interface ProjectTransaction {
+  id: string;
+  created_at?: string;
+  updated_at?: string;
+  project_id: string;
+  kind: ProjectTxnKind;
+  category?: string | null;
+  description?: string | null;
+  txn_date: string;
+  month: string;
+  currency: string;
+  exchange_rate: number;
+  amount: number;
+  amount_php: number;
+  invoice_ref?: string | null;
+  attachment_path?: string | null;
+  status: ProjectTxnStatus;
+  due_date?: string | null;
+  payment_date?: string | null;
+  source: 'manual' | 'auto_payroll';
+  payslip_id?: string | null;
+  shared_expense_id?: string | null;
+  created_by?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+}
+
+export type AllocationMethod = 'equal' | 'headcount' | 'revenue' | 'custom';
+
+export interface SharedExpense {
+  id: string;
+  created_at?: string;
+  updated_at?: string;
+  description: string;
+  category?: string | null;
+  month: string;
+  currency: string;
+  exchange_rate: number;
+  amount: number;
+  amount_php: number;
+  allocation_method: AllocationMethod;
+  status: 'draft' | 'approved' | 'cancelled';
+  notes?: string | null;
+  created_by?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+}
+
+export interface SharedExpenseAllocation {
+  id: string;
+  shared_expense_id: string;
+  project_id: string;
+  allocation_pct: number;
+  amount_php: number;
+}
