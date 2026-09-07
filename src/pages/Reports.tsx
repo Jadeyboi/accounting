@@ -205,12 +205,11 @@ export default function Reports() {
       if (error) setError(error.message);
       else setItems(filteredData as Transaction[]);
 
-      // Load savings total for the same period (only active savings)
+      // Savings accumulate over time, so always load ALL savings (not just the
+      // selected report period) — savings is for the entire duration.
       const { data: savingsData, error: savingsErr } = await supabase
         .from("savings")
         .select("*")
-        .gte("date", start)
-        .lte("date", end)
         .order("date", { ascending: true});
 
       if (!cancel) {
@@ -220,20 +219,12 @@ export default function Reports() {
           setSavingsTotal(0);
           setSavingsItems([]);
         } else {
-          // Filter out paid savings (only show active ones)
-          let activeSavings = (savingsData ?? []).filter(
+          // Filter out paid savings (only show active ones). No date/month filter —
+          // savings represents the running total across all months.
+          const activeSavings = (savingsData ?? []).filter(
             (row: any) => !row.status || row.status === 'active'
           );
-          
-          // Filter savings to only include selected months in custom mode
-          if (mode === "custom" && selectedMonthYears.size > 0) {
-            activeSavings = activeSavings.filter((s: any) => {
-              const d = new Date(s.date + "T00:00:00");
-              const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-              return selectedMonthYears.has(yearMonth);
-            });
-          }
-          
+
           const sTotal = activeSavings.reduce(
             (sum: number, row: any) => sum + (row.amount ?? 0),
             0
@@ -810,10 +801,10 @@ export default function Reports() {
 
           <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-sm">
             <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Savings (Selected Period)
+              Total Savings (All Time)
             </div>
             <div className="text-[11px] text-slate-500">
-              Months: {selectedMonthsText}
+              Across all months
             </div>
             <div className="mt-1 text-2xl font-semibold text-slate-900">
               {money(savingsTotal)}
@@ -926,7 +917,7 @@ export default function Reports() {
                   Savings Breakdown
                 </div>
                 <div className="text-sm text-slate-600">
-                  Period: {selectedMonthsText} • {savingsItems.length} entries
+                  All time • {savingsItems.length} entries
                 </div>
               </div>
               <div className="text-right">
