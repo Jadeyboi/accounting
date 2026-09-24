@@ -241,7 +241,7 @@ export default function App() {
 
       <div className="min-h-screen p-2 sm:p-4">
 
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto max-w-screen-2xl">
 
           <header className="glass animate-fadeIn mb-4 sm:mb-6 rounded-2xl p-4 sm:p-6 shadow-xl">
 
