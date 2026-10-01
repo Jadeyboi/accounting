@@ -11,10 +11,7 @@ import type { Transaction } from '@/types'
 const formatDate = (dateString: string): string => {
   if (!dateString) return ''
   const date = new Date(dateString)
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${month}-${day}-${year}`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function Home() {
@@ -30,41 +27,30 @@ export default function Home() {
     const load = async () => {
       setLoadingSummary(true)
       setSummaryError(null)
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
+      const { data, error } = await supabase.from('transactions').select('*')
       if (cancelled) return
       if (error) setSummaryError(error.message)
       else setSummaryItems((data ?? []) as Transaction[])
       setLoadingSummary(false)
     }
     load()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [refreshKey])
 
-  // Fetch current user's name
   useEffect(() => {
     const fetchUserName = async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        // Try to get full name from users table first
-        const { data: userData } = await supabase
-          .from('users')
-          .select('full_name')
-          .eq('id', session.user.id)
-          .single()
-        
-        if (userData?.full_name) {
-          setUserName(userData.full_name)
-        } else {
-          // Fallback to email or user metadata
-          const name = session.user.user_metadata?.full_name || 
-                      session.user.email?.split('@')[0] || 
-                      'User'
-          setUserName(name)
-        }
+      if (!session) return
+      const { data: userData } = await supabase
+        .from('users').select('full_name').eq('id', session.user.id).single()
+      if (userData?.full_name) {
+        setUserName(userData.full_name)
+      } else {
+        setUserName(
+          session.user.user_metadata?.full_name ||
+          session.user.email?.split('@')[0] ||
+          'there'
+        )
       }
     }
     fetchUserName()
@@ -72,188 +58,212 @@ export default function Home() {
 
   const bump = () => setRefreshKey((k) => k + 1)
 
-  const recentTransactions = summaryItems
+  const recentTransactions = [...summaryItems]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5)
 
   return (
-    <div className="space-y-8">
-      {/* Welcome Section */}
-      <div className="rounded-2xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700 p-8 text-white shadow-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-3xl font-bold">
-              Welcome Back{userName ? `, ${userName}` : ''}!
-            </h2>
-            <p className="mt-2 text-blue-100">
-              Track your finances and manage your business accounting with ease
-            </p>
-          </div>
-          <div className="hidden md:block">
-            <div className="text-right">
-              <div className="text-sm text-blue-100">Today</div>
-              <div className="text-2xl font-semibold">
-                {new Date().toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  month: 'short', 
-                  day: 'numeric' 
-                })}
-              </div>
+    <div className="space-y-6">
+
+      {/* ── Welcome banner ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between rounded-xl bg-blue-600 px-6 py-5 text-white shadow-sm">
+        <div>
+          <h2 className="text-xl font-semibold">
+            Good {greeting()}{userName ? `, ${userName}` : ''}
+          </h2>
+          <p className="mt-0.5 text-sm text-blue-100">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="hidden sm:inline-flex items-center gap-2 rounded-lg bg-white/20 px-4 py-2 text-sm font-medium text-white ring-1 ring-inset ring-white/30 hover:bg-white/30 transition-colors"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Add Transaction
+        </button>
+      </div>
+
+      {/* ── Notifications ───────────────────────────────────────────────── */}
+      <Notifications />
+
+      {/* ── Summary cards ──────────────────────────────────────────────── */}
+      {loadingSummary ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="loading-shimmer h-28 rounded-xl" />
+          ))}
+        </div>
+      ) : summaryError ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+          <div className="flex items-start gap-3">
+            <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="font-medium text-red-900">Could not load transactions</p>
+              <p className="mt-0.5 text-sm text-red-700">{summaryError}</p>
             </div>
           </div>
         </div>
+      ) : (
+        <SummaryCards transactions={summaryItems} />
+      )}
+
+      {/* ── Quick actions (left-icon list) ─────────────────────────────── */}
+      <div className="panel overflow-hidden">
+        <div className="border-b border-gray-100 px-5 py-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Quick Actions</h3>
+        </div>
+        <ul className="divide-y divide-gray-100">
+          <QuickItem
+            label="Add Transaction"
+            sub="Record income or expense"
+            color="blue"
+            icon={<path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />}
+            onClick={() => setShowForm(!showForm)}
+          />
+          <QuickItem
+            label="Create Invoice"
+            sub="Generate a client invoice"
+            color="emerald"
+            icon={<path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />}
+            to="/invoice"
+          />
+          <QuickItem
+            label="View Reports"
+            sub="Financial summaries and insights"
+            color="purple"
+            icon={<path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />}
+            to="/reports"
+          />
+          <QuickItem
+            label="Manage Payroll"
+            sub="Process employee payments"
+            color="amber"
+            icon={<path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />}
+            to="/payroll"
+          />
+          <QuickItem
+            label="HRIS"
+            sub="Manage employee records"
+            color="indigo"
+            icon={<path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />}
+            to="/hris"
+          />
+          <QuickItem
+            label="Profit &amp; Loss"
+            sub="Revenue, expenses, and margins"
+            color="rose"
+            icon={<path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />}
+            to="/profitability"
+          />
+        </ul>
       </div>
 
-      {/* Notifications */}
-      <Notifications />
-
-      {/* Summary Cards */}
-      <div>
-        {loadingSummary ? (
-          <div className="flex items-center justify-center rounded-xl border border-gray-200 bg-white p-12">
-            <div className="text-center">
-              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-              <p className="mt-3 text-sm text-gray-600">Loading your financial summary...</p>
-            </div>
-          </div>
-        ) : summaryError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-            <div className="flex items-start gap-3">
-              <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <h3 className="font-semibold text-red-900">Connection Error</h3>
-                <p className="mt-1 text-sm text-red-700">{summaryError}</p>
-                <p className="mt-2 text-xs text-red-600">
-                  Please check your Supabase configuration in .env.local
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <SummaryCards transactions={summaryItems} />
-        )}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="group flex items-center gap-4 rounded-xl border-2 border-dashed border-gray-300 bg-white p-5 transition-all hover:border-blue-500 hover:bg-blue-50"
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </div>
-          <div className="text-left">
-            <div className="font-semibold text-gray-900">Add Transaction</div>
-            <div className="text-xs text-gray-500">Record income or expense</div>
-          </div>
-        </button>
-
-        <Link
-          to="/invoice"
-          className="group flex items-center gap-4 rounded-xl border-2 border-dashed border-gray-300 bg-white p-5 transition-all hover:border-emerald-500 hover:bg-emerald-50"
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div className="text-left">
-            <div className="font-semibold text-gray-900">Create Invoice</div>
-            <div className="text-xs text-gray-500">Generate client invoice</div>
-          </div>
-        </Link>
-
-        <Link
-          to="/reports"
-          className="group flex items-center gap-4 rounded-xl border-2 border-dashed border-gray-300 bg-white p-5 transition-all hover:border-purple-500 hover:bg-purple-50"
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 text-purple-600 group-hover:bg-purple-600 group-hover:text-white">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
-          <div className="text-left">
-            <div className="font-semibold text-gray-900">View Reports</div>
-            <div className="text-xs text-gray-500">Financial insights</div>
-          </div>
-        </Link>
-
-        <Link
-          to="/payroll"
-          className="group flex items-center gap-4 rounded-xl border-2 border-dashed border-gray-300 bg-white p-5 transition-all hover:border-amber-500 hover:bg-amber-50"
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 group-hover:bg-amber-600 group-hover:text-white">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          </div>
-          <div className="text-left">
-            <div className="font-semibold text-gray-900">Manage Payroll</div>
-            <div className="text-xs text-gray-500">Employee payments</div>
-          </div>
-        </Link>
-      </div>
-
-      {/* Transaction Form - Collapsible */}
+      {/* ── Collapsible transaction form ────────────────────────────────── */}
       {showForm && (
         <div className="animate-fadeIn space-y-4">
           <StorageStatus />
-          <TransactionForm onCreated={() => { bump(); setShowForm(false); }} />
+          <TransactionForm onCreated={() => { bump(); setShowForm(false) }} />
         </div>
       )}
 
-      {/* Recent Activity Section */}
+      {/* ── Recent activity ─────────────────────────────────────────────── */}
       {!loadingSummary && !summaryError && recentTransactions.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
-            <span className="text-xs text-gray-500">{recentTransactions.length} recent transactions</span>
+        <div className="panel">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+            <h3 className="text-sm font-semibold text-gray-900">Recent Activity</h3>
+            <span className="badge badge-neutral">{recentTransactions.length} transactions</span>
           </div>
-          <div className="space-y-3">
+          <ul className="divide-y divide-gray-100">
             {recentTransactions.map((t) => (
-              <div key={t.id} className="flex items-center justify-between rounded-lg border border-gray-100 p-4 hover:bg-gray-50">
-                <div className="flex items-center gap-4">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                    t.type === 'in' ? 'bg-emerald-100 text-emerald-600' :
-                    t.type === 'out' ? 'bg-amber-100 text-amber-600' :
-                    'bg-rose-100 text-rose-600'
-                  }`}>
-                    {t.type === 'in' ? '↓' : '↑'}
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900">{t.category || 'Uncategorized'}</div>
-                    <div className="text-xs text-gray-500">{formatDate(t.date)} {t.note && `• ${t.note}`}</div>
+              <li key={t.id} className="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold
+                    ${t.type === 'in'  ? 'bg-emerald-100 text-emerald-700' :
+                      t.type === 'out' ? 'bg-amber-100   text-amber-700'   :
+                                         'bg-rose-100    text-rose-700'}`}>
+                    {t.type === 'in' ? '↑' : '↓'}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900">{t.category || 'Uncategorized'}</p>
+                    <p className="text-xs text-gray-400">{formatDate(t.date)}{t.note ? ` · ${t.note}` : ''}</p>
                   </div>
                 </div>
-                <div className={`text-lg font-semibold ${
-                  t.type === 'in' ? 'text-emerald-600' : 'text-gray-900'
-                }`}>
-                  {t.type === 'in' ? '+' : '-'}₱{t.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </div>
-              </div>
+                <span className={`ml-4 flex-shrink-0 text-sm font-semibold tabular-nums
+                  ${t.type === 'in' ? 'text-emerald-600' : 'text-gray-800'}`}>
+                  {t.type === 'in' ? '+' : '−'}₱{t.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
-      {/* All Transactions List */}
+      {/* ── All transactions ─────────────────────────────────────────────── */}
       <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">All Transactions</h3>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="text-sm text-blue-600 hover:text-blue-700"
-          >
-            {showForm ? 'Hide Form' : 'Add New'}
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-900">All Transactions</h3>
+          <button onClick={() => setShowForm(!showForm)} className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
+            {showForm ? 'Hide form' : '+ Add new'}
           </button>
         </div>
         <TransactionList refreshKey={refreshKey} onChanged={bump} />
       </div>
     </div>
+  )
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function greeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'morning'
+  if (h < 17) return 'afternoon'
+  return 'evening'
+}
+
+const colorMap: Record<string, { bg: string; text: string; hover: string }> = {
+  blue:    { bg: 'bg-blue-100',    text: 'text-blue-600',    hover: 'hover:bg-blue-50'    },
+  emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600', hover: 'hover:bg-emerald-50' },
+  purple:  { bg: 'bg-purple-100',  text: 'text-purple-600',  hover: 'hover:bg-purple-50'  },
+  amber:   { bg: 'bg-amber-100',   text: 'text-amber-600',   hover: 'hover:bg-amber-50'   },
+  indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-600',  hover: 'hover:bg-indigo-50'  },
+  rose:    { bg: 'bg-rose-100',    text: 'text-rose-600',    hover: 'hover:bg-rose-50'    },
+}
+
+interface QuickItemProps {
+  label: string
+  sub: string
+  color: string
+  icon: React.ReactNode
+  to?: string
+  onClick?: () => void
+}
+
+function QuickItem({ label, sub, color, icon, to, onClick }: QuickItemProps) {
+  const c = colorMap[color] ?? colorMap['blue']
+  const inner = (
+    <>
+      <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${c.bg} ${c.text}`}>
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>{icon}</svg>
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-gray-900" dangerouslySetInnerHTML={{ __html: label }} />
+        <span className="block text-xs text-gray-400">{sub}</span>
+      </span>
+      <svg className="ml-auto h-4 w-4 flex-shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </>
+  )
+  const base = `flex items-center gap-3 px-5 py-3 w-full text-left transition-colors ${c.hover}`
+  return to ? (
+    <li><Link to={to} className={base}>{inner}</Link></li>
+  ) : (
+    <li><button type="button" onClick={onClick} className={base}>{inner}</button></li>
   )
 }

@@ -255,27 +255,33 @@ export default function App() {
 
                   alt="Avensetech logo"
 
-                  className="h-16 w-16 sm:h-24 sm:w-24 lg:h-40 lg:w-40 rounded-xl object-contain shadow-lg"
+                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg object-contain shadow-sm"
 
                 />
 
                 <div>
 
-                  <h1 className="gradient-text text-sm sm:text-lg lg:text-2xl font-bold">
+                  <h1 className="gradient-text text-sm sm:text-base lg:text-lg font-bold leading-tight">
 
                     Avensetech Software Development Services
 
                   </h1>
 
-                  <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">
+                  <p className="text-xs text-gray-500 hidden sm:block">
 
-                    Accounting Tracker — Track cash in, cash out, expenses, and
-
-                    monthly summaries.
+                    Accounting &amp; HR Management
 
                   </p>
 
-                  <p className="text-xs text-blue-600 mt-1">Role: {userRole || 'Loading...'}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">
+
+                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 ring-1 ring-inset ring-blue-100">
+
+                      {userRole || '…'}
+
+                    </span>
+
+                  </p>
 
                 </div>
 
@@ -289,7 +295,7 @@ export default function App() {
 
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
 
-                className="lg:hidden rounded-lg bg-white p-2 shadow-md"
+                className="lg:hidden rounded-lg border border-gray-200 bg-white p-2 shadow-sm hover:bg-gray-50"
 
               >
 
@@ -445,9 +451,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -473,9 +479,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -501,9 +507,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -529,9 +535,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -557,9 +563,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -585,9 +591,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -613,9 +619,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -641,9 +647,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -669,9 +675,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -697,9 +703,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -725,9 +731,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -753,9 +759,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -781,9 +787,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -809,9 +815,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -837,9 +843,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -865,9 +871,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -893,9 +899,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -921,9 +927,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -949,9 +955,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1025,7 +1031,7 @@ export default function App() {
 
                   onClick={handleLogout}
 
-                  className="rounded-lg bg-red-600 px-4 py-2 font-medium text-white shadow-sm transition-all hover:bg-red-700 hover:shadow-md"
+                  className="btn-danger"
 
                 >
 
@@ -1197,9 +1203,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1227,9 +1233,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1257,9 +1263,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1287,9 +1293,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1317,9 +1323,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1347,9 +1353,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1377,9 +1383,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1407,9 +1413,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1437,9 +1443,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1467,9 +1473,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1497,9 +1503,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1527,9 +1533,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1557,9 +1563,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1587,9 +1593,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1617,9 +1623,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1647,9 +1653,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1677,9 +1683,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1707,9 +1713,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1737,9 +1743,9 @@ export default function App() {
 
                       isActive
 
-                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                        ? "bg-blue-600 text-white shadow-sm"
 
-                        : "bg-white text-blue-700 shadow-sm hover:shadow-md"
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
 
                     }`
 
@@ -1823,7 +1829,7 @@ export default function App() {
 
                   }}
 
-                  className="rounded-lg bg-red-600 px-4 py-3 font-medium text-white shadow-sm transition-all hover:bg-red-700 hover:shadow-md text-left"
+                  className="btn-danger text-left"
 
                 >
 

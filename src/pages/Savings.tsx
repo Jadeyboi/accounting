@@ -244,431 +244,204 @@ export default function Savings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Savings</h2>
-          <p className="text-sm text-gray-600">
-            Record amounts saved and track totals.
-          </p>
+          <h2 className="page-heading">Savings</h2>
+          <p className="page-subheading">Record amounts saved and track totals.</p>
         </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={loadPaidHistory}
-            className="rounded bg-gray-600 px-4 py-2 text-sm text-white hover:bg-gray-700"
-          >
+        <div className="flex items-center gap-3">
+          <button onClick={loadPaidHistory} className="btn-secondary">
             View Paid History
           </button>
           <div className="text-right">
-            <div className="text-sm text-gray-500">Total saved</div>
-            <div className="mt-1 text-2xl font-semibold">
-              ₱ {total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-            </div>
+            <p className="text-xs text-gray-400">Total saved</p>
+            <p className="text-xl font-bold tabular-nums text-gray-900">
+              ₱{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
           </div>
         </div>
       </div>
 
-      <form
-        onSubmit={onCreate}
-        className="grid grid-cols-1 gap-3 sm:grid-cols-4"
-      >
-        <div>
-          <label className="block text-sm text-gray-600">Date</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-gray-600">Description</label>
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-gray-600">Amount</label>
-          <input
-            type="number"
-            step="0.01"
-            value={amount as any}
-            onChange={(e) =>
-              setAmount(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-gray-600">Account</label>
-          {accountMode === "select" ? (
-            <select
-              value={account}
-              onChange={(e) => {
-                if (e.target.value === "__new__") {
-                  setAccountMode("new");
-                  setAccount("");
-                } else {
-                  setAccount(e.target.value);
-                }
-              }}
-              className="mt-1 w-full rounded border px-3 py-2"
-              size={Math.min(5, uniqueAccounts.length + 2)} // scrollable if >5
-              style={{ maxHeight: "120px", overflowY: "auto" }}
-            >
-              <option value="">Select account...</option>
-              {uniqueAccounts.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-              <option value="__new__">Add new account...</option>
-            </select>
-          ) : (
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
+      {/* ── Add form ────────────────────────────────────────────────────── */}
+      <form onSubmit={onCreate} className="panel p-5">
+        <h3 className="mb-4 text-sm font-semibold text-gray-700">Add Saving Entry</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input-field" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Description</label>
+            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="input-field" placeholder="e.g. Emergency fund" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Amount</label>
+            <input
+              type="number" step="0.01"
+              value={amount as any}
+              onChange={(e) => setAmount(e.target.value === "" ? "" : Number(e.target.value))}
+              className="input-field" placeholder="0.00"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Account</label>
+            {accountMode === "select" ? (
+              <select
                 value={account}
-                onChange={(e) => setAccount(e.target.value)}
-                className="mt-1 w-full rounded border px-3 py-2"
-                placeholder="Enter new account name"
-              />
-              <button
-                type="button"
-                className="mt-1 rounded bg-gray-200 px-2 py-1 text-xs"
-                onClick={() => setAccountMode("select")}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") { setAccountMode("new"); setAccount(""); }
+                  else setAccount(e.target.value);
+                }}
+                className="input-field"
               >
-                Cancel
-              </button>
-            </div>
-          )}
+                <option value="">Select account…</option>
+                {uniqueAccounts.map((a) => <option key={a} value={a}>{a}</option>)}
+                <option value="__new__">+ Add new account…</option>
+              </select>
+            ) : (
+              <div className="flex gap-2">
+                <input type="text" value={account} onChange={(e) => setAccount(e.target.value)} className="input-field" placeholder="New account name" />
+                <button type="button" className="btn-secondary shrink-0" onClick={() => setAccountMode("select")}>✕</button>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="sm:col-span-4">
-          <button className="mt-2 rounded bg-blue-600 px-4 py-2 text-white">
-            Save
-          </button>
+        <div className="mt-4">
+          <button type="submit" className="btn-primary">Save Entry</button>
         </div>
       </form>
 
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      {/* ── Table ────────────────────────────────────────────────────────── */}
+      <div className="table-container">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Date
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Description
-              </th>
-              <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Amount
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Account
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Actions
-              </th>
+              <th className="th">Date</th>
+              <th className="th">Description</th>
+              <th className="th-right">Amount</th>
+              <th className="th">Account</th>
+              <th className="th">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-100 bg-white">
             {loading && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-6 text-center text-sm text-gray-600"
-                >
-                  Loading...
-                </td>
-              </tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">Loading…</td></tr>
             )}
             {error && !loading && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-6 text-center text-sm text-red-600"
-                >
-                  {error}
-                </td>
-              </tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-red-500">{error}</td></tr>
             )}
             {!loading && !error && items.length === 0 && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-6 text-center text-sm text-gray-500"
-                >
-                  No savings recorded.
-                </td>
-              </tr>
+              <tr><td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">No savings recorded yet.</td></tr>
             )}
-            {!loading &&
-              !error &&
-              pagination.pageItems.map((it) => (
-                <tr key={it.id}>
-                  {editId === it.id ? (
-                    <>
-                      <td className="px-4 py-2 text-sm">
-                        <input
-                          type="date"
-                          value={editFields.date}
-                          onChange={(e) =>
-                            setEditFields((f) => ({
-                              ...f,
-                              date: e.target.value,
-                            }))
-                          }
-                          className="w-full rounded border px-2 py-1"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        <input
-                          type="text"
-                          value={editFields.description}
-                          onChange={(e) =>
-                            setEditFields((f) => ({
-                              ...f,
-                              description: e.target.value,
-                            }))
-                          }
-                          className="w-full rounded border px-2 py-1"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-right text-sm">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editFields.amount as any}
-                          onChange={(e) =>
-                            setEditFields((f) => ({
-                              ...f,
-                              amount:
-                                e.target.value === ""
-                                  ? ""
-                                  : Number(e.target.value),
-                            }))
-                          }
-                          className="w-full rounded border px-2 py-1 text-right"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        {editFields.accountMode === "select" ? (
-                          <select
-                            value={editFields.account}
-                            onChange={(e) => {
-                              if (e.target.value === "__new__") {
-                                setEditFields((f) => ({
-                                  ...f,
-                                  accountMode: "new",
-                                  account: "",
-                                }));
-                              } else {
-                                setEditFields((f) => ({
-                                  ...f,
-                                  account: e.target.value,
-                                }));
-                              }
-                            }}
-                            className="w-full rounded border px-2 py-1"
-                            size={Math.min(5, uniqueAccounts.length + 2)}
-                            style={{ maxHeight: "120px", overflowY: "auto" }}
-                          >
-                            <option value="">Select account...</option>
-                            {uniqueAccounts.map((a) => (
-                              <option key={a} value={a}>
-                                {a}
-                              </option>
-                            ))}
-                            <option value="__new__">Add new account...</option>
-                          </select>
-                        ) : (
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="text"
-                              value={editFields.account}
-                              onChange={(e) =>
-                                setEditFields((f) => ({
-                                  ...f,
-                                  account: e.target.value,
-                                }))
-                              }
-                              className="w-full rounded border px-2 py-1"
-                              placeholder="Enter new account name"
-                            />
-                            <button
-                              type="button"
-                              className="rounded bg-gray-200 px-2 py-1 text-xs"
-                              onClick={() =>
-                                setEditFields((f) => ({
-                                  ...f,
-                                  accountMode: "select",
-                                }))
-                              }
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-sm flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded bg-blue-600 px-2 py-1 text-white"
-                          onClick={saveEdit}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded bg-gray-400 px-2 py-1 text-white"
-                          onClick={cancelEdit}
-                        >
-                          Cancel
-                        </button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-4 py-2 text-sm text-gray-800">
-                        {it.date}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-700">
-                        {it.description ?? ""}
-                      </td>
-                      <td className="px-4 py-2 text-right text-sm font-medium text-gray-900">
-                        ₱{" "}
-                        {it.amount.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-700">
-                        {it.account ?? ""}
-                      </td>
-                      <td className="px-4 py-2 text-sm flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded bg-green-600 px-2 py-1 text-white hover:bg-green-700"
-                          onClick={() => onMarkAsPaid(it.id)}
-                        >
-                          Paid
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded bg-yellow-500 px-2 py-1 text-white hover:bg-yellow-600"
-                          onClick={() => startEdit(it)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => onDelete(it.id)}
-                          className="rounded bg-red-600 px-2 py-1 text-white hover:bg-red-700"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
+            {!loading && !error && pagination.pageItems.map((it) => (
+              <tr key={it.id} className="table-row-hover">
+                {editId === it.id ? (
+                  <>
+                    <td className="td">
+                      <input type="date" value={editFields.date} onChange={(e) => setEditFields((f) => ({ ...f, date: e.target.value }))} className="input-field" />
+                    </td>
+                    <td className="td">
+                      <input type="text" value={editFields.description} onChange={(e) => setEditFields((f) => ({ ...f, description: e.target.value }))} className="input-field" />
+                    </td>
+                    <td className="td">
+                      <input type="number" step="0.01" value={editFields.amount as any} onChange={(e) => setEditFields((f) => ({ ...f, amount: e.target.value === "" ? "" : Number(e.target.value) }))} className="input-field text-right" />
+                    </td>
+                    <td className="td">
+                      {editFields.accountMode === "select" ? (
+                        <select value={editFields.account} onChange={(e) => { if (e.target.value === "__new__") setEditFields((f) => ({ ...f, accountMode: "new", account: "" })); else setEditFields((f) => ({ ...f, account: e.target.value })); }} className="input-field">
+                          <option value="">Select account…</option>
+                          {uniqueAccounts.map((a) => <option key={a} value={a}>{a}</option>)}
+                          <option value="__new__">+ Add new…</option>
+                        </select>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input type="text" value={editFields.account} onChange={(e) => setEditFields((f) => ({ ...f, account: e.target.value }))} className="input-field" placeholder="New account" />
+                          <button type="button" className="btn-secondary shrink-0" onClick={() => setEditFields((f) => ({ ...f, accountMode: "select" }))}>✕</button>
+                        </div>
+                      )}
+                    </td>
+                    <td className="td">
+                      <div className="flex gap-2">
+                        <button type="button" className="btn-primary" onClick={saveEdit}>Save</button>
+                        <button type="button" className="btn-secondary" onClick={cancelEdit}>Cancel</button>
+                      </div>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="td whitespace-nowrap">{it.date}</td>
+                    <td className="td">{it.description ?? ""}</td>
+                    <td className="td-right">₱{it.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="td">{it.account ?? ""}</td>
+                    <td className="td">
+                      <div className="flex gap-2">
+                        <button type="button" className="btn-success" onClick={() => onMarkAsPaid(it.id)}>Paid</button>
+                        <button type="button" className="btn-secondary" onClick={() => startEdit(it)}>Edit</button>
+                        <button type="button" className="btn-danger" onClick={() => onDelete(it.id)}>Delete</button>
+                      </div>
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
           </tbody>
         </table>
         <Pagination
-          page={pagination.page}
-          pageSize={pagination.pageSize}
-          totalItems={pagination.totalItems}
-          totalPages={pagination.totalPages}
-          from={pagination.from}
-          to={pagination.to}
-          onPageChange={pagination.setPage}
-          onPageSizeChange={pagination.setPageSize}
+          page={pagination.page} pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems} totalPages={pagination.totalPages}
+          from={pagination.from} to={pagination.to}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
         />
       </div>
 
-      {/* Paid History Modal */}
+      {/* ── Paid History Modal ───────────────────────────────────────────── */}
       {showPaidHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-4xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-gray-900">Paid Savings History</h3>
-              <button
-                onClick={() => setShowPaidHistory(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-gray-900">Paid Savings History</h3>
+              <button onClick={() => setShowPaidHistory(false)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-
-            {paidItems.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">
-                No paid savings records yet.
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Date
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Description
-                      </th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Amount
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Account
-                      </th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {paidItems.map((it) => (
-                      <tr key={it.id} className="bg-gray-50">
-                        <td className="px-4 py-2 text-sm text-gray-800">
-                          {it.date}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">
-                          {it.description ?? ""}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm font-medium text-gray-900">
-                          ₱{" "}
-                          {it.amount.toLocaleString(undefined, {
-                            maximumFractionDigits: 2,
-                          })}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-700">
-                          {it.account ?? ""}
-                        </td>
-                        <td className="px-4 py-2 text-sm">
-                          <button
-                            type="button"
-                            className="rounded bg-blue-600 px-2 py-1 text-white hover:bg-blue-700"
-                            onClick={() => restoreSaving(it.id)}
-                          >
-                            Restore
-                          </button>
-                        </td>
+            <div className="flex-1 overflow-auto p-6">
+              {paidItems.length === 0 ? (
+                <p className="py-8 text-center text-sm text-gray-400">No paid savings records yet.</p>
+              ) : (
+                <div className="table-container">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="th">Date</th>
+                        <th className="th">Description</th>
+                        <th className="th-right">Amount</th>
+                        <th className="th">Account</th>
+                        <th className="th">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowPaidHistory(false)}
-                className="rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
-              >
-                Close
-              </button>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {paidItems.map((it) => (
+                        <tr key={it.id} className="table-row-hover">
+                          <td className="td whitespace-nowrap">{it.date}</td>
+                          <td className="td">{it.description ?? ""}</td>
+                          <td className="td-right">₱{it.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="td">{it.account ?? ""}</td>
+                          <td className="td">
+                            <button type="button" className="btn-secondary" onClick={() => restoreSaving(it.id)}>Restore</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end border-t border-gray-100 px-6 py-4">
+              <button onClick={() => setShowPaidHistory(false)} className="btn-secondary">Close</button>
             </div>
           </div>
         </div>
