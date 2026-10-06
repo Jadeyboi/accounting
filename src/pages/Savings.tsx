@@ -1,16 +1,44 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activityLogger";
-import type { Saving } from "@/types";
+import type { Saving, GovtRemittance, GovtAgency, GovtCategory } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
 
+const peso = (v: number) =>
+  `₱${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const GOVT_SOURCES = ["payroll_ec", "payroll_er"];
+
+const AGENCIES: GovtAgency[] = ["SSS", "PAGIBIG", "PHILHEALTH", "BIR"];
+const AGENCY_LABEL: Record<GovtAgency, string> = {
+  SSS: "SSS",
+  PAGIBIG: "Pag-IBIG",
+  PHILHEALTH: "PhilHealth",
+  BIR: "BIR (Withholding Tax)",
+};
+
 export default function Savings() {
   const [items, setItems] = useState<Saving[]>([]);
+  const [govtItems, setGovtItems] = useState<Saving[]>([]);
+  const [remittances, setRemittances] = useState<GovtRemittance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPaidHistory, setShowPaidHistory] = useState(false);
   const [paidItems, setPaidItems] = useState<Saving[]>([]);
+
+  // Mark-as-Remitted modal state
+  const [remitModal, setRemitModal] = useState<{
+    category: GovtCategory;
+    agency: GovtAgency;
+    suggested: number;
+  } | null>(null);
+  const [remitDate, setRemitDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [remitCoverage, setRemitCoverage] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [remitReference, setRemitReference] = useState<string>("");
+  const [remitAmount, setRemitAmount] = useState<number | "">("");
+  const [remitNotes, setRemitNotes] = useState<string>("");
+  const [showRemitHistory, setShowRemitHistory] = useState(false);
 
   const [date, setDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
@@ -45,9 +73,19 @@ export default function Savings() {
     } else {
       // Filter out paid items on the client side
       const allItems = (data ?? []) as Saving[];
-      setItems(allItems.filter(item => !item.status || item.status === 'active'));
+      const active = allItems.filter((item) => !item.status || item.status === "active");
+      // Separate auto government-contribution rows from manual savings
+      setGovtItems(active.filter((it) => GOVT_SOURCES.includes(it.source ?? "manual")));
+      setItems(active.filter((it) => !GOVT_SOURCES.includes(it.source ?? "manual")));
     }
-    
+
+    // Load remittance history (table may not exist yet before migration — ignore errors)
+    const { data: remitData } = await supabase
+      .from("govt_remittances")
+      .select("*")
+      .order("remitted_date", { ascending: false });
+    setRemittances((remitData ?? []) as GovtRemittance[]);
+
     setLoading(false);
   };
 
@@ -58,6 +96,87 @@ export default function Savings() {
   const pagination = usePagination(items);
 
   const total = items.reduce((s, it) => s + (it.amount ?? 0), 0);
+
+  // ── Government contributions roll-up ────────────────────────────────────
+  // Accumulate per category (EC/ER) and per agency from the breakdown stored in notes.
+  const accrued: Record<GovtCategory, Record<GovtAgency, number>> = {
+    EC: { SSS: 0, PAGIBIG: 0, PHILHEALTH: 0, BIR: 0 },
+    ER: { SSS: 0, PAGIBIG: 0, PHILHEALTH: 0, BIR: 0 },
+  };
+  for (const it of govtItems) {
+    const cat: GovtCategory = it.source === "payroll_er" ? "ER" : "EC";
+    const b = it.notes?.breakdown ?? {};
+    accrued[cat].SSS += b.sss ?? 0;
+    accrued[cat].PAGIBIG += b.pagibig ?? 0;
+    accrued[cat].PHILHEALTH += b.philhealth ?? 0;
+    accrued[cat].BIR += b.tax ?? 0;
+  }
+
+  // Remitted totals per category/agency
+  const remitted: Record<GovtCategory, Record<GovtAgency, number>> = {
+    EC: { SSS: 0, PAGIBIG: 0, PHILHEALTH: 0, BIR: 0 },
+    ER: { SSS: 0, PAGIBIG: 0, PHILHEALTH: 0, BIR: 0 },
+  };
+  for (const r of remittances) {
+    if (remitted[r.category] && remitted[r.category][r.agency] !== undefined) {
+      remitted[r.category][r.agency] += r.amount ?? 0;
+    }
+  }
+
+  const catTotal = (m: Record<GovtAgency, number>) =>
+    AGENCIES.reduce((s, a) => s + (m[a] ?? 0), 0);
+
+  const govtAccruedTotal = catTotal(accrued.EC) + catTotal(accrued.ER);
+  const overallTotal = total + govtAccruedTotal;
+
+  const openRemitModal = (category: GovtCategory, agency: GovtAgency) => {
+    const remaining = (accrued[category][agency] ?? 0) - (remitted[category][agency] ?? 0);
+    const suggested = Math.max(0, Math.round((remaining + Number.EPSILON) * 100) / 100);
+    setRemitModal({ category, agency, suggested });
+    setRemitAmount(suggested);
+    setRemitDate(new Date().toISOString().slice(0, 10));
+    setRemitCoverage(new Date().toISOString().slice(0, 7));
+    setRemitReference("");
+    setRemitNotes("");
+  };
+
+  const submitRemittance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!remitModal) return;
+    if (!remitAmount || Number(remitAmount) <= 0) return alert("Enter a positive amount");
+
+    const { error } = await supabase.from("govt_remittances").insert({
+      category: remitModal.category,
+      agency: remitModal.agency,
+      coverage_month: remitCoverage,
+      remitted_date: remitDate,
+      reference: remitReference || null,
+      amount: Number(remitAmount),
+      notes: remitNotes || null,
+    });
+    if (error) {
+      alert(
+        "Error recording remittance: " +
+          error.message +
+          "\n\nIf the table does not exist, run supabase/govt-contributions-setup.sql first."
+      );
+      return;
+    }
+    await logActivity(
+      "created",
+      "Savings",
+      `Remitted ${remitModal.category} ${AGENCY_LABEL[remitModal.agency]} ${peso(Number(remitAmount))} (coverage ${remitCoverage})`
+    );
+    setRemitModal(null);
+    await load();
+  };
+
+  const deleteRemittance = async (id: string) => {
+    if (!confirm("Delete this remittance record? The amount will be added back to the remaining balance.")) return;
+    const { error } = await supabase.from("govt_remittances").delete().eq("id", id);
+    if (error) return alert(error.message);
+    await load();
+  };
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,9 +377,101 @@ export default function Savings() {
           <div className="text-right">
             <p className="text-xs text-gray-400">Total saved</p>
             <p className="text-xl font-bold tabular-nums text-gray-900">
-              ₱{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {peso(overallTotal)}
+            </p>
+            {govtAccruedTotal > 0 && (
+              <p className="mt-0.5 text-[11px] text-gray-400">
+                Manual {peso(total)} · Govt {peso(govtAccruedTotal)}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Government Contributions set-aside ───────────────────────────── */}
+      <div className="panel p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700">Government Contributions &amp; Withholding Tax</h3>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Auto set aside each payroll. EC = employee share (SSS, Pag-IBIG, PhilHealth, Tax). ER = employer share. Intended remittance: by the 16th of the following month.
             </p>
           </div>
+          <button type="button" onClick={() => setShowRemitHistory(true)} className="btn-secondary shrink-0">
+            Remittance History
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {(["EC", "ER"] as GovtCategory[]).map((cat) => {
+            const accruedTotal = catTotal(accrued[cat]);
+            const remittedTotal = catTotal(remitted[cat]);
+            const remaining = accruedTotal - remittedTotal;
+            return (
+              <div key={cat} className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-gray-800">
+                    {cat === "EC" ? "Employee Contributions (EC)" : "Employer Contributions (ER)"}
+                  </h4>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cat === "EC" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
+                    {cat}
+                  </span>
+                </div>
+
+                <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-white p-2">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Accrued</p>
+                    <p className="text-sm font-bold tabular-nums text-gray-900">{peso(accruedTotal)}</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-2">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Remitted</p>
+                    <p className="text-sm font-bold tabular-nums text-emerald-600">{peso(remittedTotal)}</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-2">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Remaining</p>
+                    <p className="text-sm font-bold tabular-nums text-amber-600">{peso(remaining)}</p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                  <table className="min-w-full divide-y divide-gray-100 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-gray-400">Agency</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-gray-400">Accrued</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-gray-400">Remaining</th>
+                        <th className="px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-gray-400"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {AGENCIES.filter((a) => !(cat === "ER" && a === "BIR")).map((a) => {
+                        const acc = accrued[cat][a] ?? 0;
+                        const rem = remitted[cat][a] ?? 0;
+                        const left = acc - rem;
+                        return (
+                          <tr key={a}>
+                            <td className="px-3 py-2 text-gray-700">{AGENCY_LABEL[a]}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-gray-600">{peso(acc)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">{peso(left)}</td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                disabled={left <= 0.005}
+                                onClick={() => openRemitModal(cat, a)}
+                                className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 enabled:hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Mark Remitted
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -395,6 +606,115 @@ export default function Savings() {
           onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
         />
       </div>
+
+      {/* ── Mark as Remitted Modal ───────────────────────────────────────── */}
+      {remitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={submitRemittance} className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-gray-900">
+                Mark Remitted · {remitModal.category} {AGENCY_LABEL[remitModal.agency]}
+              </h3>
+              <button type="button" onClick={() => setRemitModal(null)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4 p-6">
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Remaining balance for this agency: <span className="font-semibold">{peso(remitModal.suggested)}</span>
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Remittance Date</label>
+                  <input type="date" value={remitDate} onChange={(e) => setRemitDate(e.target.value)} className="input-field" required />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Coverage Month</label>
+                  <input type="month" value={remitCoverage} onChange={(e) => setRemitCoverage(e.target.value)} className="input-field" required />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Amount Remitted</label>
+                <input
+                  type="number" step="0.01"
+                  value={remitAmount as any}
+                  onChange={(e) => setRemitAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="input-field" placeholder="0.00" required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Reference No. (optional)</label>
+                <input type="text" value={remitReference} onChange={(e) => setRemitReference(e.target.value)} className="input-field" placeholder="e.g. PRN / OR number" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Notes (optional)</label>
+                <input type="text" value={remitNotes} onChange={(e) => setRemitNotes(e.target.value)} className="input-field" placeholder="Remarks" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
+              <button type="button" onClick={() => setRemitModal(null)} className="btn-secondary">Cancel</button>
+              <button type="submit" className="btn-primary">Record Remittance</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Remittance History Modal ─────────────────────────────────────── */}
+      {showRemitHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-gray-900">Remittance History</h3>
+              <button onClick={() => setShowRemitHistory(false)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              {remittances.length === 0 ? (
+                <p className="py-8 text-center text-sm text-gray-400">No remittances recorded yet.</p>
+              ) : (
+                <div className="table-container">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="th">Date</th>
+                        <th className="th">Category</th>
+                        <th className="th">Agency</th>
+                        <th className="th">Coverage</th>
+                        <th className="th">Reference</th>
+                        <th className="th-right">Amount</th>
+                        <th className="th">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {remittances.map((r) => (
+                        <tr key={r.id} className="table-row-hover">
+                          <td className="td whitespace-nowrap">{r.remitted_date}</td>
+                          <td className="td">{r.category}</td>
+                          <td className="td">{AGENCY_LABEL[r.agency] ?? r.agency}</td>
+                          <td className="td">{r.coverage_month}</td>
+                          <td className="td">{r.reference ?? ""}</td>
+                          <td className="td-right">{peso(r.amount)}</td>
+                          <td className="td">
+                            <button type="button" className="btn-danger" onClick={() => deleteRemittance(r.id)}>Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end border-t border-gray-100 px-6 py-4">
+              <button onClick={() => setShowRemitHistory(false)} className="btn-secondary">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Paid History Modal ───────────────────────────────────────────── */}
       {showPaidHistory && (

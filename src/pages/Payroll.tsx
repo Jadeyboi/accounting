@@ -5,6 +5,7 @@ import type { Employee, Payslip, Loan } from '@/types'
 import PayslipView from '@/components/PayslipView'
 import { usePagination } from '@/hooks/usePagination'
 import Pagination from '@/components/Pagination'
+import { upsertGovtContributions, removeGovtContributions } from '@/lib/payrollGovt'
 
 type Mode = 'list' | 'edit'
 
@@ -323,9 +324,19 @@ export default function Payroll() {
   const onDeletePayslip = async (id: string) => {
     const pay = payslips.find((x) => x.id === id)
     if (!confirm('Delete this payslip?')) return
-    // If linked transaction exists, you may also delete or keep it. We'll keep for audit.
+    // Delete the linked expense transaction first (before the payslip, since payslip holds the FK)
+    if (pay?.transaction_id) {
+      const { error: txErr } = await supabase.from('transactions').delete().eq('id', pay.transaction_id)
+      if (txErr) console.error('Failed to delete linked transaction:', txErr.message)
+    }
     const { error } = await supabase.from('payslips').delete().eq('id', id)
     if (error) return alert(error.message)
+    // Reverse any government contribution set-aside linked to this payslip
+    try {
+      await removeGovtContributions(id)
+    } catch (e) {
+      console.error('Govt contribution reversal failed:', e)
+    }
     const emp = allEmployees.find(e => e.id === pay?.employee_id)
     await logActivity('deleted', 'Payroll', `Deleted payslip for ${emp?.name ?? 'Unknown'}`)
     await refresh()
@@ -387,6 +398,20 @@ export default function Payroll() {
       const rows = cleanAlloc.map(a => ({ payslip_id: p.id, project_id: a.project_id, allocation_pct: Number(a.allocation_pct), source: 'manual' }))
       const { error: allocErr } = await supabase.from('payslip_project_allocations').insert(rows)
       if (allocErr) return alert('Allocation save failed: ' + allocErr.message)
+    }
+
+    // Auto set-aside government contributions + withholding tax into Savings (EC/ER)
+    try {
+      await upsertGovtContributions({
+        payslipId: p.id,
+        employeeName: currentEmployee?.name ?? '',
+        periodStart: p.period_start,
+        periodEnd: p.period_end,
+        dateIssued: p.date_issued,
+        monthlySalary: currentEmployee?.base_salary ?? 0,
+      })
+    } catch (e) {
+      console.error('Govt contribution set-aside failed:', e)
     }
 
     setEditingPayslip(null)
@@ -585,6 +610,23 @@ export default function Payroll() {
       for (const payslip of newPayslips) {
         if (payslip.loan_deductions && payslip.loan_deductions > 0) {
           await processLoanPayments(payslip.id, payslip.employee_id, payslip.date_issued, payslip.loan_deductions)
+        }
+      }
+
+      // Auto set-aside government contributions + withholding tax for each payslip (EC/ER)
+      for (const payslip of newPayslips) {
+        const emp = employees.find(e => e.id === payslip.employee_id)
+        try {
+          await upsertGovtContributions({
+            payslipId: payslip.id,
+            employeeName: emp?.name ?? '',
+            periodStart: payslip.period_start,
+            periodEnd: payslip.period_end,
+            dateIssued: payslip.date_issued,
+            monthlySalary: emp?.base_salary ?? 0,
+          })
+        } catch (e) {
+          console.error('Govt contribution set-aside failed for', payslip.id, e)
         }
       }
 

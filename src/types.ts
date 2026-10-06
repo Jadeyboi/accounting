@@ -105,6 +105,22 @@ export interface Payslip {
   transaction_id?: string | null;
 }
 
+export interface GovtContribBreakdown {
+  sss?: number;
+  pagibig?: number;
+  philhealth?: number;
+  tax?: number;
+}
+
+export interface GovtContribNotes {
+  category: 'EC' | 'ER';
+  employee?: string;
+  period?: string;
+  coverage?: string;
+  frequency?: string;
+  breakdown?: GovtContribBreakdown;
+}
+
 export interface Saving {
   id: string;
   created_at: string;
@@ -113,6 +129,24 @@ export interface Saving {
   amount: number;
   account?: string | null;
   status?: 'active' | 'paid';
+  payslip_id?: string | null;
+  source?: 'manual' | 'payroll_ec' | 'payroll_er';
+  notes?: GovtContribNotes | null;
+}
+
+export type GovtAgency = 'SSS' | 'PAGIBIG' | 'PHILHEALTH' | 'BIR';
+export type GovtCategory = 'EC' | 'ER';
+
+export interface GovtRemittance {
+  id: string;
+  created_at: string;
+  category: GovtCategory;
+  agency: GovtAgency;
+  coverage_month: string;
+  remitted_date: string;
+  reference?: string | null;
+  amount: number;
+  notes?: string | null;
 }
 
 export interface InventoryItem {
