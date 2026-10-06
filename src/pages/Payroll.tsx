@@ -6,6 +6,7 @@ import PayslipView from '@/components/PayslipView'
 import { usePagination } from '@/hooks/usePagination'
 import Pagination from '@/components/Pagination'
 import { upsertGovtContributions, removeGovtContributions } from '@/lib/payrollGovt'
+import { upsertHmoSavings, removeHmoSavings, getHmoDeductionForPayslip } from '@/lib/hmo'
 
 type Mode = 'list' | 'edit'
 
@@ -76,7 +77,7 @@ export default function Payroll() {
         const [periodStart, periodEnd] = key.split('_')
         const totalGross = payslips.reduce((sum, p) => sum + p.gross_salary, 0)
         const totalDeductions = payslips.reduce((sum, p) => {
-          return sum + (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
+          return sum + (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0) + (p.hmo_deduction ?? 0)
         }, 0)
         const totalAdditions = payslips.reduce((sum, p) => {
           return sum + (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
@@ -143,7 +144,7 @@ export default function Payroll() {
     if (!editingPayslip) return { additions: 0, deductions: 0, net: 0 }
     const p = editingPayslip
     const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
-    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
+    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0) + (p.hmo_deduction ?? 0)
     const net = p.gross_salary + additions - deductions
     return { additions, deductions, net }
   }, [editingPayslip])
@@ -255,6 +256,7 @@ export default function Payroll() {
       allowances: 0,
       other_deductions: 0,
       holiday_pay: 0,
+      hmo_deduction: 0,
       notes: '',
       net_salary: 0,
       transaction_id: null,
@@ -337,6 +339,12 @@ export default function Payroll() {
     } catch (e) {
       console.error('Govt contribution reversal failed:', e)
     }
+    // Reverse any HMO set-aside linked to this payslip
+    try {
+      await removeHmoSavings(id)
+    } catch (e) {
+      console.error('HMO reversal failed:', e)
+    }
     const emp = allEmployees.find(e => e.id === pay?.employee_id)
     await logActivity('deleted', 'Payroll', `Deleted payslip for ${emp?.name ?? 'Unknown'}`)
     await refresh()
@@ -347,7 +355,7 @@ export default function Payroll() {
     const p = { ...editingPayslip }
     // Recompute net on save
     const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
-    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
+    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0) + (p.hmo_deduction ?? 0)
     p.net_salary = p.gross_salary + additions - deductions
 
     // Upsert payslip
@@ -408,10 +416,28 @@ export default function Payroll() {
         periodStart: p.period_start,
         periodEnd: p.period_end,
         dateIssued: p.date_issued,
-        monthlySalary: currentEmployee?.base_salary ?? 0,
+        sss: p.sss ?? 0,
+        pagibig: p.pagibig ?? 0,
+        philhealth: p.philhealth ?? 0,
+        tax: p.tax ?? 0,
       })
     } catch (e) {
       console.error('Govt contribution set-aside failed:', e)
+    }
+
+    // Auto set-aside HMO funds (company-funded + employee deduction) into Savings
+    try {
+      await upsertHmoSavings({
+        payslipId: p.id,
+        employeeId: p.employee_id,
+        employeeName: currentEmployee?.name ?? '',
+        periodStart: p.period_start,
+        periodEnd: p.period_end,
+        dateIssued: p.date_issued,
+        hmoDeduction: p.hmo_deduction ?? 0,
+      })
+    } catch (e) {
+      console.error('HMO set-aside failed:', e)
     }
 
     setEditingPayslip(null)
@@ -503,11 +529,22 @@ export default function Payroll() {
     }
 
     try {
+      // Pre-compute each employee's per-cutoff HMO employee deduction (async)
+      const hmoDeductions: Record<string, number> = {}
+      for (const empId of selectedEmployees) {
+        try {
+          hmoDeductions[empId] = await getHmoDeductionForPayslip(empId)
+        } catch {
+          hmoDeductions[empId] = 0
+        }
+      }
+
       const newPayslips = selectedEmployees.map(empId => {
         const emp = employees.find(e => e.id === empId)
         const baseSalary = emp?.base_salary ?? 0
         const gross = calculateGrossSalary(bulkPeriodStart, bulkPeriodEnd, baseSalary)
         const loanDeductions = calculateLoanDeductions(empId, today())
+        const hmoDeduction = hmoDeductions[empId] ?? 0
         
         // Pre-fill with last payslip values for this employee
         const lastPayslip = payslips.find(ps => ps.employee_id === empId)
@@ -529,9 +566,10 @@ export default function Payroll() {
           bonuses: lastPayslip?.bonuses ?? 0,
           allowances: lastPayslip?.allowances ?? 0,
           other_deductions: 0, // Don't copy one-time deductions
+          hmo_deduction: hmoDeduction,
           notes: '',
           net_salary: gross + (lastPayslip?.bonuses ?? 0) + (lastPayslip?.allowances ?? 0) - 
-                      ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0) + loanDeductions),
+                      ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0) + loanDeductions + hmoDeduction),
           transaction_id: null,
         }
       })
@@ -623,10 +661,27 @@ export default function Payroll() {
             periodStart: payslip.period_start,
             periodEnd: payslip.period_end,
             dateIssued: payslip.date_issued,
-            monthlySalary: emp?.base_salary ?? 0,
+            sss: payslip.sss ?? 0,
+            pagibig: payslip.pagibig ?? 0,
+            philhealth: payslip.philhealth ?? 0,
+            tax: payslip.tax ?? 0,
           })
         } catch (e) {
           console.error('Govt contribution set-aside failed for', payslip.id, e)
+        }
+        // HMO savings (company-funded + employee deduction)
+        try {
+          await upsertHmoSavings({
+            payslipId: payslip.id,
+            employeeId: payslip.employee_id,
+            employeeName: emp?.name ?? '',
+            periodStart: payslip.period_start,
+            periodEnd: payslip.period_end,
+            dateIssued: payslip.date_issued,
+            hmoDeduction: payslip.hmo_deduction ?? 0,
+          })
+        } catch (e) {
+          console.error('HMO set-aside failed for', payslip.id, e)
         }
       }
 
@@ -665,6 +720,49 @@ export default function Payroll() {
   // Bulk payslip download
   const [selectedPayslipIds, setSelectedPayslipIds] = useState<Set<string>>(new Set())
   const [bulkDownloading, setBulkDownloading] = useState(false)
+  const [deletingSelected, setDeletingSelected] = useState(false)
+
+  // Delete the selected payroll entries for a period, reversing all linked records.
+  const deleteSelectedPayslips = async (periodPayslips: Payslip[]) => {
+    const toDelete = periodPayslips.filter(p => selectedPayslipIds.has(p.id))
+    if (toDelete.length === 0) { alert('Select at least one payroll entry'); return }
+    if (!confirm(`Delete ${toDelete.length} selected payroll ${toDelete.length === 1 ? 'entry' : 'entries'} for this period?\n\nThis will reverse the linked expense transactions, government contributions, HMO set-asides, and Savings entries. Employee profiles and other payroll periods are kept.`)) return
+
+    setDeletingSelected(true)
+    try {
+      for (const p of toDelete) {
+        // 1. Delete linked expense transaction (FK held on payslip)
+        if (p.transaction_id) {
+          const { error: txErr } = await supabase.from('transactions').delete().eq('id', p.transaction_id)
+          if (txErr) console.error('Failed to delete linked transaction:', txErr.message)
+        }
+        // 2. Delete the payslip
+        const { error: delErr } = await supabase.from('payslips').delete().eq('id', p.id)
+        if (delErr) { console.error('Failed to delete payslip:', delErr.message); continue }
+        // 3. Reverse government contribution set-asides
+        try { await removeGovtContributions(p.id) } catch (e) { console.error('Govt reversal failed:', e) }
+        // 4. Reverse HMO set-asides
+        try { await removeHmoSavings(p.id) } catch (e) { console.error('HMO reversal failed:', e) }
+      }
+
+      // Clear selection for the deleted entries
+      setSelectedPayslipIds(prev => {
+        const next = new Set(prev)
+        toDelete.forEach(p => next.delete(p.id))
+        return next
+      })
+
+      const names = toDelete.map(p => allEmployees.find(e => e.id === p.employee_id)?.name ?? 'Unknown')
+      await logActivity('deleted', 'Payroll', `Deleted ${toDelete.length} payroll entr${toDelete.length === 1 ? 'y' : 'ies'} (${names.join(', ')})`)
+
+      await refresh()
+    } catch (err) {
+      console.error('Delete selected failed:', err)
+      alert(`Error deleting selected payroll entries: ${err}`)
+    } finally {
+      setDeletingSelected(false)
+    }
+  }
 
   const togglePayslipSelection = (id: string) => {
     setSelectedPayslipIds(prev => {
@@ -877,7 +975,7 @@ export default function Payroll() {
         const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
         const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + 
                           (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + 
-                          (payslip.other_deductions ?? 0)
+                          (payslip.other_deductions ?? 0) + (payslip.hmo_deduction ?? 0)
         
         const empName = emp?.name ?? payslip.employee_id
         const truncatedName = empName.length > 25 ? empName.substring(0, 22) + '...' : empName
@@ -1085,6 +1183,16 @@ export default function Payroll() {
                         </svg>
                         {bulkDownloading ? 'Generating...' : `Download Selected (${period.payslips.filter(p => selectedPayslipIds.has(p.id)).length})`}
                       </button>
+                      <button
+                        onClick={() => deleteSelectedPayslips(period.payslips)}
+                        disabled={deletingSelected || !period.payslips.some(p => selectedPayslipIds.has(p.id))}
+                        className="flex items-center gap-1 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-40"
+                      >
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        {deletingSelected ? 'Deleting...' : `Delete Selected (${period.payslips.filter(p => selectedPayslipIds.has(p.id)).length})`}
+                      </button>
                     </div>
                     <div className="overflow-hidden rounded border border-slate-200">
                       <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -1103,7 +1211,7 @@ export default function Payroll() {
                           {period.payslips.map((payslip) => {
                             const emp = allEmployees.find((e) => e.id === payslip.employee_id)
                             const additions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
-                            const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
+                            const deductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0) + (payslip.hmo_deduction ?? 0)
                             const netPay = payslip.gross_salary + additions - deductions
                             return (
                               <tr key={payslip.id} className={`hover:bg-slate-50 ${selectedPayslipIds.has(payslip.id) ? 'bg-blue-50' : ''}`}>
@@ -1231,7 +1339,7 @@ export default function Payroll() {
                 <select 
                   className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" 
                   value={editingPayslip.employee_id} 
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const newEmpId = e.target.value
                     const emp = employees.find(emp => emp.id === newEmpId)
                     const baseSalary = emp?.base_salary ?? 0
@@ -1253,7 +1361,12 @@ export default function Payroll() {
                       cash_advance: 0, // Reset one-time deductions
                       loan_deductions: calculateLoanDeductions(newEmpId, editingPayslip.date_issued),
                       other_deductions: 0, // Reset one-time deductions
+                      hmo_deduction: 0,
                     })
+                    // Auto-fill HMO deduction from enrollment (async)
+                    getHmoDeductionForPayslip(newEmpId).then(amt => {
+                      setEditingPayslip(prev => prev ? { ...prev, hmo_deduction: amt } : prev)
+                    }).catch(() => {})
                   }}
                 >
                   {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
@@ -1392,6 +1505,21 @@ export default function Payroll() {
                 </label>
                 <label className="text-sm text-slate-600">Other Deductions
                   <input type="number" step="0.01" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm" value={editingPayslip.other_deductions ?? 0} onChange={(e) => setEditingPayslip({ ...editingPayslip, other_deductions: Number(e.target.value) })} />
+                </label>
+                <label className="text-sm text-slate-600">HMO Deduction
+                  <div className="relative">
+                    <input type="number" step="0.01" className="mt-1 w-full rounded-md border-slate-300 text-sm shadow-sm" value={editingPayslip.hmo_deduction ?? 0} onChange={(e) => setEditingPayslip({ ...editingPayslip, hmo_deduction: Number(e.target.value) })} />
+                    <button
+                      type="button"
+                      className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+                      onClick={async () => {
+                        const amt = await getHmoDeductionForPayslip(editingPayslip.employee_id)
+                        setEditingPayslip(prev => prev ? { ...prev, hmo_deduction: amt } : prev)
+                      }}
+                    >
+                      Auto-fill from HMO enrollment (per cutoff)
+                    </button>
+                  </div>
                 </label>
               </div>
 
@@ -1573,7 +1701,7 @@ export default function Payroll() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {employeeHistory.payslips.map((p) => {
-                    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0)
+                    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0) + (p.hmo_deduction ?? 0)
                     return (
                       <tr key={p.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm text-gray-900">{formatDate(p.period_start)} to {formatDate(p.period_end)}</td>

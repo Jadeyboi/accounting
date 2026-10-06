@@ -18,7 +18,7 @@ const formatDate = (dateString: string): string => {
 }
 
 const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, ref) => {
-  const totalDeductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0)
+  const totalDeductions = (payslip.sss ?? 0) + (payslip.pagibig ?? 0) + (payslip.philhealth ?? 0) + (payslip.tax ?? 0) + (payslip.cash_advance ?? 0) + (payslip.loan_deductions ?? 0) + (payslip.other_deductions ?? 0) + (payslip.hmo_deduction ?? 0)
   const totalAdditions = (payslip.bonuses ?? 0) + (payslip.allowances ?? 0) + (payslip.holiday_pay ?? 0)
   // Always recalculate net from raw fields for accuracy
   const calculatedNet = payslip.gross_salary + totalAdditions - totalDeductions
@@ -79,6 +79,9 @@ const PayslipView = forwardRef<HTMLDivElement, Props>(({ employee, payslip }, re
           <div className="text-sm"><span className="text-slate-500">Tax:</span> <span className="float-right">{money(payslip.tax)}</span></div>
           <div className="text-sm"><span className="text-slate-500">Cash Advance:</span> <span className="float-right">{money(payslip.cash_advance)}</span></div>
           <div className="text-sm"><span className="text-slate-500">Loan Deductions:</span> <span className="float-right">{money(payslip.loan_deductions)}</span></div>
+          {(payslip.hmo_deduction ?? 0) > 0 && (
+            <div className="text-sm"><span className="text-slate-500">HMO Deduction:</span> <span className="float-right">{money(payslip.hmo_deduction)}</span></div>
+          )}
           <div className="text-sm"><span className="text-slate-500">Other:</span> <span className="float-right">{money(payslip.other_deductions)}</span></div>
           <div className="mt-2 border-t pt-2 text-sm"><span className="text-slate-600">Total Deductions</span> <span className="float-right font-medium">{money(totalDeductions)}</span></div>
         </div>

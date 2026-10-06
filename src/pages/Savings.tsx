@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activityLogger";
-import type { Saving, GovtRemittance, GovtAgency, GovtCategory } from "@/types";
+import type { Saving, GovtRemittance, GovtAgency, GovtCategory, GovtContribNotes } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
+import { backfillGovtContributions } from "@/lib/payrollGovt";
 
 const peso = (v: number) =>
   `₱${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const GOVT_SOURCES = ["payroll_ec", "payroll_er"];
+const HMO_SOURCES = ["payroll_hmo_company", "payroll_hmo_employee"];
+const AUTO_SOURCES = [...GOVT_SOURCES, ...HMO_SOURCES];
 
 const AGENCIES: GovtAgency[] = ["SSS", "PAGIBIG", "PHILHEALTH", "BIR"];
 const AGENCY_LABEL: Record<GovtAgency, string> = {
@@ -21,6 +24,8 @@ const AGENCY_LABEL: Record<GovtAgency, string> = {
 export default function Savings() {
   const [items, setItems] = useState<Saving[]>([]);
   const [govtItems, setGovtItems] = useState<Saving[]>([]);
+  const [hmoItems, setHmoItems] = useState<Saving[]>([]);
+  const [hmoPaid, setHmoPaid] = useState(0);
   const [remittances, setRemittances] = useState<GovtRemittance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,17 +79,24 @@ export default function Savings() {
       // Filter out paid items on the client side
       const allItems = (data ?? []) as Saving[];
       const active = allItems.filter((item) => !item.status || item.status === "active");
-      // Separate auto government-contribution rows from manual savings
+      // Separate auto government-contribution + HMO rows from manual savings
       setGovtItems(active.filter((it) => GOVT_SOURCES.includes(it.source ?? "manual")));
-      setItems(active.filter((it) => !GOVT_SOURCES.includes(it.source ?? "manual")));
+      setHmoItems(active.filter((it) => HMO_SOURCES.includes(it.source ?? "manual")));
+      setItems(active.filter((it) => !AUTO_SOURCES.includes(it.source ?? "manual")));
     }
 
-    // Load remittance history (table may not exist yet before migration — ignore errors)
+    // Load govt remittance history (table may not exist yet before migration — ignore errors)
     const { data: remitData } = await supabase
       .from("govt_remittances")
       .select("*")
       .order("remitted_date", { ascending: false });
     setRemittances((remitData ?? []) as GovtRemittance[]);
+
+    // Load HMO remittance total (to compute HMO outstanding)
+    const { data: hmoRemitData } = await supabase
+      .from("hmo_remittances")
+      .select("amount");
+    setHmoPaid((hmoRemitData ?? []).reduce((a: number, r: any) => a + (r.amount ?? 0), 0));
 
     setLoading(false);
   };
@@ -92,6 +104,22 @@ export default function Savings() {
   useEffect(() => {
     load();
   }, []);
+
+  const [recalcingGovt, setRecalcingGovt] = useState(false);
+  const recalcGovt = async () => {
+    if (!confirm("Recalculate all government contribution set-asides from the actual payslip deduction columns (SSS, Pag-IBIG, PhilHealth, Tax)?\n\nThis replaces amounts previously derived from base salary. Manual savings are not affected.")) return;
+    setRecalcingGovt(true);
+    try {
+      const res = await backfillGovtContributions();
+      await logActivity("updated", "Savings", `Recalculated govt contributions from payslips (${res.updated} updated, ${res.created} created, ${res.removed} removed)`);
+      alert(`Done. Only payrolls from Oct 1, 2026 onward are tracked.\n\nPayslips processed: ${res.processed}\nRows updated: ${res.updated}\nRows created: ${res.created}\nOld pre-Oct rows removed: ${res.removed}`);
+      await load();
+    } catch (err) {
+      alert("Recalculation failed: " + err);
+    } finally {
+      setRecalcingGovt(false);
+    }
+  };
 
   const pagination = usePagination(items);
 
@@ -105,7 +133,8 @@ export default function Savings() {
   };
   for (const it of govtItems) {
     const cat: GovtCategory = it.source === "payroll_er" ? "ER" : "EC";
-    const b = it.notes?.breakdown ?? {};
+    const notes = it.notes as GovtContribNotes | null;
+    const b = notes?.breakdown ?? {};
     accrued[cat].SSS += b.sss ?? 0;
     accrued[cat].PAGIBIG += b.pagibig ?? 0;
     accrued[cat].PHILHEALTH += b.philhealth ?? 0;
@@ -127,7 +156,18 @@ export default function Savings() {
     AGENCIES.reduce((s, a) => s + (m[a] ?? 0), 0);
 
   const govtAccruedTotal = catTotal(accrued.EC) + catTotal(accrued.ER);
-  const overallTotal = total + govtAccruedTotal;
+
+  // ── HMO roll-up ─────────────────────────────────────────────────────────
+  const hmoCompany = hmoItems
+    .filter((it) => it.source === "payroll_hmo_company")
+    .reduce((a, it) => a + (it.amount ?? 0), 0);
+  const hmoEmployee = hmoItems
+    .filter((it) => it.source === "payroll_hmo_employee")
+    .reduce((a, it) => a + (it.amount ?? 0), 0);
+  const hmoReserved = hmoCompany + hmoEmployee;
+  const hmoRemaining = hmoReserved - hmoPaid;
+
+  const overallTotal = total + govtAccruedTotal + hmoReserved;
 
   const openRemitModal = (category: GovtCategory, agency: GovtAgency) => {
     const remaining = (accrued[category][agency] ?? 0) - (remitted[category][agency] ?? 0);
@@ -379,9 +419,9 @@ export default function Savings() {
             <p className="text-xl font-bold tabular-nums text-gray-900">
               {peso(overallTotal)}
             </p>
-            {govtAccruedTotal > 0 && (
+            {(govtAccruedTotal > 0 || hmoReserved > 0) && (
               <p className="mt-0.5 text-[11px] text-gray-400">
-                Manual {peso(total)} · Govt {peso(govtAccruedTotal)}
+                Manual {peso(total)} · Govt {peso(govtAccruedTotal)} · HMO {peso(hmoReserved)}
               </p>
             )}
           </div>
@@ -397,9 +437,14 @@ export default function Savings() {
               Auto set aside each payroll. EC = employee share (SSS, Pag-IBIG, PhilHealth, Tax). ER = employer share. Intended remittance: by the 16th of the following month.
             </p>
           </div>
-          <button type="button" onClick={() => setShowRemitHistory(true)} className="btn-secondary shrink-0">
-            Remittance History
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={recalcGovt} disabled={recalcingGovt} className="btn-secondary disabled:opacity-50">
+              {recalcingGovt ? "Recalculating…" : "Recalculate from Payslips"}
+            </button>
+            <button type="button" onClick={() => setShowRemitHistory(true)} className="btn-secondary">
+              Remittance History
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -474,6 +519,34 @@ export default function Savings() {
           })}
         </div>
       </div>
+
+      {/* ── HMO Savings ────────────────────────────────────────────────── */}
+      {hmoReserved > 0 && (
+        <div className="panel p-5">
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">HMO</h3>
+          <p className="mb-3 text-xs text-gray-400">
+            Company-funded + employee-deducted premiums set aside each payroll. Manage enrollments on the HMO page.
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg bg-blue-50 p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-blue-600">Company Reserved</p>
+              <p className="text-sm font-bold tabular-nums text-blue-900">{peso(hmoCompany)}</p>
+            </div>
+            <div className="rounded-lg bg-amber-50 p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-amber-600">Employee Collected</p>
+              <p className="text-sm font-bold tabular-nums text-amber-900">{peso(hmoEmployee)}</p>
+            </div>
+            <div className="rounded-lg bg-emerald-50 p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-emerald-600">Total Reserved</p>
+              <p className="text-sm font-bold tabular-nums text-emerald-900">{peso(hmoReserved)}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-gray-200 p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-gray-500">Paid / Remaining</p>
+              <p className="text-sm font-bold tabular-nums text-gray-900">{peso(hmoPaid)} / {peso(hmoRemaining)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Add form ────────────────────────────────────────────────────── */}
       <form onSubmit={onCreate} className="panel p-5">

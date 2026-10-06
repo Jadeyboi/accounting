@@ -100,6 +100,7 @@ export interface Payslip {
   allowances?: number | null;
   other_deductions?: number | null;
   holiday_pay?: number | null;
+  hmo_deduction?: number | null;
   notes?: string | null;
   net_salary: number;
   transaction_id?: string | null;
@@ -130,8 +131,8 @@ export interface Saving {
   account?: string | null;
   status?: 'active' | 'paid';
   payslip_id?: string | null;
-  source?: 'manual' | 'payroll_ec' | 'payroll_er';
-  notes?: GovtContribNotes | null;
+  source?: 'manual' | 'payroll_ec' | 'payroll_er' | 'payroll_hmo_company' | 'payroll_hmo_employee';
+  notes?: GovtContribNotes | HmoSavingNotes | null;
 }
 
 export type GovtAgency = 'SSS' | 'PAGIBIG' | 'PHILHEALTH' | 'BIR';
@@ -147,6 +148,82 @@ export interface GovtRemittance {
   reference?: string | null;
   amount: number;
   notes?: string | null;
+}
+
+// ── HMO ────────────────────────────────────────────────────────────────
+export type HmoBillingCycle = 'monthly' | 'quarterly' | 'annual';
+export type HmoCoverageType = 'company' | 'employee';
+export type HmoProration = 'none' | 'daily' | 'monthly';
+
+export interface HmoEnrollment {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  employee_id: string;
+  provider: string;
+  plan?: string | null;
+  principal_premium: number;
+  billing_cycle: HmoBillingCycle;
+  coverage_start?: string | null;
+  coverage_end?: string | null;
+  effective_date: string;
+  proration: HmoProration;
+  status: 'active' | 'ended';
+  notes?: string | null;
+}
+
+export interface HmoDependent {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  enrollment_id: string;
+  name: string;
+  relationship?: string | null;
+  premium: number;
+  billing_cycle: HmoBillingCycle;
+  coverage_type: HmoCoverageType;
+  coverage_start?: string | null;
+  coverage_end?: string | null;
+  effective_date: string;
+  status: 'active' | 'ended';
+  notes?: string | null;
+}
+
+export interface HmoBill {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  provider: string;
+  invoice_number?: string | null;
+  coverage_start?: string | null;
+  coverage_end?: string | null;
+  due_date?: string | null;
+  amount_due: number;
+  notes?: string | null;
+}
+
+export interface HmoRemittance {
+  id: string;
+  created_at: string;
+  bill_id?: string | null;
+  provider?: string | null;
+  coverage_period?: string | null;
+  paid_date: string;
+  amount: number;
+  reference?: string | null;
+  notes?: string | null;
+}
+
+export interface HmoSavingNotes {
+  category: 'HMO_COMPANY' | 'HMO_EMPLOYEE';
+  employee?: string;
+  period?: string;
+  coverage?: string;
+  breakdown?: {
+    principal?: number;
+    companyDependent?: number;
+    employeeDependents?: number;
+  };
 }
 
 export interface InventoryItem {

@@ -18,6 +18,8 @@ import SalaryDeclaration from "@/pages/SalaryDeclaration";
 
 import Savings from "@/pages/Savings";
 
+import HMO from "@/pages/HMO";
+
 import MonthlyExpenses from "@/pages/MonthlyExpenses";
 
 import FinalPay from "@/pages/FinalPay";
@@ -173,7 +175,7 @@ export default function App() {
 
     if (userRole === 'hr') {
 
-      const hrRoutes = ['/payroll', '/salary-declaration', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users', '/final-pay', '/projects'];
+      const hrRoutes = ['/payroll', '/salary-declaration', '/hris', '/leave', '/inventory', '/job-openings', '/activity-logs', '/users', '/final-pay', '/projects', '/hmo'];
 
       return hrRoutes.some(r => path === r || path.startsWith(r));
 
@@ -546,6 +548,34 @@ export default function App() {
                 >
 
                   Savings
+
+                </NavLink>
+
+                )}
+
+                {canAccess('/hmo') && (
+
+                <NavLink
+
+                  to="/hmo"
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-2 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-blue-600 text-white shadow-sm"
+
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
+
+                    }`
+
+                  }
+
+                >
+
+                  HMO
 
                 </NavLink>
 
@@ -1309,6 +1339,36 @@ export default function App() {
 
                 )}
 
+                {canAccess('/hmo') && (
+
+                <NavLink
+
+                  to="/hmo"
+
+                  onClick={() => setMobileMenuOpen(false)}
+
+                  className={({ isActive }) =>
+
+                    `rounded-lg px-4 py-3 font-medium transition-all ${
+
+                      isActive
+
+                        ? "bg-blue-600 text-white shadow-sm"
+
+                        : "bg-white text-gray-700 shadow-sm hover:bg-gray-50 hover:text-blue-700"
+
+                    }`
+
+                  }
+
+                >
+
+                  HMO
+
+                </NavLink>
+
+                )}
+
                 {canAccess('/payroll') && (
 
                 <NavLink
@@ -1888,6 +1948,7 @@ export default function App() {
                   <Route path="/monthly" element={<Monthly />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/savings" element={<Savings />} />
+                  <Route path="/hmo" element={<HMO />} />
                   <Route path="/payroll" element={<Payroll />} />
                   <Route path="/salary-declaration" element={<SalaryDeclaration />} />
                   <Route path="/hris" element={<HRIS />} />
