@@ -49,16 +49,28 @@ export default function SalaryDeclaration() {
 
   const getSalary = (employee: Employee) => declaredSalaries[employee.id] ?? employee.declared_salary ?? employee.base_salary ?? 0
 
+  // Totals across ALL filtered records (not just the current page).
   const totals = useMemo(() => {
     return filteredEmployees.reduce((result, employee) => {
-      const deductions = calculateStatutoryDeductions(getSalary(employee))
+      const d = calculateStatutoryDeductions(getSalary(employee))
       return {
-        salary: result.salary + deductions.monthlySalary,
-        employee: result.employee + deductions.total,
-        employer: result.employer + deductions.totalEmployer,
-        net: result.net + deductions.netPay,
+        salary: result.salary + d.monthlySalary,
+        employerSss: result.employerSss + d.employerSss,
+        sss: result.sss + d.sss,
+        employerPagibig: result.employerPagibig + d.employerPagibig,
+        pagibig: result.pagibig + d.pagibig,
+        employerPhilhealth: result.employerPhilhealth + d.employerPhilhealth,
+        philhealth: result.philhealth + d.philhealth,
+        tax: result.tax + d.tax,
+        employee: result.employee + d.total,
+        employer: result.employer + d.totalEmployer,
+        net: result.net + d.netPay,
       }
-    }, { salary: 0, employee: 0, employer: 0, net: 0 })
+    }, {
+      salary: 0, employerSss: 0, sss: 0, employerPagibig: 0, pagibig: 0,
+      employerPhilhealth: 0, philhealth: 0, tax: 0, employee: 0, employer: 0, net: 0,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredEmployees, declaredSalaries])
 
   const setSalary = (employeeId: string, value: string) => {
@@ -204,6 +216,24 @@ export default function SalaryDeclaration() {
                   )
                 })}
               </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-300 bg-slate-100 font-bold text-slate-900">
+                  <td className="sticky left-0 z-10 border-r border-slate-200 bg-slate-100 px-3 py-3 text-left">
+                    Total ({filteredEmployees.length})
+                  </td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.salary)}</td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.employerSss)}</td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.sss)}</td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.employerPagibig)}</td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.pagibig)}</td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.employerPhilhealth)}</td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.philhealth)}</td>
+                  <td className="px-3 py-3 text-right">{formatMoney(totals.tax)}</td>
+                  <td className="px-3 py-3 text-right text-rose-700">{formatMoney(totals.employee)}</td>
+                  <td className="px-3 py-3 text-right text-amber-700">{formatMoney(totals.employer)}</td>
+                  <td className="px-3 py-3 text-right text-emerald-700">{formatMoney(totals.net)}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
           <Pagination

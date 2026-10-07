@@ -4,6 +4,7 @@ import { logActivity } from '@/lib/activityLogger'
 import type { Employee, SalaryHistory } from '@/types'
 import { usePagination } from '@/hooks/usePagination'
 import Pagination from '@/components/Pagination'
+import ModalPortal from '@/components/ModalPortal'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -723,8 +724,9 @@ export default function HRIS() {
 
       {/* Modal */}
       {showModal && (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 sm:p-4">
-          <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+          <div className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
             <div className="sticky top-0 z-10 border-b border-gray-200 bg-white px-4 py-4 sm:px-6 sm:pt-6">
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -1278,12 +1280,14 @@ export default function HRIS() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* View Employee Details Modal */}
       {showViewModal && viewingEmployee && (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 sm:p-4">
-          <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+          <div className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
             <div className="sticky top-0 z-10 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-4 sm:px-6 sm:py-6">
               <div className="flex items-start justify-between gap-4 sm:items-center">
                 <div className="flex items-center gap-3 sm:gap-4">
@@ -1607,6 +1611,7 @@ export default function HRIS() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
       {/* Former Employees Section */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
