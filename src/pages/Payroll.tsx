@@ -7,6 +7,7 @@ import { usePagination } from '@/hooks/usePagination'
 import Pagination from '@/components/Pagination'
 import { upsertGovtContributions, removeGovtContributions } from '@/lib/payrollGovt'
 import { upsertHmoSavings, removeHmoSavings, getHmoDeductionForPayslip } from '@/lib/hmo'
+import { CuteLoader, LOADING_MESSAGES } from '@/components/Loading'
 
 type Mode = 'list' | 'edit'
 
@@ -352,6 +353,9 @@ export default function Payroll() {
 
   const onSavePayslip = async () => {
     if (!editingPayslip) return
+    if (savingPayslip) return // guard against duplicate submits
+    setSavingPayslip(true)
+    try {
     const p = { ...editingPayslip }
     // Recompute net on save
     const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
@@ -445,6 +449,9 @@ export default function Payroll() {
     setMode('list')
     await logActivity('created', 'Payroll', `Processed payslip for ${currentEmployee?.name ?? 'Unknown'}`)
     await refresh()
+    } finally {
+      setSavingPayslip(false)
+    }
   }
 
   const onDownloadPdf = async () => {
@@ -527,6 +534,8 @@ export default function Payroll() {
       alert('Please select at least one employee')
       return
     }
+    if (bulkGenerating) return
+    setBulkGenerating(true)
 
     try {
       // Pre-compute each employee's per-cutoff HMO employee deduction (async)
@@ -698,6 +707,8 @@ export default function Payroll() {
     } catch (error) {
       console.error('Bulk generation error:', error)
       alert(`Error during bulk generation: ${error}`)
+    } finally {
+      setBulkGenerating(false)
     }
   }
 
@@ -721,6 +732,8 @@ export default function Payroll() {
   const [selectedPayslipIds, setSelectedPayslipIds] = useState<Set<string>>(new Set())
   const [bulkDownloading, setBulkDownloading] = useState(false)
   const [deletingSelected, setDeletingSelected] = useState(false)
+  const [savingPayslip, setSavingPayslip] = useState(false)
+  const [bulkGenerating, setBulkGenerating] = useState(false)
 
   // Delete the selected payroll entries for a period, reversing all linked records.
   const deleteSelectedPayslips = async (periodPayslips: Payslip[]) => {
@@ -1014,6 +1027,8 @@ export default function Payroll() {
 
   return (
     <div className="space-y-6">
+      <CuteLoader show={savingPayslip} message={LOADING_MESSAGES.saving} submessage="Updating payslip, contributions & savings" />
+      <CuteLoader show={bulkGenerating} message={LOADING_MESSAGES.generating} submessage="Creating payslips for selected employees" />
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Payroll</h2>
@@ -1029,7 +1044,7 @@ export default function Payroll() {
           ) : (
             <>
               <button className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200" onClick={() => { setMode('list'); setEditingPayslip(null) }}>Back</button>
-              <button className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700" onClick={onSavePayslip}>Process & Save</button>
+              <button className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700 disabled:opacity-50" onClick={onSavePayslip} disabled={savingPayslip}>{savingPayslip ? 'Saving…' : 'Process & Save'}</button>
               <button className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black" onClick={onDownloadPdf}>Download PDF</button>
             </>
           )}
@@ -1652,9 +1667,10 @@ export default function Payroll() {
               </button>
               <button
                 onClick={onBulkGenerate}
-                className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+                disabled={bulkGenerating}
+                className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
               >
-                Generate {selectedEmployees.length} Payslip{selectedEmployees.length !== 1 ? 's' : ''}
+                {bulkGenerating ? 'Generating…' : `Generate ${selectedEmployees.length} Payslip${selectedEmployees.length !== 1 ? 's' : ''}`}
               </button>
             </div>
           </div>

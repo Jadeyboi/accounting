@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 
 import NotificationsBell from "@/components/NotificationsBell";
 
+import { NavigationLoader } from "@/components/Loading";
+
 import Home from "@/pages/Home";
 
 import Monthly from "@/pages/Monthly";
@@ -240,6 +242,8 @@ export default function App() {
   return (
 
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+
+      <NavigationLoader />
 
       <div className="min-h-screen p-2 sm:p-4">
 

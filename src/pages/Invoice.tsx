@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import invoiceLogo from '@/assets/invoice-logo.jpg'
+import { CuteLoader, LOADING_MESSAGES } from '@/components/Loading'
 
 type Tab = 'maker' | 'history'
 
@@ -48,6 +49,7 @@ interface SavedInvoice {
 
 export default function Invoice() {
   const [activeTab, setActiveTab] = useState<Tab>('maker')
+  const [generatingPdf, setGeneratingPdf] = useState(false)
 
   // ── Maker state ──────────────────────────────────────────────────────────
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -458,6 +460,8 @@ export default function Invoice() {
   const handlePrint = async () => {
     const invoiceElement = document.getElementById('invoice-content')
     if (!invoiceElement) { alert('Invoice content not found'); return }
+    if (generatingPdf) return
+    setGeneratingPdf(true)
     try {
       // Get the logo as base64 to overlay directly onto the PDF (html2canvas can't reliably capture it)
       const logoData = await getLogoData()
@@ -493,6 +497,8 @@ export default function Invoice() {
     } catch (error) {
       console.error('Error generating PDF:', error)
       alert('Failed to generate PDF. Please try again.')
+    } finally {
+      setGeneratingPdf(false)
     }
   }
 
@@ -750,6 +756,7 @@ export default function Invoice() {
 
   return (
     <div className="space-y-4">
+      <CuteLoader show={generatingPdf} message={LOADING_MESSAGES.exporting} submessage="Rendering your invoice PDF" />
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 print:hidden">
         <button className={tabClass('maker')} onClick={() => setActiveTab('maker')}>
@@ -769,8 +776,8 @@ export default function Invoice() {
               <button onClick={handleReset} className="rounded bg-gray-500 px-4 py-2 text-sm font-medium text-white hover:bg-gray-600">
                 Reset
               </button>
-              <button onClick={handlePrint} className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-                Save as PDF
+              <button onClick={handlePrint} disabled={generatingPdf} className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+                {generatingPdf ? 'Generating…' : 'Save as PDF'}
               </button>
             </div>
           </div>
