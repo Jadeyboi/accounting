@@ -4,6 +4,7 @@ import { logActivity } from "@/lib/activityLogger";
 import type { Saving, GovtRemittance, GovtAgency, GovtCategory, GovtContribNotes } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
+import CuteLoader from "@/components/CuteLoader";
 import { backfillGovtContributions } from "@/lib/payrollGovt";
 
 const peso = (v: number) =>
@@ -403,6 +404,12 @@ export default function Savings() {
 
   return (
     <div className="space-y-6">
+
+      <CuteLoader
+        show={recalcingGovt}
+        message="Recalculating contributions"
+        submessage="Reading each payslip and updating the reserve"
+      />
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">

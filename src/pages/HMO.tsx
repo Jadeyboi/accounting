@@ -12,6 +12,7 @@ import {
 } from "@/lib/hmo";
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
+import CuteLoader from "@/components/CuteLoader";
 
 const peso = (v: number) =>
   `₱${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -413,6 +414,11 @@ export default function HMO() {
   // ═══════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-6">
+      <CuteLoader
+        show={backfilling}
+        message="Reconciling HMO reserve"
+        submessage="Scanning payslips and linking savings entries"
+      />
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -1016,8 +1022,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className={`${wide ? "max-w-4xl" : "max-w-2xl"} w-full rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-auto`}>
+    <div
+      className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center overflow-y-auto bg-black/50 p-4"
+      style={{ position: "fixed" }}
+    >
+      <div className={`${wide ? "max-w-4xl" : "max-w-2xl"} my-auto w-full rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-auto`}>
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <h3 className="text-base font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
