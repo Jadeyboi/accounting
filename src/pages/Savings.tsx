@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activityLogger";
-import type { Saving, GovtRemittance, GovtAgency, GovtCategory, GovtContribNotes } from "@/types";
+import type { Saving, GovtRemittance, GovtAgency, GovtCategory, GovtContribNotes, ThirteenthMonthNotes, ThirteenthMonthPayment } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
 import CuteLoader from "@/components/CuteLoader";
 import { backfillGovtContributions } from "@/lib/payrollGovt";
+import { backfillThirteenthMonth } from "@/lib/thirteenthMonth";
 
 const peso = (v: number) =>
   `₱${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const GOVT_SOURCES = ["payroll_ec", "payroll_er"];
 const HMO_SOURCES = ["payroll_hmo_company", "payroll_hmo_employee"];
-const AUTO_SOURCES = [...GOVT_SOURCES, ...HMO_SOURCES];
+const T13_SOURCES = ["payroll_13th"];
+const AUTO_SOURCES = [...GOVT_SOURCES, ...HMO_SOURCES, ...T13_SOURCES];
 
 const AGENCIES: GovtAgency[] = ["SSS", "PAGIBIG", "PHILHEALTH", "BIR"];
 const AGENCY_LABEL: Record<GovtAgency, string> = {
@@ -27,6 +29,8 @@ export default function Savings() {
   const [govtItems, setGovtItems] = useState<Saving[]>([]);
   const [hmoItems, setHmoItems] = useState<Saving[]>([]);
   const [hmoPaid, setHmoPaid] = useState(0);
+  const [t13Items, setT13Items] = useState<Saving[]>([]);
+  const [t13Payments, setT13Payments] = useState<ThirteenthMonthPayment[]>([]);
   const [remittances, setRemittances] = useState<GovtRemittance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,9 +84,10 @@ export default function Savings() {
       // Filter out paid items on the client side
       const allItems = (data ?? []) as Saving[];
       const active = allItems.filter((item) => !item.status || item.status === "active");
-      // Separate auto government-contribution + HMO rows from manual savings
+      // Separate auto government-contribution + HMO + 13th-month rows from manual savings
       setGovtItems(active.filter((it) => GOVT_SOURCES.includes(it.source ?? "manual")));
       setHmoItems(active.filter((it) => HMO_SOURCES.includes(it.source ?? "manual")));
+      setT13Items(active.filter((it) => T13_SOURCES.includes(it.source ?? "manual")));
       setItems(active.filter((it) => !AUTO_SOURCES.includes(it.source ?? "manual")));
     }
 
@@ -99,12 +104,70 @@ export default function Savings() {
       .select("amount");
     setHmoPaid((hmoRemitData ?? []).reduce((a: number, r: any) => a + (r.amount ?? 0), 0));
 
+    // Load 13th month payments (table may not exist before migration — ignore errors)
+    const { data: t13PayData } = await supabase
+      .from("thirteenth_month_payments")
+      .select("*")
+      .order("paid_date", { ascending: false });
+    setT13Payments((t13PayData ?? []) as ThirteenthMonthPayment[]);
+
     setLoading(false);
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  // ── 13th month: backfill + record payment ──────────────────────────────
+  const [t13Backfilling, setT13Backfilling] = useState(false);
+  const runT13Backfill = async () => {
+    if (!confirm("Scan all payslips and create missing 13th month accrual savings?\n\nAccrual = basic earned per cutoff ÷ 12. Existing entries are updated in place, not duplicated.")) return;
+    setT13Backfilling(true);
+    try {
+      const res = await backfillThirteenthMonth();
+      await logActivity("updated", "Savings", `13th month backfill (${res.created} created, ${res.updated} updated)`);
+      alert(`Done.\n\nPayslips processed: ${res.processed}\nCreated: ${res.created}\nUpdated: ${res.updated}`);
+      await load();
+    } catch (err) {
+      alert("13th month backfill failed: " + err);
+    } finally {
+      setT13Backfilling(false);
+    }
+  };
+
+  const [t13PayModal, setT13PayModal] = useState<{ employeeId: string; employee: string; year: number; remaining: number } | null>(null);
+  const [t13PayForm, setT13PayForm] = useState({ paid_date: new Date().toISOString().slice(0, 10), amount: "" as number | "", reference: "", is_final_pay: false });
+
+  const openT13Pay = (row: { employeeId: string; employee: string; year: number; remaining: number }) => {
+    setT13PayModal(row);
+    setT13PayForm({
+      paid_date: new Date().toISOString().slice(0, 10),
+      amount: Math.max(0, Math.round((row.remaining + Number.EPSILON) * 100) / 100),
+      reference: "",
+      is_final_pay: false,
+    });
+  };
+
+  const submitT13Payment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!t13PayModal) return;
+    if (!t13PayForm.amount || Number(t13PayForm.amount) <= 0) return alert("Enter a positive amount");
+    const { error } = await supabase.from("thirteenth_month_payments").insert({
+      employee_id: t13PayModal.employeeId,
+      year: t13PayModal.year,
+      paid_date: t13PayForm.paid_date,
+      amount: Number(t13PayForm.amount),
+      reference: t13PayForm.reference || null,
+      is_final_pay: t13PayForm.is_final_pay,
+    });
+    if (error) {
+      alert("Error recording payment: " + error.message + "\n\nIf the table doesn't exist, run supabase/thirteenth-month-setup.sql first.");
+      return;
+    }
+    await logActivity("created", "Savings", `13th month payment ${peso(Number(t13PayForm.amount))} to ${t13PayModal.employee} (${t13PayModal.year})`);
+    setT13PayModal(null);
+    await load();
+  };
 
   const [recalcingGovt, setRecalcingGovt] = useState(false);
   const recalcGovt = async () => {
@@ -168,7 +231,45 @@ export default function Savings() {
   const hmoReserved = hmoCompany + hmoEmployee;
   const hmoRemaining = hmoReserved - hmoPaid;
 
-  const overallTotal = total + govtAccruedTotal + hmoReserved;
+  // ── 13th Month roll-up ──────────────────────────────────────────────────
+  const t13Reserved = t13Items.reduce((a, it) => a + (it.amount ?? 0), 0);
+  const t13Paid = t13Payments.reduce((a, p) => a + (p.amount ?? 0), 0);
+  const t13Available = t13Reserved - t13Paid;
+
+  // Per-employee + per-year breakdown of accrual (entitlement) and payments.
+  interface T13Row {
+    employeeId: string;
+    employee: string;
+    year: number;
+    accrued: number;  // entitlement earned (sum of accruals)
+    paid: number;     // amount already paid
+    remaining: number;
+  }
+  const t13Breakdown: T13Row[] = (() => {
+    const map = new Map<string, T13Row>();
+    for (const it of t13Items) {
+      const n = (it.notes as ThirteenthMonthNotes) ?? null;
+      const empId = n?.employee_id ?? "unknown";
+      const year = n?.year ?? new Date(it.date).getFullYear();
+      const key = `${empId}::${year}`;
+      if (!map.has(key)) {
+        map.set(key, { employeeId: empId, employee: n?.employee ?? "Unknown", year, accrued: 0, paid: 0, remaining: 0 });
+      }
+      map.get(key)!.accrued += it.amount ?? 0;
+    }
+    for (const p of t13Payments) {
+      const key = `${p.employee_id}::${p.year}`;
+      if (!map.has(key)) {
+        map.set(key, { employeeId: p.employee_id, employee: "Unknown", year: p.year, accrued: 0, paid: 0, remaining: 0 });
+      }
+      map.get(key)!.paid += p.amount ?? 0;
+    }
+    const rows = Array.from(map.values());
+    for (const r of rows) r.remaining = Math.round((r.accrued - r.paid + Number.EPSILON) * 100) / 100;
+    return rows.sort((a, b) => b.year - a.year || a.employee.localeCompare(b.employee));
+  })();
+
+  const overallTotal = total + govtAccruedTotal + hmoReserved + t13Reserved;
 
   const openRemitModal = (category: GovtCategory, agency: GovtAgency) => {
     const remaining = (accrued[category][agency] ?? 0) - (remitted[category][agency] ?? 0);
@@ -426,9 +527,9 @@ export default function Savings() {
             <p className="text-xl font-bold tabular-nums text-gray-900">
               {peso(overallTotal)}
             </p>
-            {(govtAccruedTotal > 0 || hmoReserved > 0) && (
+            {(govtAccruedTotal > 0 || hmoReserved > 0 || t13Reserved > 0) && (
               <p className="mt-0.5 text-[11px] text-gray-400">
-                Manual {peso(total)} · Govt {peso(govtAccruedTotal)} · HMO {peso(hmoReserved)}
+                Manual {peso(total)} · Govt {peso(govtAccruedTotal)} · HMO {peso(hmoReserved)} · 13th {peso(t13Reserved)}
               </p>
             )}
           </div>
@@ -554,6 +655,91 @@ export default function Savings() {
           </div>
         </div>
       )}
+
+      {/* ── 13th Month Pay ─────────────────────────────────────────────── */}
+      <div className="panel p-5">
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700">13th Month Pay</h3>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Company-funded reserve. Accrual = basic earned per cutoff ÷ 12. Not deducted from employees.
+            </p>
+          </div>
+          <button type="button" onClick={runT13Backfill} disabled={t13Backfilling} className="btn-secondary shrink-0 disabled:opacity-50">
+            {t13Backfilling ? "Recalculating…" : "Recalculate from Payslips"}
+          </button>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-lg bg-blue-50 p-3 text-center">
+            <p className="text-[10px] uppercase tracking-wide text-blue-600">Accrued (Entitlement)</p>
+            <p className="text-sm font-bold tabular-nums text-blue-900">{peso(t13Reserved)}</p>
+          </div>
+          <div className="rounded-lg bg-emerald-50 p-3 text-center">
+            <p className="text-[10px] uppercase tracking-wide text-emerald-600">Reserved in Savings</p>
+            <p className="text-sm font-bold tabular-nums text-emerald-900">{peso(t13Reserved)}</p>
+          </div>
+          <div className="rounded-lg bg-amber-50 p-3 text-center">
+            <p className="text-[10px] uppercase tracking-wide text-amber-600">Paid</p>
+            <p className="text-sm font-bold tabular-nums text-amber-900">{peso(t13Paid)}</p>
+          </div>
+          <div className="rounded-lg bg-white border border-gray-200 p-3 text-center">
+            <p className="text-[10px] uppercase tracking-wide text-gray-500">Available Balance</p>
+            <p className="text-sm font-bold tabular-nums text-gray-900">{peso(t13Available)}</p>
+          </div>
+        </div>
+
+        {t13Breakdown.length === 0 ? (
+          <p className="py-4 text-center text-xs text-gray-400">
+            No 13th month accruals yet. Finalize payroll or click "Recalculate from Payslips".
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-100 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-gray-400">Employee</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-gray-400">Year</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-gray-400">Accrued</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-gray-400">Paid</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-medium uppercase tracking-wide text-gray-400">Remaining</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {t13Breakdown.map((r) => (
+                  <tr key={`${r.employeeId}-${r.year}`}>
+                    <td className="px-3 py-2 text-gray-800">{r.employee}</td>
+                    <td className="px-3 py-2 text-gray-600">{r.year}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{peso(r.accrued)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{peso(r.paid)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-amber-600">{peso(r.remaining)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        disabled={r.remaining <= 0.005}
+                        onClick={() => openT13Pay(r)}
+                        className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 enabled:hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Record Payment
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 font-semibold">
+                <tr>
+                  <td className="px-3 py-2" colSpan={2}>Total</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{peso(t13Breakdown.reduce((a, r) => a + r.accrued, 0))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{peso(t13Breakdown.reduce((a, r) => a + r.paid, 0))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-amber-700">{peso(t13Breakdown.reduce((a, r) => a + r.remaining, 0))}</td>
+                  <td className="px-3 py-2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ── Add form ────────────────────────────────────────────────────── */}
       <form onSubmit={onCreate} className="panel p-5">
@@ -793,6 +979,50 @@ export default function Savings() {
               <button onClick={() => setShowRemitHistory(false)} className="btn-secondary">Close</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Record 13th Month Payment Modal ──────────────────────────────── */}
+      {t13PayModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={submitT13Payment} className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-gray-900">Record 13th Month Payment</h3>
+              <button type="button" onClick={() => setT13PayModal(null)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4 p-6">
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                {t13PayModal.employee} · {t13PayModal.year} — unpaid balance <b>{peso(t13PayModal.remaining)}</b>
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Payment Date</label>
+                  <input type="date" value={t13PayForm.paid_date} onChange={(e) => setT13PayForm((f) => ({ ...f, paid_date: e.target.value }))} className="input-field" required />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-500">Amount Paid</label>
+                  <input type="number" step="0.01" value={t13PayForm.amount as any} onChange={(e) => setT13PayForm((f) => ({ ...f, amount: e.target.value === "" ? "" : Number(e.target.value) }))} className="input-field" required />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Reference (optional)</label>
+                <input type="text" value={t13PayForm.reference} onChange={(e) => setT13PayForm((f) => ({ ...f, reference: e.target.value }))} className="input-field" placeholder="OR / voucher number" />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input type="checkbox" checked={t13PayForm.is_final_pay} onChange={(e) => setT13PayForm((f) => ({ ...f, is_final_pay: e.target.checked }))} className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                Final-pay settlement
+              </label>
+              <p className="text-[11px] text-gray-400">Supports partial payments. Records reduce the employee's unpaid balance and the Savings balance.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
+              <button type="button" onClick={() => setT13PayModal(null)} className="btn-secondary">Cancel</button>
+              <button type="submit" className="btn-primary">Record Payment</button>
+            </div>
+          </form>
         </div>
       )}
 

@@ -131,8 +131,8 @@ export interface Saving {
   account?: string | null;
   status?: 'active' | 'paid';
   payslip_id?: string | null;
-  source?: 'manual' | 'payroll_ec' | 'payroll_er' | 'payroll_hmo_company' | 'payroll_hmo_employee';
-  notes?: GovtContribNotes | HmoSavingNotes | null;
+  source?: 'manual' | 'payroll_ec' | 'payroll_er' | 'payroll_hmo_company' | 'payroll_hmo_employee' | 'payroll_13th';
+  notes?: GovtContribNotes | HmoSavingNotes | ThirteenthMonthNotes | null;
 }
 
 export type GovtAgency = 'SSS' | 'PAGIBIG' | 'PHILHEALTH' | 'BIR';
@@ -224,6 +224,40 @@ export interface HmoSavingNotes {
     companyDependent?: number;
     employeeDependents?: number;
   };
+}
+
+// ── 13th Month Pay ───────────────────────────────────────────────────────
+export interface ThirteenthMonthNotes {
+  category: 'THIRTEENTH_MONTH';
+  employee?: string;
+  employee_id?: string;
+  period?: string;
+  year?: number;
+  basicEarned?: number;
+  accrual?: number;
+}
+
+export interface ThirteenthMonthPayment {
+  id: string;
+  created_at: string;
+  employee_id: string;
+  year: number;
+  paid_date: string;
+  amount: number;
+  reference?: string | null;
+  is_final_pay: boolean;
+  notes?: string | null;
+}
+
+export interface ThirteenthMonthOpening {
+  id: string;
+  created_at: string;
+  employee_id?: string | null;
+  year: number;
+  accrued: number;
+  reserved: number;
+  paid: number;
+  notes?: string | null;
 }
 
 export interface InventoryItem {

@@ -7,6 +7,7 @@ import { usePagination } from '@/hooks/usePagination'
 import Pagination from '@/components/Pagination'
 import { upsertGovtContributions, removeGovtContributions } from '@/lib/payrollGovt'
 import { upsertHmoSavings, removeHmoSavings, getHmoDeductionForPayslip } from '@/lib/hmo'
+import { upsertThirteenthMonth, removeThirteenthMonth } from '@/lib/thirteenthMonth'
 import { CuteLoader, LOADING_MESSAGES } from '@/components/Loading'
 
 type Mode = 'list' | 'edit'
@@ -234,6 +235,58 @@ export default function Payroll() {
     }
   }
 
+  // Reverse the loan payments that a payslip created: restore each loan's
+  // remaining balance, reactivate completed loans, delete the loan_payment
+  // rows, and remove the matching "Loan Repayment" cash-in transactions.
+  // Called when a payslip (and its linked transaction) is deleted.
+  const reverseLoanPayments = async (payslipId: string, employeeId?: string, payrollDate?: string) => {
+    const { data: payments, error } = await supabase
+      .from('loan_payments')
+      .select('*')
+      .eq('payslip_id', payslipId)
+    if (error) { console.error('Failed to load loan payments:', error.message); return }
+    if (!payments || payments.length === 0) return
+
+    for (const pmt of payments as any[]) {
+      // Restore the loan balance
+      const { data: loan } = await supabase
+        .from('loans')
+        .select('*')
+        .eq('id', pmt.loan_id)
+        .maybeSingle()
+      if (loan) {
+        const restored = Number(loan.remaining_balance) + Number(pmt.amount)
+        await supabase
+          .from('loans')
+          .update({
+            remaining_balance: restored,
+            status: loan.status === 'cancelled' ? 'cancelled' : 'active', // reopen a repaid loan
+            end_date: null,
+          })
+          .eq('id', pmt.loan_id)
+      }
+      // Delete the loan payment record
+      await supabase.from('loan_payments').delete().eq('id', pmt.id)
+    }
+
+    // Remove the "Loan Repayment" cash-in transactions this payslip created.
+    // Matched narrowly by category + date + the employee's name in the note
+    // (processLoanPayments writes `Loan repayment: <name> — ...`), to avoid
+    // touching other employees' repayments posted on the same date.
+    if (payrollDate) {
+      const empName = allEmployees.find(e => e.id === employeeId)?.name
+      let q = supabase
+        .from('transactions')
+        .delete()
+        .eq('category', 'Loan Repayment')
+        .eq('type', 'in')
+        .eq('date', payrollDate)
+      if (empName) q = q.ilike('note', `Loan repayment: ${empName} %`)
+      const { error: txErr } = await q
+      if (txErr) console.error('Failed to remove loan repayment transactions:', txErr.message)
+    }
+  }
+
   const newPayslip = (): Payslip => {
     const baseSalary = Number(employees[0]?.base_salary ?? 0)
     const employeeId = employees[0]?.id ?? ''
@@ -346,6 +399,18 @@ export default function Payroll() {
     } catch (e) {
       console.error('HMO reversal failed:', e)
     }
+    // Reverse any 13th month accrual linked to this payslip
+    try {
+      await removeThirteenthMonth(id)
+    } catch (e) {
+      console.error('13th month reversal failed:', e)
+    }
+    // Reverse loan payments: restore loan balances and remove repayment records
+    try {
+      await reverseLoanPayments(id, pay?.employee_id, pay?.date_issued)
+    } catch (e) {
+      console.error('Loan payment reversal failed:', e)
+    }
     const emp = allEmployees.find(e => e.id === pay?.employee_id)
     await logActivity('deleted', 'Payroll', `Deleted payslip for ${emp?.name ?? 'Unknown'}`)
     await refresh()
@@ -442,6 +507,21 @@ export default function Payroll() {
       })
     } catch (e) {
       console.error('HMO set-aside failed:', e)
+    }
+
+    // Auto set-aside 13th month accrual (company-funded; basic earned / 12)
+    try {
+      await upsertThirteenthMonth({
+        payslipId: p.id,
+        employeeId: p.employee_id,
+        employeeName: currentEmployee?.name ?? '',
+        periodStart: p.period_start,
+        periodEnd: p.period_end,
+        dateIssued: p.date_issued,
+        basicEarned: p.gross_salary ?? 0,
+      })
+    } catch (e) {
+      console.error('13th month set-aside failed:', e)
     }
 
     setEditingPayslip(null)
@@ -692,6 +772,20 @@ export default function Payroll() {
         } catch (e) {
           console.error('HMO set-aside failed for', payslip.id, e)
         }
+        // 13th month accrual (company-funded; basic earned / 12)
+        try {
+          await upsertThirteenthMonth({
+            payslipId: payslip.id,
+            employeeId: payslip.employee_id,
+            employeeName: emp?.name ?? '',
+            periodStart: payslip.period_start,
+            periodEnd: payslip.period_end,
+            dateIssued: payslip.date_issued,
+            basicEarned: payslip.gross_salary ?? 0,
+          })
+        } catch (e) {
+          console.error('13th month set-aside failed for', payslip.id, e)
+        }
       }
 
       setShowBulkModal(false)
@@ -756,6 +850,10 @@ export default function Payroll() {
         try { await removeGovtContributions(p.id) } catch (e) { console.error('Govt reversal failed:', e) }
         // 4. Reverse HMO set-asides
         try { await removeHmoSavings(p.id) } catch (e) { console.error('HMO reversal failed:', e) }
+        // 5. Reverse 13th month accrual
+        try { await removeThirteenthMonth(p.id) } catch (e) { console.error('13th month reversal failed:', e) }
+        // 6. Reverse loan payments (restore balances, remove repayment records)
+        try { await reverseLoanPayments(p.id, p.employee_id, p.date_issued) } catch (e) { console.error('Loan payment reversal failed:', e) }
       }
 
       // Clear selection for the deleted entries

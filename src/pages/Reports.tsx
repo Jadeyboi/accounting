@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import type { Transaction } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
-import html2canvas from "html2canvas";
+import { CuteLoader, LOADING_MESSAGES } from "@/components/Loading";
 import jsPDF from "jspdf";
 import {
   Chart as ChartJS,
@@ -78,6 +78,7 @@ export default function Reports() {
   const [usdRate, setUsdRate] = useState<string>("56");
   const [isLoadingRate, setIsLoadingRate] = useState(false);
   const [rateError, setRateError] = useState<string>("");
+  const [exporting, setExporting] = useState(false);
 
   const reportRef = useRef<HTMLDivElement | null>(null);
 
@@ -351,76 +352,219 @@ export default function Reports() {
   };
 
   const exportPDF = async () => {
-    if (!reportRef.current) return;
-    
-    const element = reportRef.current;
-    document.body.classList.add("pdf-mode");
-    
+    if (exporting) return;
+    if (items.length === 0 && savingsItems.length === 0) {
+      alert("No data to export for the selected period.");
+      return;
+    }
+    setExporting(true);
     try {
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        letterRendering: true,
-      });
-      
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
+      const rate = Number(usdRate) || 0;
+      const fmtPhp = (v: number) =>
+        v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const fmtUsd = (v: number) =>
+        rate > 0 ? (v / rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
+
+      // Landscape A4 for wide tables so no columns are cut off.
+      const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      
-      const imgWidth = pageWidth - 40; // 20pt margin each side
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let y = 20;
-      
-      if (imgHeight <= pageHeight - 40) {
-        pdf.addImage(imgData, "PNG", 20, y, imgWidth, imgHeight);
-      } else {
-        let position = 0;
-        const sliceHeight = (canvas.width * (pageHeight - 40)) / imgWidth;
-        
-        while (position < canvas.height) {
-          const slice = document.createElement("canvas");
-          slice.width = canvas.width;
-          slice.height = Math.min(sliceHeight, canvas.height - position);
-          const sctx = slice.getContext("2d");
-          
-          if (sctx) {
-            sctx.drawImage(
-              canvas,
-              0,
-              position,
-              canvas.width,
-              slice.height,
-              0,
-              0,
-              canvas.width,
-              slice.height
-            );
-          }
-          
-          const sliceData = slice.toDataURL("image/png");
-          pdf.addImage(
-            sliceData,
-            "PNG",
-            20,
-            20,
-            imgWidth,
-            (slice.height * imgWidth) / canvas.width
-          );
-          
-          position += slice.height;
-          if (position < canvas.height) pdf.addPage();
+      const margin = 32;
+      const rowHeight = 18;
+      const headerHeight = 22;
+
+      // Footer page numbers are stamped at the very end once total pages are known.
+      const stampTitle = (title: string, subtitle?: string) => {
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(16);
+        pdf.setTextColor(15, 23, 42);
+        pdf.text(title, margin, margin + 6);
+        if (subtitle) {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(9);
+          pdf.setTextColor(100, 116, 139);
+          pdf.text(subtitle, margin, margin + 22);
         }
+      };
+
+      /**
+       * Draw a table across as many pages as needed.
+       * columns: { header, width (pt), align }  — widths should sum to usable width.
+       * rows: string[][] matching columns.
+       * Returns nothing; advances the PDF cursor and adds pages.
+       */
+      const drawTable = (
+        title: string,
+        subtitle: string,
+        columns: { header: string; width: number; align: "left" | "right" }[],
+        rows: string[][],
+        totalRow?: string[]
+      ) => {
+        let y = margin + 36;
+        stampTitle(title, subtitle);
+
+        const drawHeader = () => {
+          pdf.setFillColor(241, 245, 249);
+          pdf.rect(margin, y, columns.reduce((a, c) => a + c.width, 0), headerHeight, "F");
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(9);
+          pdf.setTextColor(51, 65, 85);
+          let x = margin;
+          for (const col of columns) {
+            const tx = col.align === "right" ? x + col.width - 6 : x + 6;
+            pdf.text(col.header, tx, y + 15, { align: col.align });
+            x += col.width;
+          }
+          y += headerHeight;
+        };
+
+        drawHeader();
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(30, 41, 59);
+
+        for (const row of rows) {
+          // New page if the next row would overflow (leave room for footer).
+          if (y + rowHeight > pageHeight - margin) {
+            pdf.addPage();
+            y = margin + 10;
+            drawHeader();
+            pdf.setFont("helvetica", "normal");
+            pdf.setTextColor(30, 41, 59);
+          }
+          let x = margin;
+          pdf.setFontSize(8.5);
+          for (let i = 0; i < columns.length; i++) {
+            const col = columns[i];
+            const tx = col.align === "right" ? x + col.width - 6 : x + 6;
+            // Truncate long text to the column width.
+            let text = row[i] ?? "";
+            const maxChars = Math.floor(col.width / 4.6);
+            if (text.length > maxChars) text = text.slice(0, maxChars - 1) + "…";
+            pdf.text(text, tx, y + 13, { align: col.align });
+            x += col.width;
+          }
+          pdf.setDrawColor(226, 232, 240);
+          pdf.line(margin, y + rowHeight, margin + columns.reduce((a, c) => a + c.width, 0), y + rowHeight);
+          y += rowHeight;
+        }
+
+        if (totalRow) {
+          if (y + rowHeight > pageHeight - margin) {
+            pdf.addPage();
+            y = margin + 10;
+            drawHeader();
+          }
+          pdf.setFillColor(226, 232, 240);
+          pdf.rect(margin, y, columns.reduce((a, c) => a + c.width, 0), rowHeight, "F");
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(9);
+          pdf.setTextColor(15, 23, 42);
+          let x = margin;
+          for (let i = 0; i < columns.length; i++) {
+            const col = columns[i];
+            const tx = col.align === "right" ? x + col.width - 6 : x + 6;
+            pdf.text(totalRow[i] ?? "", tx, y + 13, { align: col.align });
+            x += col.width;
+          }
+          y += rowHeight;
+        }
+      };
+
+      const usableWidth = pageWidth - margin * 2;
+
+      // ── Page 1: Summary ────────────────────────────────────────────────
+      stampTitle("Financial Report", `Period: ${selectedMonthsText}`);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(100, 116, 139);
+      pdf.text(
+        `Generated: ${new Date().toLocaleDateString()}   •   Exchange Rate: 1 USD = ${rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} PHP`,
+        margin,
+        margin + 40
+      );
+
+      const summary: [string, number][] = [
+        ["Total Credit (In)", totals.credit],
+        ["Total Debit (Out + Expense)", totals.debit],
+        ["Remaining", remaining],
+        ["Total Savings (All Time)", savingsTotal],
+        ["Remaining After Savings", remaining - savingsTotal],
+      ];
+      let sy = margin + 70;
+      pdf.setFontSize(11);
+      for (const [label, val] of summary) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(51, 65, 85);
+        pdf.text(label, margin, sy);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(15, 23, 42);
+        pdf.text(`PHP ${fmtPhp(val)}    (USD ${fmtUsd(val)})`, margin + 260, sy);
+        sy += 22;
       }
-      
-      const filename = `financial-report-${selectedMonthsText.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.pdf`;
+
+      // ── Transactions table (ALL filtered records) ──────────────────────
+      if (items.length > 0) {
+        pdf.addPage();
+        const txColumns = [
+          { header: "Date", width: usableWidth * 0.12, align: "left" as const },
+          { header: "Type", width: usableWidth * 0.12, align: "left" as const },
+          { header: "Category", width: usableWidth * 0.2, align: "left" as const },
+          { header: "Amount (PHP)", width: usableWidth * 0.17, align: "right" as const },
+          { header: "Amount (USD)", width: usableWidth * 0.14, align: "right" as const },
+          { header: "Note", width: usableWidth * 0.25, align: "left" as const },
+        ];
+        const txRows = items.map((t) => [
+          t.date,
+          t.type === "in" ? "Credit" : t.type === "out" ? "Debit" : "Expense",
+          t.category || "-",
+          fmtPhp(t.amount),
+          fmtUsd(t.amount),
+          t.note || "-",
+        ]);
+        const net = items.reduce((s, t) => s + (t.type === "in" ? t.amount : -t.amount), 0);
+        const txTotal = ["Total", "", "", fmtPhp(net), fmtUsd(net), ""];
+        drawTable("Transaction Breakdown", `${items.length} records • ${selectedMonthsText}`, txColumns, txRows, txTotal);
+      }
+
+      // ── Savings table (ALL filtered records) ───────────────────────────
+      if (savingsItems.length > 0) {
+        pdf.addPage();
+        const svColumns = [
+          { header: "Date", width: usableWidth * 0.15, align: "left" as const },
+          { header: "Description", width: usableWidth * 0.33, align: "left" as const },
+          { header: "Account", width: usableWidth * 0.22, align: "left" as const },
+          { header: "Amount (PHP)", width: usableWidth * 0.15, align: "right" as const },
+          { header: "Amount (USD)", width: usableWidth * 0.15, align: "right" as const },
+        ];
+        const svRows = savingsItems.map((s) => [
+          s.date ?? "",
+          s.description || "-",
+          s.account || "-",
+          fmtPhp(s.amount ?? 0),
+          fmtUsd(s.amount ?? 0),
+        ]);
+        const svTotal = ["Total Savings", "", "", fmtPhp(savingsTotal), fmtUsd(savingsTotal)];
+        drawTable("Savings Breakdown", `${savingsItems.length} entries • all time`, svColumns, svRows, svTotal);
+      }
+
+      // ── Page numbers on every page ─────────────────────────────────────
+      const pageCount = pdf.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        pdf.setPage(p);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.setTextColor(148, 163, 184);
+        pdf.text(`Page ${p} of ${pageCount}`, pageWidth - margin, pageHeight - 14, { align: "right" });
+        pdf.text("Avensetech — Financial Report", margin, pageHeight - 14);
+      }
+
+      const filename = `financial-report-${selectedMonthsText.replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.pdf`;
       pdf.save(filename);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating PDF:", error);
-      alert("Error generating PDF. Please try again.");
+      alert(`Error generating PDF: ${error?.message ?? error}. Please try again.`);
     } finally {
-      document.body.classList.remove("pdf-mode");
+      setExporting(false);
     }
   };
 
@@ -462,6 +606,7 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
+      <CuteLoader show={exporting} message={LOADING_MESSAGES.exporting} submessage="Building your full report PDF" />
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Reports</h2>
@@ -599,9 +744,10 @@ export default function Reports() {
           )}
           <button
             onClick={exportPDF}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700"
+            disabled={exporting || loading}
+            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700 disabled:opacity-50"
           >
-            Export PDF
+            {exporting ? "Exporting…" : "Export PDF"}
           </button>
         </div>
       </div>
