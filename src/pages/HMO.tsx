@@ -44,6 +44,7 @@ const blankDep = (): FormDep => ({
 
 export default function HMO() {
   const [tab, setTab] = useState<Tab>("enrollments");
+  const [search, setSearch] = useState("");
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [enrollments, setEnrollments] = useState<HmoEnrollment[]>([]);
   const [dependents, setDependents] = useState<HmoDependent[]>([]);
@@ -83,6 +84,7 @@ export default function HMO() {
   );
 
   const empName = (id: string) => allEmployees.find((e) => e.id === id)?.name ?? "Unknown";
+  const empNumber = (id: string) => allEmployees.find((e) => e.id === id)?.employee_number ?? "";
   const depsFor = (enrollmentId: string) => dependents.filter((d) => d.enrollment_id === enrollmentId);
 
   // ── Per-employee HMO breakdown (monthly) ───────────────────────────────
@@ -133,6 +135,19 @@ export default function HMO() {
       { principal: 0, companyDep: 0, employeeDep: 0, company: 0, employee: 0, total: 0 }
     );
   }, [rows]);
+
+  // Enrollment rows filtered by the search term (employee name or employee ID).
+  // Case-insensitive, partial match, across ALL enrollments (not paginated).
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const name = empName(r.enrollment.employee_id).toLowerCase();
+      const num = String(empNumber(r.enrollment.employee_id)).toLowerCase();
+      return name.includes(q) || num.includes(q);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, search, allEmployees]);
 
   // ── Savings balances ───────────────────────────────────────────────────
   const companyReserved = savings.filter((s) => s.source === "payroll_hmo_company").reduce((a, s) => a + (s.amount ?? 0), 0);
@@ -466,16 +481,46 @@ export default function HMO() {
       {/* ════════════════ Enrollments tab ═══════════════════════════════════ */}
       {tab === "enrollments" && !loading && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <button onClick={openNew} className="btn-primary">+ New Enrollment</button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Search bar */}
+            <div className="relative w-full sm:max-w-xs">
+              <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by employee name or ID…"
+                className="input-field w-full !pl-10 !pr-10"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <button onClick={openNew} className="btn-primary shrink-0">+ New Enrollment</button>
           </div>
 
           {enrollments.length === 0 && !showForm && (
             <div className="panel p-8 text-center text-sm text-gray-400">No HMO enrollments yet.</div>
           )}
 
+          {enrollments.length > 0 && filteredRows.length === 0 && (
+            <div className="panel p-8 text-center text-sm text-gray-400">No matching employees found.</div>
+          )}
+
           {/* ── Enrollment list (cards) ─────────────────────────────────────── */}
-          {rows.map((r) => (
+          {filteredRows.map((r) => (
             <div key={r.enrollment.id} className="panel p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
