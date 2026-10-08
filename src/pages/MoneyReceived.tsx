@@ -4,6 +4,7 @@ import { logActivity } from '@/lib/activityLogger'
 import type { MoneyReceived } from '@/types'
 import { usePagination } from '@/hooks/usePagination'
 import Pagination from '@/components/Pagination'
+import ModalPortal from '@/components/ModalPortal'
 
 const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return '-'
@@ -537,9 +538,10 @@ export default function MoneyReceived() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between">
+        <ModalPortal>
+        <div className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4" style={{ position: 'fixed' }}>
+          <div className="flex h-[100dvh] w-full max-w-2xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <h3 className="text-xl font-bold text-gray-900">
                 {editingRecord ? 'Edit Record' : 'Add Money Received'}
               </h3>
@@ -553,7 +555,7 @@ export default function MoneyReceived() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date Received *</label>
@@ -741,7 +743,7 @@ export default function MoneyReceived() {
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="flex justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
               <button
                 onClick={() => { setShowModal(false); resetForm(); }}
                 className="rounded-md bg-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-400"
@@ -757,13 +759,15 @@ export default function MoneyReceived() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* View Details Modal */}
       {showViewModal && viewingRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between">
+        <ModalPortal>
+        <div className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4" style={{ position: 'fixed' }}>
+          <div className="flex h-[100dvh] w-full max-w-2xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <h3 className="text-xl font-bold text-gray-900">Money Received Details</h3>
               <button
                 onClick={() => { setShowViewModal(false); setViewingRecord(null); }}
@@ -775,7 +779,7 @@ export default function MoneyReceived() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-sm text-gray-500">Date Received:</span>
@@ -848,7 +852,7 @@ export default function MoneyReceived() {
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end">
+            <div className="flex justify-end border-t border-gray-200 bg-white px-6 py-4">
               <button
                 onClick={() => { setShowViewModal(false); setViewingRecord(null); }}
                 className="rounded-md bg-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-400"
@@ -858,6 +862,7 @@ export default function MoneyReceived() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   )
