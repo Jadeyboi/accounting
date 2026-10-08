@@ -15,33 +15,96 @@ export interface StatutoryDeductions {
   netPay: number
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Configurable statutory rates (PH). These default to the 2025 schedule.
+// They can be overridden at runtime via setStatutoryRates(...) — see
+// loadStatutoryRates() which reads the effective-dated DB config. All
+// calculation functions read from the live `RATES` object so a single
+// override updates every computation consistently.
+// ─────────────────────────────────────────────────────────────────────────
+export interface StatutoryRates {
+  effectiveDate: string            // ISO date this schedule takes effect
+  sss: {
+    employeeRate: number           // e.g. 0.05
+    employerRate: number           // e.g. 0.10
+    mscFloor: number               // minimum monthly salary credit
+    mscCeiling: number             // maximum monthly salary credit
+    mscStep: number                // credit granularity
+    mscBase: number                // credit at the first step above the floor band
+    mscBaseSalary: number          // salary at/above which stepping starts
+    ecLowAmount: number            // Employees' Compensation premium (low MSC)
+    ecHighAmount: number           // EC premium (high MSC)
+    ecThreshold: number            // MSC at/below which the low EC applies
+  }
+  pagibig: {
+    lowRate: number                // rate when salary <= lowThreshold
+    highRate: number               // rate when salary > lowThreshold
+    lowThreshold: number
+    fundSalaryCap: number          // max salary the rate applies to
+    employerRate: number
+  }
+  philhealth: {
+    rate: number                   // employee share (= employer share)
+    salaryFloor: number
+    salaryCeiling: number
+  }
+}
+
+export const DEFAULT_STATUTORY_RATES: StatutoryRates = {
+  effectiveDate: '2025-01-01',
+  sss: {
+    employeeRate: 0.05, employerRate: 0.10,
+    mscFloor: 5000, mscCeiling: 35000, mscStep: 500, mscBase: 5500, mscBaseSalary: 5250,
+    ecLowAmount: 10, ecHighAmount: 30, ecThreshold: 14500,
+  },
+  pagibig: { lowRate: 0.01, highRate: 0.02, lowThreshold: 1500, fundSalaryCap: 10000, employerRate: 0.02 },
+  philhealth: { rate: 0.025, salaryFloor: 10000, salaryCeiling: 100000 },
+}
+
+// Live rates — mutable via setStatutoryRates. Starts at the 2025 default.
+let RATES: StatutoryRates = DEFAULT_STATUTORY_RATES
+
+/** Override the active statutory rates (e.g. after loading from DB config). */
+export function setStatutoryRates(rates: StatutoryRates) {
+  RATES = rates
+}
+
+/** Return the currently active statutory rates. */
+export function getStatutoryRates(): StatutoryRates {
+  return RATES
+}
+
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
 const getSssMonthlySalaryCredit = (monthlySalary: number) => {
+  const s = RATES.sss
   if (monthlySalary <= 0) return 0
-  if (monthlySalary < 5250) return 5000
-  return Math.min(35000, 5500 + Math.floor((monthlySalary - 5250) / 500) * 500)
+  if (monthlySalary < s.mscBaseSalary) return s.mscFloor
+  return Math.min(s.mscCeiling, s.mscBase + Math.floor((monthlySalary - s.mscBaseSalary) / s.mscStep) * s.mscStep)
 }
 
-const calculateSssMonthly = (monthlySalary: number) => roundCurrency(getSssMonthlySalaryCredit(monthlySalary) * 0.05)
+const calculateSssMonthly = (monthlySalary: number) => roundCurrency(getSssMonthlySalaryCredit(monthlySalary) * RATES.sss.employeeRate)
 
 const calculateEmployerSssMonthly = (monthlySalary: number) => {
+  const s = RATES.sss
   const monthlySalaryCredit = getSssMonthlySalaryCredit(monthlySalary)
   if (monthlySalaryCredit === 0) return 0
-  const employeesCompensation = monthlySalaryCredit <= 14500 ? 10 : 30
-  return roundCurrency(monthlySalaryCredit * 0.1 + employeesCompensation)
+  const employeesCompensation = monthlySalaryCredit <= s.ecThreshold ? s.ecLowAmount : s.ecHighAmount
+  return roundCurrency(monthlySalaryCredit * s.employerRate + employeesCompensation)
 }
 
 const calculatePagibigMonthly = (monthlySalary: number) => {
+  const p = RATES.pagibig
   if (monthlySalary <= 0) return 0
-  const fundSalary = Math.min(monthlySalary, 10000)
-  return roundCurrency(fundSalary * (monthlySalary <= 1500 ? 0.01 : 0.02))
+  const fundSalary = Math.min(monthlySalary, p.fundSalaryCap)
+  return roundCurrency(fundSalary * (monthlySalary <= p.lowThreshold ? p.lowRate : p.highRate))
 }
 
 const calculatePhilhealthMonthly = (monthlySalary: number) => {
+  const h = RATES.philhealth
   if (monthlySalary <= 0) return 0
-  const premiumBase = Math.min(Math.max(monthlySalary, 10000), 100000)
-  return roundCurrency(premiumBase * 0.025)
+  const premiumBase = Math.min(Math.max(monthlySalary, h.salaryFloor), h.salaryCeiling)
+  return roundCurrency(premiumBase * h.rate)
 }
 
 const calculateWithholdingTax = (taxablePay: number, frequency: PayrollFrequency) => {
@@ -85,7 +148,7 @@ export function calculateStatutoryDeductions(
   const pagibig = calculatePagibigMonthly(safeMonthlySalary) / divisor
   const philhealth = calculatePhilhealthMonthly(safeMonthlySalary) / divisor
   const employerSss = calculateEmployerSssMonthly(safeMonthlySalary) / divisor
-  const employerPagibig = Math.min(safeMonthlySalary, 10000) * 0.02 / divisor
+  const employerPagibig = Math.min(safeMonthlySalary, RATES.pagibig.fundSalaryCap) * RATES.pagibig.employerRate / divisor
   const employerPhilhealth = calculatePhilhealthMonthly(safeMonthlySalary) / divisor
   const tax = calculateWithholdingTax(grossPay - sss - pagibig - philhealth, frequency)
   const total = roundCurrency(sss + pagibig + philhealth + tax)

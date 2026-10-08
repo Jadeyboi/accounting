@@ -3,6 +3,7 @@ import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import NotificationsBell from "@/components/NotificationsBell";
 import { NavigationLoader } from "@/components/Loading";
+import { loadStatutoryRates } from "@/lib/loadStatutoryRates";
 import Home from "@/pages/Home";
 import Monthly from "@/pages/Monthly";
 import Reports from "@/pages/Reports";
@@ -64,7 +65,7 @@ export default function App() {
   const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem("sidebarCollapsed") === "1");
   const [mustChangePassword, setMustChangePassword] = useState(false);
 
-  useEffect(() => { checkAuth(); }, []);
+  useEffect(() => { checkAuth(); loadStatutoryRates(); }, []);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calculateStatutoryDeductions } from './statutoryDeductions'
+import { calculateStatutoryDeductions, setStatutoryRates, getStatutoryRates, DEFAULT_STATUTORY_RATES } from './statutoryDeductions'
 import { toMonthly, toQuarterly, toMonthlyRaw, toQuarterlyRaw } from './hmo'
 import { accrualForBasic, yearOf } from './thirteenthMonth'
 
@@ -106,5 +106,31 @@ describe('13th month accrual', () => {
   })
   it('yearOf reads the calendar year from the period end', () => {
     expect(yearOf('2026-10-15')).toBe(2026)
+  })
+})
+
+// ───────────────────────────────────────────────────────────────────────────
+// Configurable statutory rates
+// ───────────────────────────────────────────────────────────────────────────
+describe('configurable statutory rates', () => {
+  it('default rates match the built-in 2025 schedule', () => {
+    expect(getStatutoryRates()).toEqual(DEFAULT_STATUTORY_RATES)
+  })
+
+  it('overriding rates changes the computation, then restores', () => {
+    const base = calculateStatutoryDeductions(20000, 'monthly')
+    expect(base.philhealth).toBe(500) // 2.5%
+
+    // Override PhilHealth to 5% and recompute
+    setStatutoryRates({
+      ...DEFAULT_STATUTORY_RATES,
+      philhealth: { ...DEFAULT_STATUTORY_RATES.philhealth, rate: 0.05 },
+    })
+    const changed = calculateStatutoryDeductions(20000, 'monthly')
+    expect(changed.philhealth).toBe(1000) // 5%
+
+    // Restore default so other tests are unaffected
+    setStatutoryRates(DEFAULT_STATUTORY_RATES)
+    expect(calculateStatutoryDeductions(20000, 'monthly').philhealth).toBe(500)
   })
 })
