@@ -125,6 +125,49 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
     category: string; note: string; receipt: string; receiptFile?: File | null;
   }>({ date: "", type: "in", amount: "", category: "", note: "", receipt: "", receiptFile: null });
 
+  // Open a receipt attachment. Works whether the 'receipts' bucket is public
+  // or private: it extracts the storage path from the stored URL and asks for
+  // a short-lived signed URL; if that fails, it falls back to the stored URL.
+  const openReceipt = async (receiptUrl: string) => {
+    const marker = "/receipts/";
+    const idx = receiptUrl.indexOf(marker);
+    const path = idx !== -1 ? decodeURIComponent(receiptUrl.slice(idx + marker.length).split("?")[0]) : "";
+
+    // 1) Preferred: download the file via the authenticated Storage API and
+    //    open it as a blob URL. This avoids the public CDN path, which can be
+    //    blocked at the storage edge even for public buckets.
+    if (path) {
+      try {
+        const { data, error } = await supabase.storage.from("receipts").download(path);
+        if (!error && data) {
+          const blobUrl = URL.createObjectURL(data);
+          const win = window.open(blobUrl, "_blank", "noopener,noreferrer");
+          // Revoke after a delay so the new tab has time to load it.
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+          if (win) return;
+        }
+      } catch (e) {
+        console.error("Receipt download failed:", e);
+      }
+
+      // 2) Fallback: a short-lived signed URL (different endpoint than public).
+      try {
+        const { data, error } = await supabase.storage
+          .from("receipts")
+          .createSignedUrl(path, 60 * 5);
+        if (!error && data?.signedUrl) {
+          window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+          return;
+        }
+      } catch (e) {
+        console.error("Signed URL failed:", e);
+      }
+    }
+
+    // 3) Last resort: the stored public URL.
+    window.open(receiptUrl, "_blank", "noopener,noreferrer");
+  };
+
   const startEdit = (t: Transaction) => {
     setEditId(t.id);
     setEditFields({ date: t.date, type: t.type, amount: t.amount, category: t.category ?? "", note: t.note ?? "", receipt: t.receipt_url ?? "", receiptFile: null });
@@ -299,9 +342,20 @@ export default function TransactionList({ refreshKey, onChanged }: Props) {
                       <div className="flex items-center gap-2">
                         <div>{t.note ?? ""}</div>
                         {t.receipt_url ? (
-                          <a href={t.receipt_url} target="_blank" rel="noreferrer">
-                            <img src={t.receipt_url} alt="receipt" className="h-8 w-8 rounded object-cover border" />
-                          </a>
+                          <button
+                            type="button"
+                            onClick={() => openReceipt(t.receipt_url as string)}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 focus:outline-none"
+                            title="View receipt"
+                          >
+                            <img
+                              src={t.receipt_url}
+                              alt=""
+                              className="h-8 w-8 cursor-zoom-in rounded border object-cover hover:opacity-80"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                            />
+                            <span className="underline">View</span>
+                          </button>
                         ) : null}
                       </div>
                     </td>
