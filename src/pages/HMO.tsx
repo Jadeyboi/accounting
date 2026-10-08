@@ -13,6 +13,7 @@ import {
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
 import CuteLoader from "@/components/CuteLoader";
+import ModalPortal from "@/components/ModalPortal";
 
 const peso = (v: number) =>
   `₱${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -920,7 +921,7 @@ export default function HMO() {
               <input className="input-field" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} />
             </Field>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="sticky bottom-0 -mx-6 -mb-6 flex justify-end gap-2 border-t border-gray-100 bg-white px-6 py-4">
               <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
               <button type="submit" className="btn-primary">Save Enrollment</button>
             </div>
@@ -942,7 +943,7 @@ export default function HMO() {
               <Field label="Due Date"><input type="date" className="input-field" value={billForm.due_date} onChange={(e) => setBillForm((f) => ({ ...f, due_date: e.target.value }))} /></Field>
             </div>
             <Field label="Amount Due"><input type="number" step="0.01" className="input-field" value={billForm.amount_due as any} onChange={(e) => setBillForm((f) => ({ ...f, amount_due: e.target.value === "" ? "" : Number(e.target.value) }))} /></Field>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="sticky bottom-0 -mx-6 -mb-6 flex justify-end gap-2 border-t border-gray-100 bg-white px-6 py-4">
               <button type="button" className="btn-secondary" onClick={() => setShowBillModal(false)}>Cancel</button>
               <button type="submit" className="btn-primary">Save Bill</button>
             </div>
@@ -963,7 +964,7 @@ export default function HMO() {
               <Field label="Amount Paid"><input type="number" step="0.01" className="input-field" value={payForm.amount as any} onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value === "" ? "" : Number(e.target.value) }))} required /></Field>
             </div>
             <Field label="Reference (optional)"><input className="input-field" value={payForm.reference} onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))} /></Field>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="sticky bottom-0 -mx-6 -mb-6 flex justify-end gap-2 border-t border-gray-100 bg-white px-6 py-4">
               <button type="button" className="btn-secondary" onClick={() => setPayModal(null)}>Cancel</button>
               <button type="submit" className="btn-primary">Record Payment</button>
             </div>
@@ -1022,21 +1023,27 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div
-      className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center overflow-y-auto bg-black/50 p-4"
-      style={{ position: "fixed" }}
-    >
-      <div className={`${wide ? "max-w-4xl" : "max-w-2xl"} my-auto w-full rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-auto`}>
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <ModalPortal>
+      <div
+        className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center bg-black/50 p-0 sm:p-4"
+        style={{ position: "fixed" }}
+      >
+        <div className={`${wide ? "max-w-4xl" : "max-w-2xl"} flex h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl`}>
+          {/* Sticky header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
+            <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+            <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* Scrollable body (children include the form + its sticky footer) */}
+          <div className="flex-1 overflow-y-auto">
+            {children}
+          </div>
         </div>
-        {children}
       </div>
-    </div>
+    </ModalPortal>
   );
 }
