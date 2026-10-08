@@ -871,18 +871,38 @@ export default function HMO() {
                         <input className="input-field bg-gray-100" readOnly value={peso(r2((Number(d.premium) || 0) / 3))} />
                       </Field>
                       <Field label="Payment">
-                        <div className="mt-1 flex gap-3 text-xs">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="radio" name={`dep-cover-${i}`} checked={d.isCompanyCovered}
+                        <div className="mt-1 flex gap-2 text-xs">
+                          <label
+                            className={`flex items-center gap-1.5 cursor-pointer rounded-md border px-2 py-1 transition-colors ${
+                              d.isCompanyCovered
+                                ? "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                                : "border-gray-300 text-gray-600 hover:border-gray-400 dark:border-gray-600 dark:text-gray-300"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`dep-cover-${i}`}
+                              checked={d.isCompanyCovered}
                               onChange={() => setCompanyCoveredDep(i)}
-                              className="h-3.5 w-3.5 text-blue-600 border-gray-300" />
-                            <span className="text-blue-700 font-medium">Company</span>
+                              className="h-3.5 w-3.5 accent-red-600"
+                            />
+                            <span className="font-medium">Company</span>
                           </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="radio" name={`dep-cover-${i}`} checked={!d.isCompanyCovered}
+                          <label
+                            className={`flex items-center gap-1.5 cursor-pointer rounded-md border px-2 py-1 transition-colors ${
+                              !d.isCompanyCovered
+                                ? "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
+                                : "border-gray-300 text-gray-600 hover:border-gray-400 dark:border-gray-600 dark:text-gray-300"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`dep-cover-${i}`}
+                              checked={!d.isCompanyCovered}
                               onChange={() => updateDep(i, { isCompanyCovered: false })}
-                              className="h-3.5 w-3.5 text-amber-600 border-gray-300" />
-                            <span className="text-amber-700 font-medium">Employee</span>
+                              className="h-3.5 w-3.5 accent-red-600"
+                            />
+                            <span className="font-medium">Employee</span>
                           </label>
                         </div>
                       </Field>
