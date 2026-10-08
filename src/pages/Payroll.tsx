@@ -9,6 +9,7 @@ import { upsertGovtContributions, removeGovtContributions } from '@/lib/payrollG
 import { upsertHmoSavings, removeHmoSavings, getHmoDeductionForPayslip } from '@/lib/hmo'
 import { upsertThirteenthMonth, removeThirteenthMonth } from '@/lib/thirteenthMonth'
 import { CuteLoader, LOADING_MESSAGES } from '@/components/Loading'
+import ModalPortal from '@/components/ModalPortal'
 
 type Mode = 'list' | 'edit'
 
@@ -1133,17 +1134,11 @@ export default function Payroll() {
           <p className="text-sm text-slate-600">Create and edit payslips. Processing will log an expense automatically.</p>
         </div>
         <div className="flex gap-2">
-          {mode === 'list' ? (
+          {mode === 'list' && (
             <>
               <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700" onClick={() => onEditPayslip()}>New Payslip</button>
               <button className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-purple-700" onClick={() => setShowBulkModal(true)}>Bulk Generate</button>
               <button className="rounded-md bg-gray-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-gray-700" onClick={refresh}>Refresh</button>
-            </>
-          ) : (
-            <>
-              <button className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200" onClick={() => { setMode('list'); setEditingPayslip(null) }}>Back</button>
-              <button className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700 disabled:opacity-50" onClick={onSavePayslip} disabled={savingPayslip}>{savingPayslip ? 'Saving…' : 'Process & Save'}</button>
-              <button className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black" onClick={onDownloadPdf}>Download PDF</button>
             </>
           )}
         </div>
@@ -1444,6 +1439,20 @@ export default function Payroll() {
       )}
 
       {mode === 'edit' && editingPayslip && (
+        <ModalPortal>
+        <div className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4" style={{ position: 'fixed' }}>
+          <div className="flex h-[100dvh] w-full max-w-5xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[92vh] sm:rounded-lg">
+            {/* Sticky header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+              <h3 className="text-lg font-bold text-slate-900">{editingPayslip.transaction_id ? 'Edit Payslip' : 'Generate Payslip'}</h3>
+              <button onClick={() => { setMode('list'); setEditingPayslip(null) }} className="text-gray-500 hover:text-gray-700" aria-label="Close">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 text-base font-semibold text-slate-900">Payslip Details</div>
@@ -1691,18 +1700,29 @@ export default function Payroll() {
             </div>
           </div>
         </div>
+            </div>
+            {/* Sticky footer */}
+            <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-white px-6 py-4">
+              <button className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200" onClick={() => { setMode('list'); setEditingPayslip(null) }}>Back</button>
+              <button className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow hover:bg-black" onClick={onDownloadPdf}>Download PDF</button>
+              <button className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-emerald-700 disabled:opacity-50" onClick={onSavePayslip} disabled={savingPayslip}>{savingPayslip ? 'Saving…' : 'Process & Save'}</button>
+            </div>
+          </div>
+        </div>
+        </ModalPortal>
       )}
 
       {/* Bulk Generation Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+        <ModalPortal>
+        <div className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4" style={{ position: 'fixed' }}>
+          <div className="flex h-[100dvh] w-full max-w-2xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <h3 className="text-xl font-bold text-gray-900">Bulk Generate Payslips</h3>
               <button onClick={() => setShowBulkModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
             </div>
 
-            <div className="mb-6 space-y-4">
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Period Start</label>
@@ -1756,7 +1776,7 @@ export default function Payroll() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex shrink-0 justify-end gap-2 border-t border-gray-200 bg-white px-6 py-4">
               <button
                 onClick={() => setShowBulkModal(false)}
                 className="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
@@ -1773,13 +1793,15 @@ export default function Payroll() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Salary History Modal */}
       {showHistoryModal && employeeHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+        <ModalPortal>
+        <div className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4" style={{ position: 'fixed' }}>
+          <div className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Salary History</h3>
                 <p className="text-sm text-gray-600">{employeeHistory.employee.name} • {employeeHistory.employee.position}</p>
@@ -1787,6 +1809,7 @@ export default function Payroll() {
               <button onClick={() => { setShowHistoryModal(false); setHistoryEmployeeId(null); }} className="text-gray-500 hover:text-gray-700">✕</button>
             </div>
 
+            <div className="flex-1 overflow-y-auto px-6 py-4">
             <div className="mb-6 grid grid-cols-3 gap-4 rounded-lg bg-blue-50 p-4">
               <div>
                 <div className="text-xs font-medium text-blue-600">Base Salary</div>
@@ -1834,27 +1857,32 @@ export default function Payroll() {
                 </tbody>
               </table>
             </div>
+            </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* View Payslip Modal */}
       {showViewModal && viewingPayslip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+        <ModalPortal>
+        <div className="fixed inset-0 top-0 left-0 z-50 flex h-screen w-screen items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4" style={{ position: 'fixed' }}>
+          <div className="flex h-[100dvh] w-full max-w-2xl flex-col overflow-hidden bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
               <h3 className="text-xl font-bold text-gray-900">Payslip Details</h3>
               <button onClick={() => { setShowViewModal(false); setViewingPayslip(null); }} className="text-gray-500 hover:text-gray-700">✕</button>
             </div>
 
-            <div ref={viewPayslipRef} className="rounded-lg border border-gray-200 bg-white p-4">
-              <PayslipView 
-                employee={allEmployees.find(e => e.id === viewingPayslip.employee_id)!} 
-                payslip={viewingPayslip} 
-              />
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div ref={viewPayslipRef} className="rounded-lg border border-gray-200 bg-white p-4">
+                <PayslipView 
+                  employee={allEmployees.find(e => e.id === viewingPayslip.employee_id)!} 
+                  payslip={viewingPayslip} 
+                />
+              </div>
             </div>
 
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="flex shrink-0 justify-end gap-2 border-t border-gray-200 bg-white px-6 py-4">
               <button
                 onClick={() => { setShowViewModal(false); setViewingPayslip(null); }}
                 className="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
@@ -1870,6 +1898,7 @@ export default function Payroll() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {loading && <div className="text-sm text-slate-600">Loading...</div>}
