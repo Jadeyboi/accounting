@@ -36,27 +36,40 @@ export const PRINCIPAL_DEFAULT_PLAN: HmoPlan = 'Platinum'
 export const DEPENDENT_DEFAULT_PLAN: HmoPlan = 'Gold'
 
 /**
- * Convert a premium to its monthly equivalent.
+ * Full-precision monthly equivalent (NO rounding) — use for accumulation to
+ * avoid per-member rounding drift when summing across many employees.
  */
-export function toMonthly(premium: number, cycle: HmoBillingCycle): number {
+export function toMonthlyRaw(premium: number, cycle: HmoBillingCycle): number {
   switch (cycle) {
-    case 'monthly':   return r2(premium)
-    case 'quarterly': return r2(premium / 3)
-    case 'annual':    return r2(premium / 12)
-    default:          return r2(premium / 12) // fallback: treat as annual
+    case 'monthly':   return premium
+    case 'quarterly': return premium / 3
+    case 'annual':    return premium / 12
+    default:          return premium / 12
+  }
+}
+
+/** Full-precision quarterly equivalent (NO rounding). */
+export function toQuarterlyRaw(premium: number, cycle: HmoBillingCycle): number {
+  switch (cycle) {
+    case 'monthly':   return premium * 3
+    case 'quarterly': return premium
+    case 'annual':    return premium / 4
+    default:          return premium / 4
   }
 }
 
 /**
- * Convert a premium to its quarterly equivalent.
+ * Convert a premium to its monthly equivalent (rounded to 2dp for display).
+ */
+export function toMonthly(premium: number, cycle: HmoBillingCycle): number {
+  return r2(toMonthlyRaw(premium, cycle))
+}
+
+/**
+ * Convert a premium to its quarterly equivalent (rounded to 2dp for display).
  */
 export function toQuarterly(premium: number, cycle: HmoBillingCycle): number {
-  switch (cycle) {
-    case 'monthly':   return r2(premium * 3)
-    case 'quarterly': return r2(premium)
-    case 'annual':    return r2(premium / 4)
-    default:          return r2(premium / 4)
-  }
+  return r2(toQuarterlyRaw(premium, cycle))
 }
 
 /**
