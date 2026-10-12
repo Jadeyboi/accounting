@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { logActivity } from '@/lib/activityLogger'
 import type { Employee, Payslip, Loan } from '@/types'
+import { computeNetSalary, payrollExpenseAmount, validatePayslipSave } from '@/lib/payrollExpense'
 import PayslipView from '@/components/PayslipView'
 import { usePagination } from '@/hooks/usePagination'
 import Pagination from '@/components/Pagination'
@@ -315,6 +316,7 @@ export default function Payroll() {
       notes: '',
       net_salary: 0,
       transaction_id: null,
+      uses_net_expense: true, // new payslips post NET pay as the expense
     }
   }
 
@@ -423,10 +425,25 @@ export default function Payroll() {
     setSavingPayslip(true)
     try {
     const p = { ...editingPayslip }
-    // Recompute net on save
-    const additions = (p.bonuses ?? 0) + (p.allowances ?? 0) + (p.holiday_pay ?? 0)
-    const deductions = (p.sss ?? 0) + (p.pagibig ?? 0) + (p.philhealth ?? 0) + (p.tax ?? 0) + (p.cash_advance ?? 0) + (p.loan_deductions ?? 0) + (p.other_deductions ?? 0) + (p.hmo_deduction ?? 0)
-    p.net_salary = p.gross_salary + additions - deductions
+    // Recompute net on save (shared helper keeps this in sync with validation).
+    p.net_salary = computeNetSalary(p)
+
+    // Decide the expense basis from the payslip's OWN flag, not from amounts:
+    // NET for payslips created under the new behavior (uses_net_expense === true),
+    // GROSS for pre-existing ones (false/null) — including when edited. Gross on
+    // the payslip itself is never changed either way.
+    const expenseAmount = payrollExpenseAmount(p)
+
+    // VALIDATE BEFORE ANY DATABASE WRITE OR SIDE EFFECT. The transactions table
+    // requires amount > 0, so a non-positive posted amount (e.g. a net-based
+    // payslip whose deductions/loans exceed earnings) is rejected up front.
+    // Rejecting here leaves the saved payslip, its linked expense, and loan
+    // records completely unchanged (no upsert, no loan processing has run yet).
+    const validation = validatePayslipSave(p)
+    if (!validation.ok) {
+      alert(validation.message)
+      return
+    }
 
     // Upsert payslip
     const { error: upsertError } = await supabase.from('payslips').upsert(p, { onConflict: 'id' })
@@ -437,24 +454,18 @@ export default function Payroll() {
       await processLoanPayments(p.id, p.employee_id, p.date_issued, p.loan_deductions)
     }
 
-    // Validate gross salary before creating/updating transaction
-    if (!p.gross_salary || p.gross_salary <= 0) {
-      alert('Cannot create expense transaction: Gross salary must be greater than 0')
-      return
-    }
-
-    // Create or update linked expense transaction
+    // Create or update linked expense transaction using the chosen basis.
     const note = `Payroll: ${currentEmployee?.name ?? p.employee_id} (${p.period_start} to ${p.period_end})`
     if (p.transaction_id) {
       const { error: txErr } = await supabase
         .from('transactions')
-        .update({ amount: Number(p.gross_salary), type: 'expense', category: 'Payroll', note })
+        .update({ amount: expenseAmount, type: 'expense', category: 'Payroll', note })
         .eq('id', p.transaction_id)
       if (txErr) return alert(txErr.message)
     } else {
       const { data: txData, error: insErr } = await supabase
         .from('transactions')
-        .insert({ date: p.date_issued, type: 'expense', amount: Number(p.gross_salary), category: 'Payroll', note })
+        .insert({ date: p.date_issued, type: 'expense', amount: expenseAmount, category: 'Payroll', note })
         .select('id')
         .single()
       if (insErr) return alert(insErr.message)
@@ -661,33 +672,43 @@ export default function Payroll() {
           net_salary: gross + (lastPayslip?.bonuses ?? 0) + (lastPayslip?.allowances ?? 0) - 
                       ((lastPayslip?.sss ?? 0) + (lastPayslip?.pagibig ?? 0) + (lastPayslip?.philhealth ?? 0) + (lastPayslip?.tax ?? 0) + loanDeductions + hmoDeduction),
           transaction_id: null,
+          uses_net_expense: true, // new payslips post NET pay as the expense
         }
       })
 
-      // Create expense transactions first
+      // Expense basis per payslip's own flag. Bulk-generated payslips are new
+      // and carry uses_net_expense = true, so they post NET pay. The helper
+      // keeps this consistent with the single-save path and the edit path.
+      const expenseBasis = (payslip: Payslip) =>
+        payslip.uses_net_expense === true ? Number(payslip.net_salary) : Number(payslip.gross_salary)
+
+      // Create expense transactions first. Gate on the posted amount > 0
+      // (transactions requires amount > 0; a payslip can have positive gross but
+      // non-positive net when deductions/loans exceed earnings).
       const expenseTransactions = newPayslips
-        .filter(payslip => payslip.gross_salary > 0) // Only create transactions for positive amounts
+        .filter(payslip => expenseBasis(payslip) > 0)
         .map(payslip => {
           const emp = employees.find(e => e.id === payslip.employee_id)
           const note = `Payroll: ${emp?.name ?? payslip.employee_id} (${payslip.period_start} to ${payslip.period_end})`
-          
+
           return {
             date: payslip.date_issued,
             type: 'expense' as const,
-            amount: Number(payslip.gross_salary), // Ensure it's a number
+            amount: expenseBasis(payslip),
             category: 'Payroll',
             note
           }
         })
 
-      // Check if any payslips have invalid amounts
-      const invalidPayslips = newPayslips.filter(p => !p.gross_salary || p.gross_salary <= 0)
+      // Payslips whose posted amount is non-positive won't create a transaction.
+      // Keyed on the same expenseBasis as the filter above.
+      const invalidPayslips = newPayslips.filter(p => expenseBasis(p) <= 0)
       if (invalidPayslips.length > 0) {
         const empNames = invalidPayslips.map(p => {
           const emp = employees.find(e => e.id === p.employee_id)
           return emp?.name || p.employee_id
         }).join(', ')
-        alert(`Warning: ${invalidPayslips.length} payslip(s) have invalid amounts and will not create expense transactions: ${empNames}`)
+        alert(`Warning: ${invalidPayslips.length} payslip(s) have no payable amount and will not create expense transactions: ${empNames}`)
       }
 
       if (expenseTransactions.length === 0) {
@@ -711,7 +732,9 @@ export default function Payroll() {
 
       // Update payslips with transaction IDs (only for those with valid amounts)
       if (transactionData && transactionData.length === expenseTransactions.length) {
-        const validPayslips = newPayslips.filter(p => p.gross_salary > 0)
+        // Must match the expenseTransactions filter exactly (expenseBasis > 0)
+        // so the index-aligned transaction_id links map to the correct payslips.
+        const validPayslips = newPayslips.filter(p => expenseBasis(p) > 0)
         validPayslips.forEach((payslip, index) => {
           payslip.transaction_id = transactionData[index].id
           console.log(`Setting payslip ${payslip.id} transaction_id to:`, transactionData[index].id)
