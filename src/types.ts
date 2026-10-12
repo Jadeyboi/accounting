@@ -104,6 +104,10 @@ export interface Payslip {
   notes?: string | null;
   net_salary: number;
   transaction_id?: string | null;
+  // When true, this payslip's linked expense transaction uses NET pay (actual
+  // cash disbursed). Payslips created before this behavior have it false/null
+  // and keep the original GROSS-based expense, even when edited.
+  uses_net_expense?: boolean | null;
 }
 
 export interface GovtContribBreakdown {
