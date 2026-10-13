@@ -27,6 +27,20 @@ const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 const ACCOUNT = '13TH MONTH PAY'
 const SOURCE = 'payroll_13th'
 
+/**
+ * Feature flag — Automatic 13th Month Pay savings.
+ *
+ * TEMPORARILY DISABLED by request. While false, the automatic set-aside is OFF:
+ *   - upsertThirteenthMonth / backfillThirteenthMonth do nothing (no new rows,
+ *     no updates), and
+ *   - removeThirteenthMonth does nothing (so disabling never deletes existing
+ *     13th-month savings — existing data is preserved untouched).
+ *
+ * To RE-ENABLE later, set this back to true. No other change is needed; the
+ * payroll call sites remain wired and will resume working immediately.
+ */
+export const THIRTEENTH_MONTH_ENABLED = false
+
 /** 13th month accrual for one cutoff from the basic earned that period. */
 export function accrualForBasic(basicEarned: number): number {
   return r2((Number(basicEarned) || 0) / 12)
@@ -59,6 +73,8 @@ export interface ThirteenthPayload {
  * Does nothing when basic earned is zero.
  */
 export async function upsertThirteenthMonth(p: ThirteenthPayload): Promise<void> {
+  // Feature disabled: no automatic 13th-month set-aside is created or updated.
+  if (!THIRTEENTH_MONTH_ENABLED) return
   const accrual = accrualForBasic(p.basicEarned)
   if (accrual <= 0) {
     // If a prior row exists (e.g. corrected to zero), remove it.
@@ -100,6 +116,8 @@ export async function upsertThirteenthMonth(p: ThirteenthPayload): Promise<void>
 
 /** Remove the 13th-month savings row for a payslip (on delete/correction). */
 export async function removeThirteenthMonth(payslipId: string): Promise<void> {
+  // Feature disabled: do not touch existing 13th-month savings rows.
+  if (!THIRTEENTH_MONTH_ENABLED) return
   await supabase.from('savings').delete().eq('payslip_id', payslipId).eq('source', SOURCE)
 }
 
@@ -109,6 +127,8 @@ export async function removeThirteenthMonth(payslipId: string): Promise<void> {
  * payslip now has zero basic. Does not duplicate.
  */
 export async function backfillThirteenthMonth(): Promise<{ processed: number; created: number; updated: number }> {
+  // Feature disabled: no backfill while off.
+  if (!THIRTEENTH_MONTH_ENABLED) return { processed: 0, created: 0, updated: 0 }
   const { data: payslips } = await supabase
     .from('payslips')
     .select('id, employee_id, period_start, period_end, date_issued, gross_salary')
