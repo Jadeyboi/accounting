@@ -346,7 +346,7 @@ export default function Loans() {
   const activeLoans = loans.filter(loan => loan.status === 'active')
   const totalActiveAmount = activeLoans.reduce((sum, loan) => sum + loan.remaining_balance, 0)
   const totalLoanedAmount = loans.reduce((sum, loan) => sum + loan.total_amount, 0)
-  const totalPaidAmount = totalLoanedAmount - loans.reduce((sum, loan) => sum + loan.remaining_balance, 0)
+  const totalPaidAmount = loanPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0)
 
   return (
     <div className="space-y-6">

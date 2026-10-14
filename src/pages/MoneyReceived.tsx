@@ -220,6 +220,22 @@ export default function MoneyReceived() {
 
     try {
       const record = moneyReceived.find(r => r.id === id)
+
+      // Delete the linked cash-in transaction first.
+      // The money_received table has no transaction_id FK, so we match on
+      // date + amount + type + sender name in the note (same pattern used
+      // when the transaction was created in handleSubmit).
+      if (record) {
+        const { error: txErr } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('type', 'in')
+          .eq('date', record.date_received)
+          .eq('amount', record.amount_php)
+          .ilike('note', `% — from ${record.sender_name} %`)
+        if (txErr) console.error('Failed to delete linked transaction:', txErr.message)
+      }
+
       const { error } = await supabase
         .from('money_received')
         .delete()
