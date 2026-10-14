@@ -4,6 +4,7 @@ import type { Transaction } from "@/types";
 import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
 import { CuteLoader, LOADING_MESSAGES } from "@/components/Loading";
+import { computeSavingsRollup } from "@/lib/savingsTotals";
 import jsPDF from "jspdf";
 import {
   Chart as ChartJS,
@@ -220,18 +221,47 @@ export default function Reports() {
           setSavingsTotal(0);
           setSavingsItems([]);
         } else {
-          // Filter out paid savings (only show active ones). No date/month filter —
+          // Only active savings count as reserved. No date/month filter —
           // savings represents the running total across all months.
           const activeSavings = (savingsData ?? []).filter(
             (row: any) => !row.status || row.status === 'active'
           );
 
-          const sTotal = activeSavings.reduce(
-            (sum: number, row: any) => sum + (row.amount ?? 0),
-            0
-          );
-          setSavingsTotal(sTotal);
-          setSavingsItems(activeSavings);
+          // Reserved per category from active rows.
+          const amt = (rows: any[]) => rows.reduce((s, r) => s + (r.amount ?? 0), 0);
+          const bySrc = (srcs: string[]) =>
+            activeSavings.filter((r: any) => srcs.includes(r.source ?? 'manual'));
+          const govtReserved = amt(bySrc(['payroll_ec', 'payroll_er']));
+          const hmoReserved = amt(bySrc(['payroll_hmo_company', 'payroll_hmo_employee']));
+          const t13Reserved = amt(bySrc(['payroll_13th']));
+          const manualActive = activeSavings
+            .filter((r: any) => !['payroll_ec','payroll_er','payroll_hmo_company','payroll_hmo_employee','payroll_13th'].includes(r.source ?? 'manual'))
+            .map((r: any) => r.amount ?? 0);
+
+          // Paid/remitted per category from their dedicated ledgers (tables may
+          // not exist before migration — ignore errors, treat as 0).
+          const [govtRemit, hmoRemit, t13Pay] = await Promise.all([
+            supabase.from('govt_remittances').select('amount'),
+            supabase.from('hmo_remittances').select('amount'),
+            supabase.from('thirteenth_month_payments').select('amount'),
+          ]);
+          const paidSum = (res: any) => (res?.data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+
+          const rollup = computeSavingsRollup({
+            manualActiveAmounts: manualActive,
+            govtReserved,
+            govtRemitted: paidSum(govtRemit),
+            hmoReserved,
+            hmoPaid: paidSum(hmoRemit),
+            t13Reserved,
+            t13Paid: paidSum(t13Pay),
+          });
+
+          if (!cancel) {
+            // Remaining = reserved − paid/remitted, consistent with the Savings page.
+            setSavingsTotal(rollup.overallRemaining);
+            setSavingsItems(activeSavings);
+          }
         }
       }
       setLoading(false);

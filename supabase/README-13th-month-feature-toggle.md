@@ -1,8 +1,9 @@
 # 13th Month Pay Savings — Feature Toggle
 
-The automatic 13th Month Pay savings reserve is **currently DISABLED** by request.
-This note explains the current state, how to turn it back on, and how the data
-removal relates to it.
+The automatic 13th Month Pay savings reserve is **currently ENABLED**
+(`THIRTEENTH_MONTH_ENABLED = true`). Each successfully saved eligible payslip
+(single or bulk) creates exactly one 13th-month accrual. This note explains the
+toggle and how the earlier data removal relates to it.
 
 ## What "13th Month Pay Savings" is
 
@@ -12,13 +13,15 @@ table with `source = 'payroll_13th'`. It does **not** change gross pay, net pay,
 or payroll expense, and it is **not** posted to the transactions ledger — so it
 never affects the cash balance.
 
-## Current state (DISABLED)
+## Current state (ENABLED)
 
 Controlled by a single flag in `src/lib/thirteenthMonth.ts`:
 
 ```ts
-export const THIRTEENTH_MONTH_ENABLED = false
+export const THIRTEENTH_MONTH_ENABLED = true
 ```
+
+Set to `false` to temporarily turn the automatic set-aside off.
 
 While `false`:
 - `upsertThirteenthMonth(...)` returns immediately — saving/generating payslips

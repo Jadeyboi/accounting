@@ -7,6 +7,7 @@ import Pagination from "@/components/Pagination";
 import CuteLoader from "@/components/CuteLoader";
 import { backfillGovtContributions } from "@/lib/payrollGovt";
 import { backfillThirteenthMonth } from "@/lib/thirteenthMonth";
+import { computeSavingsRollup } from "@/lib/savingsTotals";
 
 const peso = (v: number) =>
   `₱${(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -49,6 +50,14 @@ export default function Savings() {
   const [remitAmount, setRemitAmount] = useState<number | "">("");
   const [remitNotes, setRemitNotes] = useState<string>("");
   const [showRemitHistory, setShowRemitHistory] = useState(false);
+
+  // Record-HMO-Payment modal state (general payment against the HMO reserve;
+  // bill-specific payments are still recorded on the HMO page).
+  const [hmoPayModal, setHmoPayModal] = useState<{ suggested: number } | null>(null);
+  const [hmoPayDate, setHmoPayDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [hmoPayAmount, setHmoPayAmount] = useState<number | "">("");
+  const [hmoPayReference, setHmoPayReference] = useState<string>("");
+  const [hmoPayNotes, setHmoPayNotes] = useState<string>("");
 
   const [date, setDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
@@ -269,6 +278,22 @@ export default function Savings() {
     return rows.sort((a, b) => b.year - a.year || a.employee.localeCompare(b.employee));
   })();
 
+  // Roll-up that correctly nets out paid/remitted amounts (shared helper so the
+  // Savings page, category summaries, dashboard, and Reports all agree).
+  // Government "paid" = remittances; HMO "paid" = hmo_remittances; 13th "paid" =
+  // thirteenth_month_payments. Manual active rows are already net of paid.
+  const savingsRollup = computeSavingsRollup({
+    manualActiveAmounts: items.map((it) => it.amount ?? 0),
+    govtReserved: govtAccruedTotal,
+    govtRemitted: catTotal(remitted.EC) + catTotal(remitted.ER),
+    hmoReserved,
+    hmoPaid,
+    t13Reserved,
+    t13Paid,
+  });
+  // Remaining reserve across all categories (reserved − paid/remitted).
+  const overallRemaining = savingsRollup.overallRemaining;
+  // Gross reserved kept for reference (e.g. showing reserved vs remaining).
   const overallTotal = total + govtAccruedTotal + hmoReserved + t13Reserved;
 
   const openRemitModal = (category: GovtCategory, agency: GovtAgency) => {
@@ -317,6 +342,44 @@ export default function Savings() {
     if (!confirm("Delete this remittance record? The amount will be added back to the remaining balance.")) return;
     const { error } = await supabase.from("govt_remittances").delete().eq("id", id);
     if (error) return alert(error.message);
+    await load();
+  };
+
+  // ── HMO: record a general payment against the HMO reserve ───────────────
+  // Bill-specific HMO payments are made on the HMO page (linked to a bill).
+  // This records a general payment (no bill_id) that reduces HMO remaining.
+  const openHmoPayModal = () => {
+    const remaining = Math.max(0, Math.round((hmoRemaining + Number.EPSILON) * 100) / 100);
+    setHmoPayModal({ suggested: remaining });
+    setHmoPayAmount(remaining);
+    setHmoPayDate(new Date().toISOString().slice(0, 10));
+    setHmoPayReference("");
+    setHmoPayNotes("");
+  };
+
+  const submitHmoPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hmoPayModal) return;
+    if (!hmoPayAmount || Number(hmoPayAmount) <= 0) return alert("Enter a positive amount");
+    const { error } = await supabase.from("hmo_remittances").insert({
+      bill_id: null,
+      provider: null,
+      coverage_period: null,
+      paid_date: hmoPayDate,
+      amount: Number(hmoPayAmount),
+      reference: hmoPayReference || null,
+      notes: hmoPayNotes || "General HMO payment recorded from Savings",
+    });
+    if (error) {
+      alert(
+        "Error recording HMO payment: " +
+          error.message +
+          "\n\nIf the table does not exist, run supabase/hmo-setup.sql first."
+      );
+      return;
+    }
+    await logActivity("created", "Savings", `HMO payment ${peso(Number(hmoPayAmount))}`);
+    setHmoPayModal(null);
     await load();
   };
 
@@ -523,13 +586,16 @@ export default function Savings() {
             View Paid History
           </button>
           <div className="text-right">
-            <p className="text-xs text-gray-400">Total saved</p>
+            <p className="text-xs text-gray-400">Remaining reserved</p>
             <p className="text-xl font-bold tabular-nums text-gray-900">
-              {peso(overallTotal)}
+              {peso(overallRemaining)}
+            </p>
+            <p className="mt-0.5 text-[11px] text-gray-400">
+              Reserved {peso(savingsRollup.overallReserved)} − Paid/Remitted {peso(savingsRollup.overallPaid)}
             </p>
             {(govtAccruedTotal > 0 || hmoReserved > 0 || t13Reserved > 0) && (
               <p className="mt-0.5 text-[11px] text-gray-400">
-                Manual {peso(total)} · Govt {peso(govtAccruedTotal)} · HMO {peso(hmoReserved)} · 13th {peso(t13Reserved)}
+                Manual {peso(savingsRollup.manual.remaining)} · Govt {peso(savingsRollup.govt.remaining)} · HMO {peso(savingsRollup.hmo.remaining)} · 13th {peso(savingsRollup.t13.remaining)}
               </p>
             )}
           </div>
@@ -631,9 +697,20 @@ export default function Savings() {
       {/* ── HMO Savings ────────────────────────────────────────────────── */}
       {hmoReserved > 0 && (
         <div className="panel p-5">
-          <h3 className="mb-3 text-sm font-semibold text-gray-700">HMO</h3>
+          <div className="mb-3 flex items-start justify-between gap-4">
+            <h3 className="text-sm font-semibold text-gray-700">HMO</h3>
+            <button
+              type="button"
+              onClick={openHmoPayModal}
+              disabled={hmoRemaining <= 0}
+              className="btn-secondary text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              title={hmoRemaining <= 0 ? "Fully paid" : "Record a general HMO payment against the reserve"}
+            >
+              Record Payment
+            </button>
+          </div>
           <p className="mb-3 text-xs text-gray-400">
-            Company-funded + employee-deducted premiums set aside each payroll. Manage enrollments on the HMO page.
+            Company-funded + employee-deducted premiums set aside each payroll. Manage enrollments and bill-specific payments on the HMO page.
           </p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-lg bg-blue-50 p-3 text-center">
@@ -922,6 +999,54 @@ export default function Savings() {
             <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
               <button type="button" onClick={() => setRemitModal(null)} className="btn-secondary">Cancel</button>
               <button type="submit" className="btn-primary">Record Remittance</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Record HMO Payment Modal ─────────────────────────────────────── */}
+      {hmoPayModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={submitHmoPayment} className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-gray-900">Record HMO Payment</h3>
+              <button type="button" onClick={() => setHmoPayModal(null)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4 p-6">
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Remaining HMO reserve: <span className="font-semibold">{peso(hmoPayModal.suggested)}</span>
+                <br />
+                General payment against the reserve. For a specific HMO bill, use the HMO page.
+              </p>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Payment Date</label>
+                <input type="date" value={hmoPayDate} onChange={(e) => setHmoPayDate(e.target.value)} className="input-field" required />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Amount Paid</label>
+                <input
+                  type="number" step="0.01"
+                  value={hmoPayAmount as any}
+                  onChange={(e) => setHmoPayAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="input-field" placeholder="0.00" required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Reference No. (optional)</label>
+                <input type="text" value={hmoPayReference} onChange={(e) => setHmoPayReference(e.target.value)} className="input-field" placeholder="e.g. OR / cheque number" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-500">Notes (optional)</label>
+                <input type="text" value={hmoPayNotes} onChange={(e) => setHmoPayNotes(e.target.value)} className="input-field" placeholder="Remarks" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
+              <button type="button" onClick={() => setHmoPayModal(null)} className="btn-secondary">Cancel</button>
+              <button type="submit" className="btn-primary">Record Payment</button>
             </div>
           </form>
         </div>
