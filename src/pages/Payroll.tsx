@@ -533,7 +533,10 @@ export default function Payroll() {
         basicEarned: p.gross_salary ?? 0,
       })
     } catch (e) {
+      // Surface the failure instead of silently showing success. The payslip
+      // and its expense already saved; only the 13th-month accrual failed.
       console.error('13th month set-aside failed:', e)
+      alert(`Payslip saved, but the 13th-month savings accrual FAILED: ${e instanceof Error ? e.message : String(e)}`)
     }
 
     setEditingPayslip(null)
@@ -764,6 +767,10 @@ export default function Payroll() {
         }
       }
 
+      // Track 13th-month accrual failures so we report them instead of
+      // reporting unconditional success for the whole bulk run.
+      const t13Failures: string[] = []
+
       // Auto set-aside government contributions + withholding tax for each payslip (EC/ER)
       for (const payslip of newPayslips) {
         const emp = employees.find(e => e.id === payslip.employee_id)
@@ -809,6 +816,7 @@ export default function Payroll() {
           })
         } catch (e) {
           console.error('13th month set-aside failed for', payslip.id, e)
+          t13Failures.push(`${emp?.name ?? payslip.employee_id}: ${e instanceof Error ? e.message : String(e)}`)
         }
       }
 
@@ -821,7 +829,15 @@ export default function Payroll() {
       }, 500)
       
       await logActivity('created', 'Payroll', `Bulk generated ${newPayslips.length} payslips`)
-      alert(`${newPayslips.length} payslips generated successfully with linked expense transactions and loan deductions!`)
+      if (t13Failures.length > 0) {
+        alert(
+          `${newPayslips.length} payslips generated, but ${t13Failures.length} 13th-month savings accrual(s) FAILED:\n\n` +
+          t13Failures.join('\n') +
+          `\n\nThe payslips and their expenses were saved; re-save the affected payslips or check the savings table.`
+        )
+      } else {
+        alert(`${newPayslips.length} payslips generated successfully with linked expense transactions, 13th-month accruals, and loan deductions!`)
+      }
     } catch (error) {
       console.error('Bulk generation error:', error)
       alert(`Error during bulk generation: ${error}`)

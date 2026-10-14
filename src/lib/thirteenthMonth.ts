@@ -30,16 +30,12 @@ const SOURCE = 'payroll_13th'
 /**
  * Feature flag — Automatic 13th Month Pay savings.
  *
- * TEMPORARILY DISABLED by request. While false, the automatic set-aside is OFF:
- *   - upsertThirteenthMonth / backfillThirteenthMonth do nothing (no new rows,
- *     no updates), and
- *   - removeThirteenthMonth does nothing (so disabling never deletes existing
- *     13th-month savings — existing data is preserved untouched).
- *
- * To RE-ENABLE later, set this back to true. No other change is needed; the
- * payroll call sites remain wired and will resume working immediately.
+ * ENABLED: each successfully saved eligible payslip (single or bulk) creates
+ * exactly one 13th-month accrual (idempotent via payslip_id + source). While
+ * false, upsert/backfill do nothing and remove is a no-op (existing data
+ * preserved). Set to false only to temporarily turn the automatic set-aside off.
  */
-export const THIRTEENTH_MONTH_ENABLED = false
+export const THIRTEENTH_MONTH_ENABLED = true
 
 /** 13th month accrual for one cutoff from the basic earned that period. */
 export function accrualForBasic(basicEarned: number): number {
@@ -95,22 +91,31 @@ export async function upsertThirteenthMonth(p: ThirteenthPayload): Promise<void>
     accrual,
   }
 
-  const { data: existing } = await supabase
+  const { data: existing, error: selErr } = await supabase
     .from('savings')
     .select('id')
     .eq('payslip_id', p.payslipId)
     .eq('source', SOURCE)
     .maybeSingle()
+  if (selErr) {
+    throw new Error(`13th-month lookup failed for payslip ${p.payslipId}: ${selErr.message}`)
+  }
 
   if (existing) {
-    await supabase.from('savings')
+    const { error: updErr } = await supabase.from('savings')
       .update({ amount: accrual, date: p.dateIssued, description, notes })
       .eq('id', existing.id)
+    if (updErr) {
+      throw new Error(`13th-month update failed for payslip ${p.payslipId}: ${updErr.message}`)
+    }
   } else {
-    await supabase.from('savings').insert({
+    const { error: insErr } = await supabase.from('savings').insert({
       source: SOURCE, account: ACCOUNT, amount: accrual, date: p.dateIssued,
       description, payslip_id: p.payslipId, status: 'active', notes,
     })
+    if (insErr) {
+      throw new Error(`13th-month insert failed for payslip ${p.payslipId}: ${insErr.message}`)
+    }
   }
 }
 
