@@ -7,6 +7,7 @@ import Notifications from '@/components/Notifications'
 import StorageStatus from '@/components/StorageStatus'
 import { supabase } from '@/lib/supabase'
 import type { Transaction } from '@/types'
+import { fetchAllTransactions } from '@/lib/financeTotals'
 
 const formatDate = (dateString: string): string => {
   if (!dateString) return ''
@@ -27,11 +28,20 @@ export default function Home() {
     const load = async () => {
       setLoadingSummary(true)
       setSummaryError(null)
-      const { data, error } = await supabase.from('transactions').select('*')
-      if (cancelled) return
-      if (error) setSummaryError(error.message)
-      else setSummaryItems((data ?? []) as Transaction[])
-      setLoadingSummary(false)
+      try {
+        // Paginated fetch: retrieves ALL transactions (not just the first 1000),
+        // so Dashboard totals stay complete and correct as the table grows.
+        const all = await fetchAllTransactions()
+        if (cancelled) return
+        setSummaryItems(all)
+      } catch (e) {
+        if (cancelled) return
+        // Surface the failure instead of showing truncated/incorrect totals.
+        setSummaryItems([])
+        setSummaryError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancelled) setLoadingSummary(false)
+      }
     }
     load()
     return () => { cancelled = true }

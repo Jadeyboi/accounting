@@ -1,20 +1,17 @@
 import { Transaction } from '@/types'
+import { computeLedgerTotals } from '@/lib/financeTotals'
 
 interface Props {
   transactions: Transaction[]
 }
 
 export default function SummaryCards({ transactions }: Props) {
-  const totals = transactions.reduce(
-    (acc, t) => {
-      if (t.type === 'in') acc.in += t.amount
-      if (t.type === 'out') acc.out += t.amount
-      if (t.type === 'expense') acc.expense += t.amount
-      return acc
-    },
-    { in: 0, out: 0, expense: 0 }
-  )
-  const balance = totals.in - (totals.out + totals.expense)
+  // Centralized, exact-decimal totals shared with Reports (single source of truth).
+  const ledger = computeLedgerTotals(transactions)
+  const totals = { in: ledger.cashIn, out: ledger.cashOut, expense: ledger.expense }
+  const balance = ledger.balance
+
+  
 
   const fmt = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 

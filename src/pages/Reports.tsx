@@ -5,6 +5,7 @@ import { usePagination } from "@/hooks/usePagination";
 import Pagination from "@/components/Pagination";
 import { CuteLoader, LOADING_MESSAGES } from "@/components/Loading";
 import { computeSavingsRollup } from "@/lib/savingsTotals";
+import { fetchAllTransactions, computeLedgerTotals } from "@/lib/financeTotals";
 import jsPDF from "jspdf";
 import {
   Chart as ChartJS,
@@ -185,17 +186,27 @@ export default function Reports() {
         end = endDate.toISOString().slice(0, 10);
       }
 
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("*")
-        .gte("date", start)
-        .lte("date", end)
-        .order("date", { ascending: true });
+      // Paginated, complete fetch for the selected range (shared service), so
+      // Reports never truncates at 1000 rows and uses the same retrieval as the
+      // Dashboard. Throws on failure — handled below so we never show a partial
+      // total as if complete.
+      let rangeData: Transaction[] = [];
+      try {
+        rangeData = await fetchAllTransactions({ start, end });
+      } catch (e) {
+        if (cancel) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setItems([]);
+        setSavingsTotal(0);
+        setSavingsItems([]);
+        setLoading(false);
+        return;
+      }
 
       if (cancel) return;
-      
+
       // Filter transactions to only include selected months in custom mode
-      let filteredData = data ?? [];
+      let filteredData = rangeData;
       if (mode === "custom" && selectedMonthYears.size > 0) {
         filteredData = filteredData.filter((t: Transaction) => {
           const d = new Date(t.date + "T00:00:00");
@@ -203,9 +214,8 @@ export default function Reports() {
           return selectedMonthYears.has(yearMonth);
         });
       }
-      
-      if (error) setError(error.message);
-      else setItems(filteredData as Transaction[]);
+
+      setItems(filteredData as Transaction[]);
 
       // Savings accumulate over time, so always load ALL savings (not just the
       // selected report period) — savings is for the entire duration.
@@ -308,9 +318,14 @@ export default function Reports() {
     ).sort();
     const c = lab.map((k) => creditBy[k] ?? 0);
     const d = lab.map((k) => debitBy[k] ?? 0);
-    const totalCredit = c.reduce((a, b) => a + b, 0);
-    const totalDebit = d.reduce((a, b) => a + b, 0);
-    const rem = totalCredit - totalDebit;
+
+    // Headline totals use the centralized exact-decimal service (same formula as
+    // the Dashboard). credit = Cash In; debit = Cash Out + Expenses;
+    // remaining = Cash In − Cash Out − Expenses.
+    const led = computeLedgerTotals(items);
+    const totalCredit = led.cashIn;
+    const totalDebit = led.debit;
+    const rem = led.balance;
 
     return {
       labels: lab,
